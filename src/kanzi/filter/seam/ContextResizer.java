@@ -290,12 +290,8 @@ public class ContextResizer implements VideoEffect
         if ((this.direction & HORIZONTAL) != 0)
         {
             if ((this.direction & VERTICAL) != 0)
-            {
-                int[] tmp = src;
                 src = dst;
-                dst = tmp;
-            }
-   
+
             Geodesic[] geodesics = this.computeGeodesics(src, HORIZONTAL);
 
             if (geodesics.length > 0)
@@ -594,8 +590,8 @@ public class ContextResizer implements VideoEffect
                            dstIdx += incIdx;
                            srcIdx += incIdx;
                        }
-                    }  
-                    
+                    }
+
                     pos = nextPos;
                 }
 
@@ -660,13 +656,13 @@ public class ContextResizer implements VideoEffect
             dstStart += incStart;
         }
 
-        if (this.debug == false)
-        {
-            if (dir == VERTICAL)
-                this.width -= geodesics.length;
-            else
-                this.height -= geodesics.length;
-        }
+//        if (this.debug == false)
+//        {
+//            if (dir == VERTICAL)
+//                this.width -= geodesics.length;
+//            else
+//                this.height -= geodesics.length;
+//        }
     }
 
 
@@ -733,12 +729,12 @@ public class ContextResizer implements VideoEffect
 
         // Calculate cost at each pixel
         this.calculateCosts(src, this.costs);
-        int maxGeo = (this.nbGeodesics > maxSearches) ? maxSearches : this.nbGeodesics;
+        final int maxGeo = (this.nbGeodesics > maxSearches) ? maxSearches : this.nbGeodesics;
 
         // Queue of geodesics sorted by cost
         // The queue size could be less than firstPositions.length
-        SortedDeque queue = new SortedDeque(maxGeo);
-        int geoLength4 = geoLength & -4;
+        final GeodesicSortedQueue queue = new GeodesicSortedQueue(maxGeo);
+        final int geoLength4 = geoLength & -4;
         boolean consumed = true;
         Geodesic geodesic = null;
         Geodesic last = null; // last in queue
@@ -803,7 +799,7 @@ public class ContextResizer implements VideoEffect
 
                         if ((cost & USED_MASK) != 0)
                            continue;
-                        
+
                          if (cost < bestCost)
                          {
                              bestCost = cost;
@@ -827,9 +823,9 @@ public class ContextResizer implements VideoEffect
             if (geodesic.cost < maxCost)
             {
                  // Add geodesic (in increasing cost order). It is sure to succeed
-                 // (it may evice the current tail) because geodesic.cos < maxCost
+                 // (it may evict the current tail) because geodesic.cos < maxCost
                  // and maxCost is adjusted to tail.value
-                 queue.add(geodesic);
+                 Geodesic newLast = queue.add(geodesic);
 
                  // Prevent geodesics from sharing pixels by marking the used pixels
                  // Only the pixels of the geodesics in the queue are marked as used
@@ -899,8 +895,8 @@ public class ContextResizer implements VideoEffect
                  // Update maxCost
                  if (queue.isFull())
                  {
-                    last = queue.getLast();
-                    maxCost = last.cost;
+                    last = newLast;
+                    maxCost = newLast.cost;
                  }
             }
 
