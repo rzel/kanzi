@@ -485,33 +485,29 @@ public class BWT implements ByteTransform
             int j = sa0[p];
             int si = s[i];
             int sj = s[j];
-            boolean leq1 = (si < sj);
+            boolean leq;
 
             if (idx < n0)
             {
-                if (leq1 == false)
-                {
-                   int div3 = (int) (((long) j * 0xAAAAAAABL) >> 33);
-                   leq1 = (si == sj) && (s12[idx+n0] <= s12[div3]);
-                }
+                if (si == sj)
+                   leq = (s12[idx+n0] <= s12[j/3]);
+                else
+                   leq = (si < sj);
             }
             else
             {
-                if (leq1 == false)
+                if (si == sj)
                 {
-                    boolean leq2 = (s[i+1] < s[j+1]);
-
-                    if (leq2 == false)
-                    {
-                        int div3 = (int) (((long) j * 0xAAAAAAABL) >> 33);
-                        leq2 = (s[i+1] == s[j+1]) && (s12[idx-n0+1] <= s12[div3+n0]);
-                    }
-
-                    leq1 = (si == sj) && leq2;
+                   if (s[i+1] == s[j+1])
+                      leq = (s12[idx-n0+1] <= s12[(j/3)+n0]);
+                   else
+                      leq = (s[i+1] < s[j+1]);
                 }
+                else
+                   leq = (si < sj);
             }
 
-            if (leq1 == true)
+            if (leq == true)
             {
                 sa[l] = i;
                 t++;
@@ -525,8 +521,6 @@ public class BWT implements ByteTransform
                 l += (n0 - p);
                 p = n0;
 
-//                for (l++; p<n0; p++, l++)
-//                   sa[l] = sa0[p];
             }
             else
             {
@@ -545,7 +539,4 @@ public class BWT implements ByteTransform
             }
         }
     }
-
-
-
 }
