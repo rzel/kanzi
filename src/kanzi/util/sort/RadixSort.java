@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.util.sort;
 
+import java.util.LinkedList;
 import kanzi.ByteSorter;
 import kanzi.IntSorter;
 
@@ -25,7 +26,8 @@ import kanzi.IntSorter;
 // This implementation uses a 4-bit radix
 public final class RadixSort implements IntSorter, ByteSorter
 {
-    private static final int INT_THRESHOLD = 0x10000000;
+    private static final int INT_THRESHOLD  = 0x10000000;
+    private static final int BYTE_THRESHOLD = 0x00000010;
 
     private final LinkedQueue[] queues;
     private final int bufferSize;
@@ -41,7 +43,7 @@ public final class RadixSort implements IntSorter, ByteSorter
         this.queues = new LinkedQueue[16]; // radix of 16
 
         for (int i=0; i<this.queues.length; i++)
-            this.queues[i] = new LinkedQueue();
+            this.queues[i] = new LinkedQueue(this.bufferSize);
     }
 
 
@@ -80,7 +82,7 @@ public final class RadixSort implements IntSorter, ByteSorter
         this.queues = new LinkedQueue[16];
 
         for (int i=0; i<this.queues.length; i++)
-            this.queues[i] = new LinkedQueue();
+            this.queues[i] = new LinkedQueue(this.bufferSize);
     }
 
 
@@ -88,19 +90,13 @@ public final class RadixSort implements IntSorter, ByteSorter
     {
         final int sz = (this.size == 0) ? input.length : this.size;
         final int end = blkptr + sz;
-        final int len = this.queues.length;
+        final int len = this.queues.length; // aliasing
+        final int bSize = this.bufferSize; // aliasing
 
         for (int j=0; j<len; j++)
-        {
-            final LinkedQueue queue = this.queues[j];
+            this.queues[j].store((int[]) null);
 
-            if (queue.intBuffer == null)
-                queue.intBuffer = new int[this.bufferSize];
-
-            queue.index = 0;
-        }
-
-        // Due a pass for each radix (4 bit step)
+        // Do a pass for each radix (4 bit step)
         for (int pass=0; pass<digits; pass++)
         {
             final int shift = pass << 2;
@@ -114,21 +110,19 @@ public final class RadixSort implements IntSorter, ByteSorter
                 queue.intBuffer[queue.index] = value;
                 queue.index++;
 
-                if (queue.index == this.bufferSize)
-                {
-                    // The previous buffer for this radix must be saved
-                    queue.put(queue.intBuffer);
-                    queue.intBuffer = new int[this.bufferSize];
-                    queue.index = 0;
-                }
+                // Check if the previous buffer for this radix must be saved
+                if (queue.index == bSize)
+                   queue.store(queue.intBuffer);
             }
 
             int idx = blkptr;
 
             // Copy back data to the input array
             for (int j=0; j<len; j++)
-               idx = this.queues[j].get(input, idx);
+               idx = this.queues[j].retrieve(input, idx);
         }
+
+        LinkedQueue.clear();
     }
 
 
@@ -148,16 +142,12 @@ public final class RadixSort implements IntSorter, ByteSorter
 
             for (int i=blkptr; i<end; i++)
             {
-                if (max < input[i])
-                {
-                    max = input[i];
+                int x = input[i];
+                x = (x + (x >> 31)) ^ (x >> 31); // abs
 
-                    if (max >= INT_THRESHOLD)
-                        break;
-                }
-                else if (max < -input[i])
+                if (max < x)
                 {
-                    max = -input[i];
+                    max = x;
 
                     if (max >= INT_THRESHOLD)
                         break;
@@ -180,19 +170,13 @@ public final class RadixSort implements IntSorter, ByteSorter
     {
         final int sz = (this.size == 0) ? input.length : this.size;
         final int end = blkptr + sz;
-        final int len = this.queues.length;
+        final int len = this.queues.length; // aliasing
+        final int bSize = this.bufferSize; // aliasing
 
         for (int j=0; j<len; j++)
-        {
-            final LinkedQueue queue = this.queues[j];
+            this.queues[j].store((byte[]) null);
 
-            if (queue.byteBuffer == null)
-                queue.byteBuffer = new byte[this.bufferSize];
-
-            queue.index = 0;
-        }
-
-        // Due a pass for each radix (4 bit step)
+        // Do a pass for each radix (4 bit step)
         for (int pass=0; pass<digits; pass++)
         {
             final int shift = pass << 2;
@@ -206,21 +190,19 @@ public final class RadixSort implements IntSorter, ByteSorter
                 queue.byteBuffer[queue.index] = value;
                 queue.index++;
 
-                if (queue.index == this.bufferSize)
-                {
-                    // The previous buffer for this radix must be saved
-                    queue.put(queue.byteBuffer);
-                    queue.byteBuffer = new byte[this.bufferSize];
-                    queue.index = 0;
-                }
+                // Check if the previous buffer for this radix must be saved
+                if (queue.index == bSize)
+                    queue.store(queue.byteBuffer);
             }
 
             int idx = blkptr;
 
             // Copy back data to the input array
             for (int j=0; j<len; j++)
-               idx = this.queues[j].get(input, idx);
+               idx = this.queues[j].retrieve(input, idx);
         }
+
+        LinkedQueue.clear();
     }
 
 
@@ -233,12 +215,13 @@ public final class RadixSort implements IntSorter, ByteSorter
         int sz = (this.size == 0) ? input.length : this.size;
         int end = blkptr + sz;
 
-        for (int i=blkptr; ((i<end) && (digits==1)); i++)
+        for (int i=blkptr; i<end; i++)
         {
-            int val = input[i] & 0xFF;
-
-            if (val >= 16)
+            if ((input[i] & 0xFF) >= BYTE_THRESHOLD)
+            {
                digits = 2;
+               break;
+            }
          }
 
         this.sort(input, blkptr, digits);
@@ -254,59 +237,71 @@ public final class RadixSort implements IntSorter, ByteSorter
         Node next;
         Object value;
 
-        Node()
-        {
-        }
+        Node()  { }
 
-        Node(int[] array)
-        {
-            this.value = array;
-        }
+        Node(int[] array) { this.value = array; }
 
-        Node(byte[] array)
-        {
-            this.value = array;
-        }
+        Node(byte[] array) { this.value = array; }
     }
 
 
     private static class LinkedQueue
     {
+        private static LinkedList<byte[]> POOL_B = new LinkedList<byte[]>();
+        private static LinkedList<int[]>  POOL_I = new LinkedList<int[]>();
+
         private final Node head;
+        private final int bufferSize;
         private Node tail;
         byte[] byteBuffer; // working buffer for int implementation
         int[] intBuffer;   // working buffer for byte implementation
         int index;         // index in working buffer
 
 
-        public LinkedQueue()
+        public static void clear()
+        {
+            POOL_B.clear();
+            POOL_I.clear();
+        }
+
+        
+        public LinkedQueue(int bufferSize)
         {
            this.head = new Node();
            this.tail = this.head;
+           this.bufferSize = bufferSize;
         }
 
-//
-//        protected boolean isEmpty()
-//        {
-//           return ((this.head.next == null) && (this.index == 0));
-//        }
 
-
-        protected void put(int[] buffer)
+        protected int[] store(int[] buffer)
         {
-           this.tail.next = new Node(buffer);
-           this.tail = this.tail.next;
+           if (buffer != null)
+           {
+              this.tail.next = new Node(buffer);
+              this.tail = this.tail.next;
+           }
+
+           this.intBuffer = (POOL_I.size() == 0) ? new int[this.bufferSize] : POOL_I.removeFirst();
+           this.index = 0;
+           return this.intBuffer;
         }
 
 
-        protected void put(byte[] buffer)
+        protected byte[] store(byte[] buffer)
         {
-           this.tail.next = new Node(buffer);
-           this.tail = this.tail.next;
+           if (buffer != null)
+           {
+             this.tail.next = new Node(buffer);
+             this.tail = this.tail.next;
+           }
+           
+           this.byteBuffer = (POOL_B.size() == 0) ? new byte[this.bufferSize] : POOL_B.removeFirst();
+           this.index = 0;
+           return this.byteBuffer;
         }
 
 
-        public int get(int[] array, int blkptr)
+        public int retrieve(int[] array, int blkptr)
         {
             Node node = this.head.next;
 
@@ -314,24 +309,31 @@ public final class RadixSort implements IntSorter, ByteSorter
             {
                int[] buffer = (int[]) node.value;
                System.arraycopy(buffer, 0, array, blkptr, buffer.length);
-               node = node.next;
                blkptr += buffer.length;
+               node.value = null;
+               POOL_I.add(buffer); // recycle array
+               node = node.next;
             }
 
-            if (this.index > 0)
+            if (this.index < 32)
+            {
+               for (int i=this.index-1; i>=0; i--)
+                   array[blkptr+i] = this.intBuffer[i];
+            }
+            else
             {
                System.arraycopy(this.intBuffer, 0, array, blkptr, this.index);
-               blkptr += this.index;
-               this.index = 0;
             }
 
+            blkptr += this.index;
+            this.index = 0;
             this.tail = this.head;
             this.tail.next = null;
             return blkptr;
         }
 
 
-        public int get(byte[] array, int blkptr)
+        public int retrieve(byte[] array, int blkptr)
         {
             Node node = this.head.next;
 
@@ -340,18 +342,23 @@ public final class RadixSort implements IntSorter, ByteSorter
                byte[] buffer = (byte[]) node.value;
                System.arraycopy(buffer, 0, array, blkptr, buffer.length);
                blkptr += buffer.length;
+               node.value = null;
+               POOL_B.add(buffer); // recycle array
                node = node.next;
             }
 
-            if (this.index > 0)
+            if (this.index < 32)
             {
                for (int i=this.index-1; i>=0; i--)
                    array[blkptr+i] = this.byteBuffer[i];
-
-               blkptr += this.index;
-               this.index = 0;
+            }
+            else
+            {
+                System.arraycopy(this.byteBuffer, 0, array, blkptr, this.index);
             }
 
+            blkptr += this.index;
+            this.index = 0;
             this.tail = this.head;
             this.tail.next = null;
             return blkptr;
