@@ -253,7 +253,7 @@ public class BWT implements ByteTransform
         if (this.array.length < len + 3)
            this.array = new int[len+3];
 
-        int len4 = len & 0xFFFFFFFC;
+        final int len4 = len & 0xFFFFFFFC;
 
         // Copy and extend the alphabet from [0..255] to [1..256]
         for (int i=0; i<len4; )
@@ -282,10 +282,32 @@ public class BWT implements ByteTransform
 
     // Stably sort input[0..n-1] to output[0..n-1]
     // Critical path for speed
-    private void radixPass(int[] input, int[] output, int[] sa, int[] freq,
-            int idx, int n)
+    private static void radixPass(int[] input, int[] output, int[] sa, int[] freq,
+            int idx, int n, boolean reset)
     {
-         int n8 = n & 0xFFFFFFF8;
+         // Reset
+         if (reset == true)
+         {
+            final int freq8 = freq.length & 0xFFFFFFF8;
+
+            for (int i=0; i<freq8; i+=8)
+            {
+               freq[i]   = 0;
+               freq[i+1] = 0;
+               freq[i+2] = 0;
+               freq[i+3] = 0;
+               freq[i+4] = 0;
+               freq[i+5] = 0;
+               freq[i+6] = 0;
+               freq[i+7] = 0;
+            }
+
+            for (int i=freq8; i<freq.length; i++)
+               freq[i] = 0;
+         }
+         
+         // Populate
+         final int n8 = n & 0xFFFFFFF8;
 
          for (int i=0; i<n8; i+=8)
          {
@@ -301,7 +323,8 @@ public class BWT implements ByteTransform
 
          for (int i=n8; i<n; i++)
             freq[sa[idx+input[i]]]++;
-
+         
+         // Accumulate
          for (int i=0, sum=0; i<freq.length; i++)
          {
             final int temp = freq[i];
@@ -309,6 +332,7 @@ public class BWT implements ByteTransform
             sum += temp;
          }
 
+         // Output
          for (int i=0; i<n8; i+=8)
          {
             final int val0 = input[i];
@@ -341,16 +365,16 @@ public class BWT implements ByteTransform
     // Requires values in [0..k] range
     private void suffixArray(int[] s, int[] sa, int n, int k)
     {
-        int n0 = (n + 2) / 3;
-        int n1 = (n + 1) / 3;
-        int n2 = n / 3;
-        int n02 = n0 + n2;
+        final int n0 = (n + 2) / 3;
+        final int n1 = (n + 1) / 3;
+        final int n2 = n / 3;
+        final int n02 = n0 + n2;
 
         // Array that contains suffixes for non-multiple-of-3 positions
-        int[] s12  = new int[n02+3];
-        int[] sa12 = new int[n02+3];
-        int end = n + (n0 - n1);
-        int end3 = 3 * (end / 3);
+        final int[] s12  = new int[n02+3];
+        final int[] sa12 = new int[n02+3];
+        final int end = n + (n0 - n1);
+        final int end3 = 3 * (end / 3);
         int ii = 0;
 
         // Generate positions of mod 1 and mod 2 suffixes
@@ -365,35 +389,10 @@ public class BWT implements ByteTransform
             s12[ii++] = i;
 
         // Radix sort the mod 1 and mod 2 triples
-        int[] freq = new int[k+1];
-        this.radixPass(s12 , sa12, s, freq, 2, n02);
-        int freq4 = freq.length & 0xFFFFFFFC;
-
-        for (int i=0; i<freq4; i+=4)
-        {
-            freq[i]   = 0;
-            freq[i+1] = 0;
-            freq[i+2] = 0;
-            freq[i+3] = 0;
-        }
-
-        for (int i=freq4; i<freq.length; i++)
-            freq[i] = 0;
-
-        this.radixPass(sa12, s12 , s, freq, 1, n02);
-
-        for (int i=0; i<freq4; i+=4)
-        {
-            freq[i]   = 0;
-            freq[i+1] = 0;
-            freq[i+2] = 0;
-            freq[i+3] = 0;
-        }
-
-        for (int i=freq4; i<freq.length; i++)
-            freq[i] = 0;
-
-        this.radixPass(s12 , sa12, s, freq, 0, n02);
+        final int[] freq = new int[k+1];
+        radixPass(s12 , sa12, s, freq, 2, n02, false);
+        radixPass(sa12, s12 , s, freq, 1, n02, true);
+        radixPass(s12 , sa12, s, freq, 0, n02, true);
 
         // Find lexicographic names of triples
         int name = 0;
@@ -450,8 +449,8 @@ public class BWT implements ByteTransform
         }
 
         // Array that contains suffixes for multiple-of-3 positions
-        int[] s0  = new int[n0];
-        int[] sa0 = new int[n0];
+        final int[] s0  = new int[n0];
+        final int[] sa0 = new int[n0];
 
         // Stably sort the mod 0 suffixes from sa12 by their first character
         for (int i=0, j=0; i<n02; i++)
@@ -460,18 +459,7 @@ public class BWT implements ByteTransform
                 s0[j++] = 3 * sa12[i];
         }
 
-        for (int i=0; i<freq4; i+=4)
-        {
-            freq[i]   = 0;
-            freq[i+1] = 0;
-            freq[i+2] = 0;
-            freq[i+3] = 0;
-        }
-
-        for (int i=freq4; i<freq.length; i++)
-            freq[i] = 0;
-
-        this.radixPass(s0, sa0, s, freq, 0, n0);
+        radixPass(s0, sa0, s, freq, 0, n0, true);
 
         // Merge the sorted sa0 suffixes and sorted sa12 suffixes
         for (int p=0, t=n0-n1, l=0; l<n; l++)
@@ -479,7 +467,7 @@ public class BWT implements ByteTransform
             int idx = sa12[t];
 
             // Position of current offset 1-2 suffix
-            int i = (idx < n0) ? (3 * idx) + 1 : (3 * (idx - n0)) + 2;
+            final int i = (idx < n0) ? (3 * idx) + 1 : (3 * (idx - n0)) + 2;
 
             // Position of current offset 0 suffix
             int j = sa0[p];
