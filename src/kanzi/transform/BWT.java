@@ -275,7 +275,7 @@ public class BWT implements ByteTransform
         this.array[len]   = 0;
         this.array[len+1] = 0;
         this.array[len+2] = 0;
-        this.suffixArray(this.array, sa, len, 256);
+        suffixArray(this.array, sa, len, 256);
         return sa;
     }
 
@@ -363,7 +363,7 @@ public class BWT implements ByteTransform
 
     // Requires s[n]=s[n+1]=s[n+2]=0, n>=2
     // Requires values in [0..k] range
-    private void suffixArray(int[] s, int[] sa, int n, int k)
+    private static void suffixArray(int[] s, int[] sa, int n, int k)
     {
         final int n0 = (n + 2) / 3;
         final int n1 = (n + 1) / 3;
@@ -435,7 +435,7 @@ public class BWT implements ByteTransform
         // Recurse if names are not yet unique
         if (name < n02)
         {
-            this.suffixArray(s12, sa12, n02, name);
+            suffixArray(s12, sa12, n02, name);
 
             // Store unique names in s12 using the suffix array
             for (int i=0; i<n02; i++)
