@@ -36,57 +36,42 @@ public final class RangeEncoder extends AbstractEncoder
     private long low;
     private long range;
     private boolean flushed;
-    private final int[] frequencies;
+    private final int[] baseFreq;
+    private final int[] deltaFreq;
     private final BitStream bitstream;
     private boolean written;
-    private int dirtyLength;       // For speed optimization purpose
-    private int[] dirtyThresholds; // For speed optimization purpose
 
 
     public RangeEncoder(BitStream bitstream)
     {
         this.range = (TOP << 8) - 1;
         this.bitstream = bitstream;
-        this.frequencies = new int[NB_SYMBOLS+1];
 
-        for (int i=0; i<this.frequencies.length; i++)
-            this.frequencies[i] = i;
+        // Since the frequency update after each byte encoded is the bottleneck,
+        // split the frequency table into an array of absolute frequencies (with
+        // indexes multiple of 16) and delta frequencies (relative to the previous
+        // abosulte frequency) with indexes in the [0..15] range
+        // This way, the update of frequencies is much faster
+        this.deltaFreq = new int[NB_SYMBOLS+1];
+        this.baseFreq = new int[(NB_SYMBOLS>>4)+1];
 
-        // Keep track of lower bounds of frequency segments that need an update.
-        // The array size is empirical
-        this.dirtyThresholds = new int[8];
+        for (int i=0; i<this.deltaFreq.length; i++)
+            this.deltaFreq[i] = i & 15; // DELTA
+
+        for (int i=0; i<this.baseFreq.length; i++)
+            this.baseFreq[i] = i << 4; // DELTA
     }
 
 
     // This method is on the speed critical path (called for each byte)
     // The speed optimization is focused on reducing the frequency table update
-    // This is achieved by keeping the previous value on each 'tick' and updating
-    // on each 'tack' => frequency table update reduction by half
     @Override
     public boolean encodeByte(byte b)
     {
-        int val = b & 0xFF;
-        int[] freq = this.frequencies;
-        int symbolLow = freq[val];
-        int symbolHigh = freq[val+1];
-        this.range /= (freq[NB_SYMBOLS] + this.dirtyLength);
-
-        if (this.dirtyLength > 0)
-        {
-            for (int i=this.dirtyLength-1; i>=0; i--)
-            {
-                int threshold = this.dirtyThresholds[i];
-
-                // Refresh high and low symbols
-                if (val >= threshold)
-                {
-                    symbolLow++;
-                    symbolHigh++;
-                }
-                else if (val + 1 >= threshold)
-                    symbolHigh++;
-            }
-        }
+        int value = b & 0xFF;
+        int symbolLow = this.baseFreq[value>>4] + this.deltaFreq[value];
+        int symbolHigh = this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1];
+        this.range /= (this.baseFreq[NB_SYMBOLS>>4] + this.deltaFreq[NB_SYMBOLS]);
 
         // Encode symbol
         this.low += (symbolLow * this.range);
@@ -108,55 +93,27 @@ public final class RangeEncoder extends AbstractEncoder
         }
 
         // Update frequencies: computational bottleneck !!!
-        val++;
-
-        // Find location of 'val' in sorted list of dirty thresholds
-        if (this.dirtyLength == 0)
-        {
-            this.dirtyThresholds[0] = val;
-        }
-        else
-        {
-            int idx = 0;
-
-            for ( ; idx<this.dirtyLength; idx++)
-            {
-                if (val <= this.dirtyThresholds[idx])
-                    break;
-            }
-            
-            for (int j=this.dirtyLength; j>idx; j--)
-              this.dirtyThresholds[j] = this.dirtyThresholds[j-1];
-
-            this.dirtyThresholds[idx] = val;
-        }
-
-        if (++this.dirtyLength == this.dirtyThresholds.length)
-        {
-            // Time to actually update the frequency table
-            int prev = this.dirtyThresholds[0];
-            int inc = 1;
-
-            for (int i=1; i<this.dirtyLength; i++)
-            {
-                int threshold = this.dirtyThresholds[i];
-
-                // Update each frequency segment
-                for (int j=prev; j<threshold; j++)
-                    freq[j] += inc;
-
-                prev = threshold;
-                inc++;
-            }
-
-            for (int j=prev; j<=NB_SYMBOLS; j++)
-                freq[j] += inc;
-
-            this.dirtyLength = 0;
-        }
-
+        this.updateFrequencies(value+1);
         this.written = true;
         return true;
+    }
+
+
+    private void updateFrequencies(int value)
+    {
+        int[] freq = this.baseFreq;
+        final int start = (value + 15) >> 4;
+        final int len = freq.length;
+
+        // Update absolute frequencies
+        for (int j=start; j<len; j++)
+            freq[j]++;
+
+        freq = this.deltaFreq;
+
+        // Update relative frequencies (in the 'right' segment only)
+        for (int j=(start<<4)-1; j>=value; j--)
+            freq[j]++;
     }
 
 
@@ -167,7 +124,6 @@ public final class RangeEncoder extends AbstractEncoder
         {
             // After this call the frequency tables may not be up to date. Do not care
             this.flushed = true;
-            this.dirtyLength = 0;
 
             for (int i=0; i<7; i++)
             {
