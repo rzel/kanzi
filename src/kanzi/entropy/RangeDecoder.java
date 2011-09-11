@@ -15,7 +15,6 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.EntropyDecoder;
 import kanzi.bitstream.BitStream;
 import kanzi.bitstream.BitStreamException;
 
@@ -33,15 +32,13 @@ public final class RangeDecoder extends AbstractDecoder
     protected static final long MASK      = 0x00FFFFFFFFFFFFFFL;
 
     private static final int NB_SYMBOLS = 257; //256 + EOF
-    private static final int LENGTH8 = (NB_SYMBOLS + 1) & 0xFFFFFFF8;
     private static final int LAST = NB_SYMBOLS - 1;
-    private static final int HALF = LAST >> 1;
-    private static final int QUARTER = HALF >> 1;
 
     private long code;
     private long low;
     private long range;
-    private final int[] frequencies;
+    private final int[] baseFreq;
+    private final int[] deltaFreq;
     private final BitStream bitstream;
     private boolean initialized;
 
@@ -50,13 +47,26 @@ public final class RangeDecoder extends AbstractDecoder
     {
         this.range = (TOP << 8) - 1;
         this.bitstream = bitstream;
-        this.frequencies = new int[NB_SYMBOLS+1];
+        
+        // Since the frequency update after each byte decoded is the bottleneck,
+        // split the frequency table into an array of absolute frequencies (with
+        // indexes multiple of 16) and delta frequencies (relative to the previous
+        // abosulte frequency) with indexes in the [0..15] range
+        // This way, the update of frequencies is much faster
+        this.deltaFreq = new int[NB_SYMBOLS+1];
+        this.baseFreq = new int[(NB_SYMBOLS>>4)+1];
 
-        for (int i=0; i<this.frequencies.length; i++)
-            this.frequencies[i] = i;
+        for (int i=0; i<this.deltaFreq.length; i++)
+            this.deltaFreq[i] = i & 15; // DELTA
+
+        for (int i=0; i<this.baseFreq.length; i++)
+            this.baseFreq[i] = i << 4; // DELTA
     }
-    
 
+
+
+    // This method is on the speed critical path (called for each byte)
+    // The speed optimization is focused on reducing the frequency table update
     @Override
     public byte decodeByte()
     {
@@ -66,27 +76,27 @@ public final class RangeDecoder extends AbstractDecoder
             this.code = this.bitstream.readBits(56) & 0xFFFFFFFF;
         }
 
-        int[] freq = this.frequencies;
-        this.range /= freq[NB_SYMBOLS];
-        int count = (int) ((this.code - this.low) / this.range);
+        this.range /= (this.baseFreq[NB_SYMBOLS>>4] + this.deltaFreq[NB_SYMBOLS]);
+        final int count = (int) ((this.code - this.low) / this.range);
 
         // Find first frequency less than 'count'
-        int value = (freq[HALF] > count) ? HALF : LAST;
-        int interval = QUARTER;
+        int value = this.baseFreq.length - 1;
 
-        // Try 1/4 or 3/4 index
-        if (freq[value-interval] > count)
-            value -= interval;
-
-        interval >>= 1;
-
-        // Try 1/8, 3/8, 5/8 or 7/8
-        if (freq[value-interval] > count)
-           value -= interval;
-
-        // Finish with a (short) loop
-        while (freq[value] > count)
+        while ((value > 0) && (count < this.baseFreq[value]))
             value--;
+
+        int base = this.baseFreq[value];
+        value <<= 4;
+
+        if (count != base)
+        {
+           final int count2 = count - base;
+           final int end = value;
+           value = ((value + 15) > NB_SYMBOLS) ? NB_SYMBOLS : value+15;
+
+           while ((value >= end) && (count2 < this.deltaFreq[value]))
+              value--;
+        }
 
         if (value == LAST)
         {
@@ -96,13 +106,13 @@ public final class RangeDecoder extends AbstractDecoder
             throw new BitStreamException("Unknown symbol: "+value, BitStreamException.INVALID_STREAM);
         }
 
-        int symbolLow = freq[value];
-        int symbolHigh = freq[value+1];
+        int symbolLow = this.baseFreq[value>>4] + this.deltaFreq[value];
+        int symbolHigh = this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1];
 
         // Decode symbol
         this.low += (symbolLow * this.range);
         this.range *= (symbolHigh - symbolLow);
-        
+
         long checkRange = (this.low ^ (this.low + this.range)) & MASK;
 
         while ((checkRange < TOP) || (this.range < BOTTOM))
@@ -118,32 +128,27 @@ public final class RangeDecoder extends AbstractDecoder
             checkRange = (this.low ^ (this.low + this.range)) & MASK;
         }
 
-        byte res = (byte) (value & 0xFF);
-        value++;
+        // Update frequencies: computational bottleneck !!!
+        this.updateFrequencies(value+1);
+        return (byte) (value & 0xFF);
+    }
 
-        // Update frequencies
-        int part1 = (value + 7) & 0xFFFFFFF8;
 
-        // Unrolling the loop provides a significant boost on my system
-        for (int j=value; j<part1; j++)
+    private void updateFrequencies(int value)
+    {
+        int[] freq = this.baseFreq;
+        final int start = (value + 15) >> 4;
+        final int len = freq.length;
+
+        // Update absolute frequencies
+        for (int j=start; j<len; j++)
             freq[j]++;
 
-        for (int j=part1; j<LENGTH8; j+=8)
-        {
-            freq[j]++;
-            freq[j+1]++;
-            freq[j+2]++;
-            freq[j+3]++;
-            freq[j+4]++;
-            freq[j+5]++;
-            freq[j+6]++;
-            freq[j+7]++;
-        }
+        freq = this.deltaFreq;
 
-        for (int j=LENGTH8; j<freq.length; j++)
+        // Update relative frequencies (in the 'right' segment only)
+        for (int j=(start<<4)-1; j>=value; j--)
             freq[j]++;
-
-        return res;
     }
 
 
