@@ -122,10 +122,11 @@ public class TestBlockCoder
             entropyCoder.dispose();
             dbs.close();
             System.out.println();
-            System.out.println("Read:        "+read);
-            System.out.println("Encoded:     "+(dbs.written() >> 3));
-            System.out.println("Ratio:       "+(dbs.written() >> 3) / (float) read);
-
+            System.out.println("Read:             "+read);
+            System.out.println("Encoded:          "+(dbs.written() >> 3));
+            System.out.println("Ratio:            "+(dbs.written() >> 3) / (float) read);
+            System.out.println("Troughput (KB/s): "+(dbs.written() / 8192) / (float) (delta/1000000000));
+            System.out.println();
 
             // Decode
             // !!! The decoder must know the block size of the encoder !!!
@@ -176,14 +177,6 @@ public class TestBlockCoder
 
                 long after = System.nanoTime();
 
-//for (int i = 0; i < block.index; i++)
-//{
-//   if (i % 200 == 0)
-//       System.out.println("");
-//
-//   System.out.print((char) block.array[i]);
-//}
-
                 System.out.println(step+": "+(compressedLength+5)+" --> "+block.index);
                 step++;
                 mode = (int) entropyDecoder.decodeByte();
@@ -196,6 +189,8 @@ public class TestBlockCoder
 
             System.out.println();
             System.out.println("Decoding took "+(delta/1000000)+" ms");
+            System.out.println("Troughput (KB/s): "+(dbs.written() / 8192) / (float) (delta/1000000000));
+            System.out.println();
 
             is.close();
             entropyDecoder.dispose();
