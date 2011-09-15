@@ -15,14 +15,12 @@ limitations under the License.
 
 package kanzi.transform;
 
-// The Move-To-Front Transform is a simple reversible transform based on
 
 import kanzi.ByteTransform;
 
+// The Move-To-Front Transform is a simple reversible transform based on
 // permutation of the data in the original message to reduce the entropy.
-
 // See http://en.wikipedia.org/wiki/Move-to-front_transform
-
 // Fast implementation using double linked lists to minimize the number of lookups
 
 public final class MTFT implements ByteTransform
