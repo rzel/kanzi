@@ -15,10 +15,9 @@ limitations under the License.
 
 package kanzi.transform;
 
-// The Burrows-Wheeler Transform is a reversible transform based on
-
 import kanzi.ByteTransform;
 
+// The Burrows-Wheeler Transform is a reversible transform based on
 // permutation of the data in the original message to reduce the entropy.
 
 // The initial text can be found here:
