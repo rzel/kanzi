@@ -172,9 +172,6 @@ public class BlockCodec implements ByteFunction
        int blockSize = this.buffer.index;
        this.buffer.index = 0;
 
-       if (output.array.length - output.index < blockSize + BLOCK_HEADER_SIZE)
-          return false;
-
        // Apply Burroughs-Wheeler Transform
        this.bwt.setSize(blockSize);
        this.bwt.forward(this.buffer.array, 0);
@@ -190,6 +187,9 @@ public class BlockCodec implements ByteFunction
 
        // Apply Zero Length Encoding (changes the index of input & output)
        if (zlt.forward(this.buffer, output) == false)
+          return false;
+
+       if (output.index + BLOCK_HEADER_SIZE >= output.array.length)
           return false;
 
        // If the ZLE did not compress (it can expand in some pathological cases)
