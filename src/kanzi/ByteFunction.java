@@ -15,7 +15,6 @@ limitations under the License.
 
 package kanzi;
 
-import kanzi.IndexedByteArray;
 
 // A byte function is an operation that takes an array of bytes as input and
 // turns it into another array of bytes. The size of the returned array is not

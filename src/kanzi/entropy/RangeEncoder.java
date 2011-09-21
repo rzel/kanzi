@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.bitstream.BitStream;
+import kanzi.BitStream;
 
 
 // Based on Order 0 range coder by Dmitry Subbotin itself derived from the algorithm

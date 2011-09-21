@@ -15,8 +15,8 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.bitstream.BitStream;
-import kanzi.bitstream.BitStreamException;
+import kanzi.BitStream;
+import kanzi.BitStreamException;
 import kanzi.bitstream.DebugBitStream;
 import kanzi.bitstream.DefaultBitStream;
 import kanzi.entropy.HuffmanDecoder;

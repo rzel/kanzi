@@ -103,6 +103,7 @@ public class BlockCodec implements ByteFunction
    }
 
 
+   @Override
    public boolean forward(IndexedByteArray input, IndexedByteArray output)
    {
        if ((input == null) || (output == null) || (input == output))
@@ -212,6 +213,7 @@ public class BlockCodec implements ByteFunction
     }
 
 
+   @Override
    public boolean inverse(IndexedByteArray input, IndexedByteArray output)
    {
       // Read 'mode' byte

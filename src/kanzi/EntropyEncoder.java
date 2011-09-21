@@ -15,11 +15,7 @@ limitations under the License.
 
 package kanzi;
 
-import kanzi.bitstream.BitStream;
 
-
-// This interface represents an function to transform one or several bytes into
-// a set of bits (not necessarily a multiple or 8)
 public interface EntropyEncoder
 {
     // Encode the array provided into the bitstream. Return the number of bytes

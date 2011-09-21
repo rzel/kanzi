@@ -15,8 +15,8 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.bitstream.BitStream;
-import kanzi.bitstream.BitStreamException;
+import kanzi.BitStream;
+import kanzi.BitStreamException;
 
 
 // Exponential Golomb Coder

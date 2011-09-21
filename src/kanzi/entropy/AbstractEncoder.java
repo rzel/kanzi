@@ -16,8 +16,8 @@ limitations under the License.
 package kanzi.entropy;
 
 import kanzi.EntropyEncoder;
-import kanzi.bitstream.BitStream;
-import kanzi.bitstream.BitStreamException;
+import kanzi.BitStream;
+import kanzi.BitStreamException;
 
 
 public abstract class AbstractEncoder implements EntropyEncoder

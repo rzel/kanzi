@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.bitstream;
 
+import kanzi.BitStreamException;
 import java.io.IOException;
 import java.io.InputStream;
 

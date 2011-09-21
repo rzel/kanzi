@@ -30,7 +30,7 @@ import kanzi.ColorModelType;
 import kanzi.EntropyEncoder;
 import kanzi.Global;
 import kanzi.IndexedByteArray;
-import kanzi.bitstream.BitStream;
+import kanzi.BitStream;
 import kanzi.bitstream.DefaultBitStream;
 import kanzi.entropy.RangeEncoder;
 import kanzi.function.BlockCodec;

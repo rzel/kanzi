@@ -14,6 +14,8 @@ limitations under the License.
 */
 
 package kanzi;
+
+
 public final class IndexedIntArray
 {
     public int[] array;

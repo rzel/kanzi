@@ -15,11 +15,7 @@ limitations under the License.
 
 package kanzi;
 
-import kanzi.bitstream.BitStream;
 
-
-// This interface represents an operator to transform a set of bits (not 
-// necessarily a multiple or 8) into one or several bytes
 public interface EntropyDecoder
 {
     // Decode the next chunk of data from the bitstream and return as a byte

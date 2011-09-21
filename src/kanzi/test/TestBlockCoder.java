@@ -20,14 +20,13 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.Arrays;
 import kanzi.IndexedByteArray;
-import kanzi.bitstream.BitStream;
+import kanzi.BitStream;
 import kanzi.bitstream.DefaultBitStream;
 import kanzi.EntropyDecoder;
 import kanzi.EntropyEncoder;
 import kanzi.entropy.RangeDecoder;
 import kanzi.entropy.RangeEncoder;
 import kanzi.function.BlockCodec;
-//import kanzi.function.RLT;
 
 
 public class TestBlockCoder
@@ -74,35 +73,22 @@ public class TestBlockCoder
             {
                read += len;
                long before = System.nanoTime();
-                iba.index = 0;
-                block.index = 0;
+               iba.index = 0;
+               block.index = 0;
 
-                // For debugging only ...
-                Arrays.fill(block.array, (byte) 0xAA);
+               // For debugging only ...
+               Arrays.fill(block.array, (byte) 0xAA);
 
-                blockCodec.setSize(len);
+               blockCodec.setSize(len);
 
-                if (blockCodec.forward(iba, block) == false)
-                {
-                   System.out.println("Error in block codec forward");
-                   System.exit(1);
-                }
+               if (blockCodec.forward(iba, block) == false)
+               {
+                  System.out.println("Error in block codec forward");
+                  System.exit(1);
+               }
 
-                // Double compression
-//                System.out.print(block.index+" ");
-//                System.arraycopy(block.array, 0, iba.array, 0, block.index);
-//                blockCodec.setSize(block.index);
-//                iba.index = 0;
-//                block.index = 0;
-//                if (blockCodec.forward(iba, block) == false)
-//                {
-//                   System.out.println("Error in block codec forward");
-//                   System.exit(1);
-//                }
-//                System.out.println(block.index);
-
-                for (int i=0; i<block.index; i++)
-                    entropyCoder.encodeByte(block.array[i]);
+               for (int i=0; i<block.index; i++)
+                  entropyCoder.encodeByte(block.array[i]);
 
                long after = System.nanoTime();
                delta += (after - before);
@@ -125,7 +111,7 @@ public class TestBlockCoder
             System.out.println("Read:             "+read);
             System.out.println("Encoded:          "+(dbs.written() >> 3));
             System.out.println("Ratio:            "+(dbs.written() >> 3) / (float) read);
-            System.out.println("Troughput (KB/s): "+(dbs.written() / 8192) / (float) (delta/1000000000));
+            System.out.println("Troughput (KB/s): "+((int) (dbs.written() * 1000000000.0 / 8192 / delta)));
             System.out.println();
 
             // Decode
@@ -141,11 +127,18 @@ public class TestBlockCoder
             delta = 0L;
             step = 0;
 
-// FIXME check mode value to find length
             int mode = (int) entropyDecoder.decodeByte();
-            int val1 = (int) entropyDecoder.decodeByte();
-            int val2 = (int) entropyDecoder.decodeByte();
-            int compressedLength = ((val1 & 0xFF) << 8) | (val2 & 0xFF);
+            int compressedLength, val1 = 0, val2 = 0;
+
+            if ((mode & BlockCodec.COPY_BLOCK_MASK) == 0)
+            {
+               val1 = (int) entropyDecoder.decodeByte();
+               val2 = (int) entropyDecoder.decodeByte();
+               compressedLength = ((val1 & 0xFF) << 8) | (val2 & 0xFF);
+            }
+            else
+               compressedLength = mode & BlockCodec.COPY_LENGTH_MASK;
+
             iba.array = new byte[compressedLength];
 
             // Decode next block
@@ -157,14 +150,19 @@ public class TestBlockCoder
                     iba.array = new byte[compressedLength + 5];
 
                 // For debugging only ...
-                Arrays.fill(iba.array, (byte) 0xAA);
+                //Arrays.fill(iba.array, (byte) 0xAA);
 
                 iba.array[0] = (byte) mode;
-                iba.array[1] = (byte) val1;
-                iba.array[2] = (byte) val2;
+                int startIdx = 1;
 
-                for (int i = 0; i < compressedLength+2; i++)
-                    iba.array[3+i] = entropyDecoder.decodeByte();
+                if ((mode & BlockCodec.COPY_BLOCK_MASK) == 0)
+                {
+                    iba.array[startIdx++] = (byte) val1;
+                    iba.array[startIdx++] = (byte) val2;
+                }
+
+                for (int i=0; i<compressedLength+2; i++)
+                    iba.array[startIdx+i] = entropyDecoder.decodeByte();
 
                 iba.index = 0;
                 block.index = 0;
@@ -179,17 +177,24 @@ public class TestBlockCoder
 
                 System.out.println(step+": "+(compressedLength+5)+" --> "+block.index);
                 step++;
+
                 mode = (int) entropyDecoder.decodeByte();
-// FIXME check mode value to find length
-                val1 = (int) entropyDecoder.decodeByte();
-                val2 = (int) entropyDecoder.decodeByte();
-                compressedLength = ((val1 & 0xFF) << 8) | (val2 & 0xFF);
+
+                if ((mode & BlockCodec.COPY_BLOCK_MASK) == 0)
+                {
+                   val1 = (int) entropyDecoder.decodeByte();
+                   val2 = (int) entropyDecoder.decodeByte();
+                   compressedLength = ((val1 & 0xFF) << 8) | (val2 & 0xFF);
+                }
+                else
+                   compressedLength = mode & BlockCodec.COPY_LENGTH_MASK;
+
                 delta += (after - before);
             }
 
             System.out.println();
             System.out.println("Decoding took "+(delta/1000000)+" ms");
-            System.out.println("Troughput (KB/s): "+(dbs.written() / 8192) / (float) (delta/1000000000));
+            System.out.println("Troughput (KB/s): "+((int) (dbs.written() * 1000000000.0 / 8192 / delta)));
             System.out.println();
 
             is.close();

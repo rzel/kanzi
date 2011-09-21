@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.bitstream.BitStream;
+import kanzi.BitStream;
 import kanzi.bitstream.DefaultBitStream;
 import kanzi.EntropyEncoder;
 import kanzi.entropy.ExpGolombEncoder;

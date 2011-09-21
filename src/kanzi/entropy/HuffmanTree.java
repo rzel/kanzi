@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.bitstream.BitStream;
+import kanzi.BitStream;
 import kanzi.ArrayComparator;
 import kanzi.util.sort.DefaultArrayComparator;
 import kanzi.util.sort.QuickSort;

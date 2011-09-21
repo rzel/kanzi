@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.bitstream.BitStream;
+import kanzi.BitStream;
 
 
 // Null entropy encoder and decoder

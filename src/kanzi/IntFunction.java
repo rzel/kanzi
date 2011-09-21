@@ -16,8 +16,7 @@ limitations under the License.
 package kanzi;
 
 
-
-import kanzi.IndexedIntArray;
+// An integer function is an operation that takes an array of integers as input and
 // and turns it into another array of integers. The size of the returned array 
 // is not known in advance (by the caller).
 public interface IntFunction

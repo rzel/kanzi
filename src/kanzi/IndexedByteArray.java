@@ -14,6 +14,8 @@ limitations under the License.
 */
 
 package kanzi;
+
+
 public final class IndexedByteArray
 {
     public byte[] array;
