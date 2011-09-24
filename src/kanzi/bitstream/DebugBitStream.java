@@ -65,7 +65,7 @@ public final class DebugBitStream implements BitStream
     }
     
     
-    public void setMark(boolean mark)
+    public synchronized void setMark(boolean mark)
     {
         this.mark = mark;
     }
@@ -77,7 +77,7 @@ public final class DebugBitStream implements BitStream
     }
     
     
-    public void showByte(boolean hex)
+    public synchronized void showByte(boolean hex)
     {
         this.hexa = hex;
     }
