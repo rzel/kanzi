@@ -81,23 +81,16 @@ public class TestEffects
                      int r2 = (p2 >> 16) & 0xFF;
                      int g2 = (p2 >> 8) & 0xFF;
                      int b2 = p2 & 0xFF;
-                     int r = (Math.abs(r1 - r2) & 0xFF) << 16;
-                     int g = (Math.abs(g1 - g2) & 0xFF) << 8;
-                     int b =  Math.abs(b1 - b2) & 0xFF;
+                     int r = Math.abs(r1 - r2) & 0xFF;
+                     int g = Math.abs(g1 - g2) & 0xFF;
+                     int b = Math.abs(b1 - b2) & 0xFF;
+                     int avg = (r + g + b) / 3;
+                     avg <<= 5; // magnify small errors
 
-                     if ((r > 8) || (r < -8))
-                        r = 0;
+                     if (avg > 255)
+                        avg = 255;
 
-                     if ((g > 8) || (g < -8))
-                        g = 0;
-
-                     if ((b > 8) || (b < -8))
-                        b = 0;
-
-                     r <<= 5;
-                     g <<= 5;
-                     b <<= 5;
-                     delta[j * w + i] = r | g | b;
+                     delta[j * w + i] = (avg << 16) | (avg << 8) | avg;
                   }
                }
 
