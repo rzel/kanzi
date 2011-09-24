@@ -159,13 +159,16 @@ public class ColorReducer implements VideoEffect
 
      protected OctreeNode(int red, int green, int blue, OctreeNode parent, int parentIndex)
      {
+       if (parent == null)
+           throw new NullPointerException("Invalid null parent");
+
        this.children = new OctreeNode[8];
        this.references = 1;
        this.red = red;
        this.green = green;
        this.blue = blue;
        this.parent = parent;
-       this.level = (parent == null) ? 0 : (short) (parent.level + 1);
+       this.level = (short) (parent.level + 1);
        this.maxLevel = parent.maxLevel;
        this.paletteIndex = -1;
        this.parentIndex = (byte) parentIndex;
