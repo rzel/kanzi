@@ -27,8 +27,8 @@ public class SortTask extends RecursiveAction
    private static final int MIN_THRESHOLD = 8192;
    private static final int MAX_THRESHOLD = MIN_THRESHOLD << 1;
 
-   private final IntSorter iDelegate;
-   private final ByteSorter bDelegate;
+   private final transient IntSorter iDelegate;
+   private final transient ByteSorter bDelegate;
    private final int[] iSrc;
    private final int[] iDst;
    private final byte[] bSrc;
