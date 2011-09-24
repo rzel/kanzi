@@ -88,7 +88,7 @@ public final class ImageQualityMonitor
        this.height = height;
        this.stride = stride;
        this.kernel32 = (kernel == null) ? DEFAULT_GAUSSIAN_KERNEL : kernel;
-       this.blockSize = kernel.length;
+       this.blockSize = this.kernel32.length;
        this.downSampling = downSampling;
    }
 
