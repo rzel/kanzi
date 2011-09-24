@@ -18,7 +18,6 @@ package kanzi.test;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.util.Arrays;
 import kanzi.IndexedByteArray;
 import kanzi.BitStream;
 import kanzi.bitstream.DefaultBitStream;
@@ -49,7 +48,7 @@ public class TestBlockCoder
             //dbs.showByte(true);
             BitStream dbs = new DefaultBitStream(fos, 16384);
 
-            byte[] buffer = new byte[32768];
+            byte[] buffer = new byte[65530];
             BlockCodec blockCodec = new BlockCodec(buffer.length);
             IndexedByteArray iba = new IndexedByteArray(buffer, 0);
 
@@ -77,7 +76,7 @@ public class TestBlockCoder
                block.index = 0;
 
                // For debugging only ...
-               Arrays.fill(block.array, (byte) 0xAA);
+               //Arrays.fill(block.array, (byte) 0xAA);
 
                blockCodec.setSize(len);
 
@@ -117,11 +116,10 @@ public class TestBlockCoder
             // Decode
             // !!! The decoder must know the block size of the encoder !!!
             fis = new FileInputStream(output);
-            FileInputStream is = new FileInputStream(output);
             //BitStream ibs = new DefaultBitStream(is, iba.array.length);
             //DebugBitStream dbs2 = new DebugBitStream(ibs, System.out);
             //dbs2.showByte(true);
-            BitStream dbs2 = new DefaultBitStream(is, iba.array.length);
+            BitStream dbs2 = new DefaultBitStream(fis, iba.array.length);
 
             EntropyDecoder entropyDecoder = new RangeDecoder(dbs2);
             delta = 0L;
@@ -197,7 +195,7 @@ public class TestBlockCoder
             System.out.println("Troughput (KB/s): "+((int) (dbs.written() * 1000000000.0 / 8192 / delta)));
             System.out.println();
 
-            is.close();
+            fis.close();
             entropyDecoder.dispose();
         }
         catch (Exception e)
