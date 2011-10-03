@@ -114,39 +114,47 @@ public class TestRangeCoder
         {
             System.out.println("\n\nSpeed Test");
             int[] values = new int[10000];
-            long delta = 0;
+            long delta1 = 0;
+            long delta2 = 0;
 
             for (int i=0; i<values.length; i++)
                 values[i] = (i & 255);
+            
+            int iter = 20000;
 
 
-            for (int ii=0; ii<5000; ii++)
+            for (int ii=0; ii<iter; ii++)
             {
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
                 BitStream bs = new DefaultBitStream(os, 16384);
                 RangeEncoder rc = new RangeEncoder(bs);
-                long before = System.nanoTime();
+                long before, after;
+                before = System.nanoTime();
 
                 for (int i=0; i<values.length; i++)
-                {
-                    rc.encodeByte((byte) (values[i] & 255));
-                }
+                   rc.encodeByte((byte) (values[i] & 255));
 
+                after = System.nanoTime();
+                delta1 += (after - before);
                 bs.flush();
                 rc.dispose();
+
                 byte[] buf = os.toByteArray();
                 bs = new DefaultBitStream(new ByteArrayInputStream(buf), 64);
                 RangeDecoder rd = new RangeDecoder(bs);
                 int len = values.length; // buf.length >> 3;
+                before = System.nanoTime();
 
                 for (int i=0; i<len; i++)
                    rd.decodeByte();
 
-                long after = System.nanoTime();
-                delta += (after - before);
+                after = System.nanoTime();
+                delta2 += (after - before);
             }
 
-            System.out.println("Elapsed [ms]: "+delta/1000000);
+            System.out.println("Iterations: "+iter);
+            System.out.println("Encoding [ms]: "+delta1/1000000);
+            System.out.println("Decoding [ms]: "+delta2/1000000);
         }
     }
 }
