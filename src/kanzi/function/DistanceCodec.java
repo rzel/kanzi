@@ -168,10 +168,16 @@ public class DistanceCodec implements ByteFunction
              }
              else // small alphabet, spell each symbol
              {
+                int previous = 0;
+                
                 for (int i=0; i<256; i++)
                 {
                    if (positions[i] != eof)
-                      dstArray[dst.index++] = (byte) i;
+                   {
+                      // Encode sumbol as delta
+                      dstArray[dst.index++] = (byte) (i - previous);
+                      previous = i;
+                   }
                 }
              }
           }
@@ -334,10 +340,13 @@ public class DistanceCodec implements ByteFunction
              }
              else // small alphabet, list all present symbols
              {
+                int previous = 0;
+                
                 for (int i=0; i<alphabetSize; i++)
                 {
-                   final int val = srcArray[src.index++] & 0xFF;
-                   alphabet[val] = 1;
+                   final int delta = srcArray[src.index++] & 0xFF;
+                   alphabet[previous + delta] = 1;
+                   previous += delta;
                 }
              }
           }
