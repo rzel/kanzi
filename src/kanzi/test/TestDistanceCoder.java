@@ -20,7 +20,7 @@ import kanzi.IndexedByteArray;
 import kanzi.function.DistanceCodec;
 
 
-public class TestDistanceCodec
+public class TestDistanceCoder
 {
      private static byte[] DATA = new byte[] 
      {

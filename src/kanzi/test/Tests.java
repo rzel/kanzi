@@ -49,7 +49,7 @@ public class Tests
        System.out.println("\n\n======================");
        TestExpGolombCoder.main(args);
        System.out.println("\n\n======================");
-       TestDistanceCodec.main(args);
+       TestDistanceCoder.main(args);
        long after = System.nanoTime();
        System.out.println("\n\n -------------------------------------- \n");
        System.out.println("Elapsed [ms]: " + (after - before) / 1000000);
