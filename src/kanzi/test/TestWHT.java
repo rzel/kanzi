@@ -22,44 +22,6 @@ public class TestWHT
 
   public static void main(String[] args)
   {
-       Runnable r1 = new Runnable()
-        {
-            public void run()
-            {
-                for (int times=0; times<20; times++)
-                {
-                    int[][] data = new int[50000][];
-                    WHT8 wht = new WHT8();
-
-                    for (int i=0; i<50000; i++)
-                    {
-                        data[i] = new int[64];
-
-                        for (int j=0; j<64; j++)
-                            data[i][j] = i*50000+j;
-                    }
-
-                    long before = System.nanoTime();
-
-                    for (int i=0; i<500000; i++)
-                    {
-                       wht.forward(data[i%2], 0);
-                       wht.inverse(data[i%2], 0);
-                    }
-
-                    long after = System.nanoTime();
-
-                    System.out.print("Elapsed [ms]: ");
-                    System.out.println((after-before)/1000000);
-                }
-            }
-        };
-
-        System.out.println("\nWHT4 speed");
-
-        // Speed test
-        r1.run();
-
 
         Runnable r2 = new Runnable()
         {
@@ -112,5 +74,54 @@ public class TestWHT
         
         // Validity test
         r2.run();
+        
+        Runnable r1 = new Runnable()
+        {
+            public void run()
+            {
+                long delta1 = 0;
+                long delta2 = 0;
+                int iter = 50000;
+                
+                for (int times=0; times<100; times++)
+                {
+                    int[][] data = new int[50000][];
+                    WHT8 wht = new WHT8();
+
+                    for (int i=0; i<iter; i++)
+                    {
+                        data[i] = new int[64];
+
+                        for (int j=0; j<64; j++)
+                            data[i][j] = i*50000+j;
+                    }
+
+                    long before, after;
+
+                    for (int i=0; i<500000; i++)
+                    {
+                       before = System.nanoTime();
+                       wht.forward(data[i%2], 0);
+                       after = System.nanoTime();
+                       delta1 += (after-before);
+                       before = System.nanoTime();
+                       wht.inverse(data[i%2], 0);
+                       after = System.nanoTime();
+                       delta2 += (after-before);
+                    }
+                }
+                
+                System.out.println("Iterations: "+iter*100);
+                System.out.println("Encoding [ms]: "+delta1/1000000);
+                System.out.println("Decoding [ms]: "+delta2/1000000);                
+            }
+        };
+
+        System.out.println("\nWHT8 speed");
+
+        // Speed test
+        r1.run();        
     }
+  
+  
 }
