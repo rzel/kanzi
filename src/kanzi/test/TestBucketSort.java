@@ -22,7 +22,7 @@ public class TestBucketSort
 {
     public static void main(String[] args)
     {
-        System.out.println("TestBuckSort");
+        System.out.println("TestBucketSort");
 
         // Test behavior
         for (int ii=1; ii<20; ii++)
