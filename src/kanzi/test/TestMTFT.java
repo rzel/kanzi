@@ -159,10 +159,10 @@ public class TestMTFT
             MTFT mtft = new MTFT();
             byte[] reverse = new byte[input.length];
             long delta1 = 0, delta2 = 0;
-            long delta3 = 0, delta4 = 0;
             long before, after;
+            int iter = 20000;
 
-            for (int ii = 0; ii < 20000; ii++)
+            for (int ii = 0; ii < iter; ii++)
             {
                 Random rnd = new Random();
 
@@ -181,7 +181,7 @@ public class TestMTFT
                 delta2 += (after - before);
             }
 
-            
+            System.out.println("Iterations: "+iter);
             System.out.println("MTFT Forward transform [ms]: " + delta1 / 1000000);
             System.out.println("MTFT Reverse transform [ms]: " + delta2 / 1000000);
         }
