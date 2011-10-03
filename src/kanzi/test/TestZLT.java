@@ -225,9 +225,14 @@ int[] arr = new int[] {
          }
          
          ZLT zlt = new ZLT();
-         long before = System.nanoTime();
+         long before, after;
+         long delta1 = 0;
+         long delta2 = 0;
+         int iter = 100000;
 
-         for (int ii = 0; ii < 100000; ii++)
+         before = System.nanoTime();
+         
+         for (int ii = 0; ii < iter; ii++)
          {
             zlt = new ZLT(); // Required to reset internal attributes
             iba1.index = 0;
@@ -235,7 +240,11 @@ int[] arr = new int[] {
             zlt.forward(iba1, iba2);
          }
 
-         for (int ii = 0; ii < 100000; ii++)
+         after = System.nanoTime();
+         delta1 += (after - before);
+         before = System.nanoTime();
+         
+         for (int ii = 0; ii < iter; ii++)
          {
             zlt = new ZLT(); // Required to reset internal attributes
             iba1.index = 0;
@@ -243,8 +252,11 @@ int[] arr = new int[] {
             zlt.inverse(iba2, iba1);
          }
 
-         long after = System.nanoTime();
-         System.out.println("Elapsed [ms]: " + (after - before) / 1000000);
+         after = System.nanoTime();
+         delta2 += (after - before);
+         System.out.println("Iterations: "+iter);
+         System.out.println("ZLT encoding [ms]: " + delta1 / 1000000);
+         System.out.println("ZLT decoding [ms]: " + delta2 / 1000000);
       }
    }
 }
