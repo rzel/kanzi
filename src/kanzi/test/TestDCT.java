@@ -21,44 +21,7 @@ public class TestDCT
 {
 
   public static void main(String[] args)
-  {
-        Runnable r1 = new Runnable()
-        {
-            public void run()
-            {
-                for (int times=0; times<20; times++)
-                {
-                    int[][] data = new int[8][];
-                    DCT8 dct = new DCT8();
-                    
-                    for (int i=0; i<8; i++)
-                    {
-                        data[i] = new int[64];
-                        
-                        for (int j=0; j<64; j++)
-                            data[i][j] = i*8+j;
-                    }
-                    
-                    long before = System.nanoTime();
-                    int iter = 1000000;
-                    
-                    for (int i=0; i<iter; i++)
-                    {
-                       dct.forward(data[i&7], 0);
-                       dct.inverse(data[i&7], 0);
-                    }
-                    
-                    long after = System.nanoTime();
-                    
-                    System.out.print("Elapsed [ms]: ");
-                    System.out.println((after-before)/1000000);
-                }
-            }
-        };
-        
-        // Speed test
-        new Thread(r1).start();
-        
+  {       
         Runnable r2 = new Runnable()
         {
             int[] block = new int[] { 18960, 15161, 17066, 17653, -1417, 270, -1796, -1706,
@@ -106,6 +69,54 @@ public class TestDCT
         
         // Validity test
         new Thread(r2).start();
+        
+        
+       Runnable r1 = new Runnable()
+        {
+            public void run()
+            {
+                long delta1 = 0;
+                long delta2 = 0;
+                int iter = 50000;
+                
+                for (int times=0; times<100; times++)
+                {
+                    int[][] data = new int[50000][];
+                    DCT8 dct = new DCT8();
+
+                    for (int i=0; i<iter; i++)
+                    {
+                        data[i] = new int[64];
+
+                        for (int j=0; j<64; j++)
+                            data[i][j] = i*50000+j;
+                    }
+
+                    long before, after;
+
+                    for (int i=0; i<500000; i++)
+                    {
+                       before = System.nanoTime();
+                       dct.forward(data[i%2], 0);
+                       after = System.nanoTime();
+                       delta1 += (after-before);
+                       before = System.nanoTime();
+                       dct.inverse(data[i%2], 0);
+                       after = System.nanoTime();
+                       delta2 += (after-before);
+                    }
+                }
+                
+                System.out.println("Iterations: "+iter*100);
+                System.out.println("Encoding [ms]: "+delta1/1000000);
+                System.out.println("Decoding [ms]: "+delta2/1000000);                
+            }
+        };
+
+        System.out.println("\nDCT8 speed");
+
+        // Speed test
+        r1.run();                 
     }
   
   
