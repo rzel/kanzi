@@ -48,7 +48,7 @@ public class TestBlockCoder
             //dbs.showByte(true);
             BitStream dbs = new DefaultBitStream(fos, 16384);
 
-            byte[] buffer = new byte[65530];
+            byte[] buffer = new byte[65530*4];
             BlockCodec blockCodec = new BlockCodec(buffer.length);
             IndexedByteArray iba = new IndexedByteArray(buffer, 0);
 
@@ -99,8 +99,7 @@ public class TestBlockCoder
             }
 
             // End block of size 0
-            entropyCoder.encodeByte((byte) 0);
-            entropyCoder.encodeByte((byte) 0);
+            entropyCoder.encodeByte((byte) 80);
 
             System.out.println("Buffer size: "+buffer.length);
             System.out.println("Encoding took "+(delta/1000000)+" ms");
@@ -125,23 +124,26 @@ public class TestBlockCoder
             delta = 0L;
             step = 0;
 
-            int mode = (int) entropyDecoder.decodeByte();
-            int compressedLength, val1 = 0, val2 = 0;
-
-            if ((mode & BlockCodec.COPY_BLOCK_MASK) == 0)
-            {
-               val1 = (int) entropyDecoder.decodeByte();
-               val2 = (int) entropyDecoder.decodeByte();
-               compressedLength = ((val1 & 0xFF) << 8) | (val2 & 0xFF);
-            }
-            else
-               compressedLength = mode & BlockCodec.COPY_LENGTH_MASK;
-
-            iba.array = new byte[compressedLength];
-
             // Decode next block
-            while (compressedLength > 0)
+            while (true)
             {
+                int mode = (int) entropyDecoder.decodeByte();
+                int compressedLength;
+                int val0 = 0, val1 = 0, val2 = 0;
+
+                if ((mode & BlockCodec.COPY_BLOCK_MASK) == 0)
+                {
+                   val0 = mode & 0x0F;
+                   val1 = (int) entropyDecoder.decodeByte() & 0xFF;
+                   val2 = (int) entropyDecoder.decodeByte() & 0xFC;
+                   compressedLength = (val0 << 14) | (val1 << 6) | (val2 >> 2);
+                }
+                else
+                   compressedLength = mode & BlockCodec.COPY_LENGTH_MASK;
+                
+                if (compressedLength == 0)
+                   break;
+                
                 long before = System.nanoTime();
 
                 if (iba.array.length < compressedLength + 5)
@@ -175,18 +177,6 @@ public class TestBlockCoder
 
                 System.out.println(step+": "+(compressedLength+5)+" --> "+block.index);
                 step++;
-
-                mode = (int) entropyDecoder.decodeByte();
-
-                if ((mode & BlockCodec.COPY_BLOCK_MASK) == 0)
-                {
-                   val1 = (int) entropyDecoder.decodeByte();
-                   val2 = (int) entropyDecoder.decodeByte();
-                   compressedLength = ((val1 & 0xFF) << 8) | (val2 & 0xFF);
-                }
-                else
-                   compressedLength = mode & BlockCodec.COPY_LENGTH_MASK;
-
                 delta += (after - before);
             }
 
