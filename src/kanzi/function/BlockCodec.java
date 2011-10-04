@@ -25,27 +25,36 @@ import kanzi.transform.MTFT;
 
 // Utility class to compress/decompress a data block
 // Fast reversible block coder/decoder based on a pipeline of transformations:
-// Forward: Run Length -> Burroughs-Wheeler -> Move to Front -> Zero Length
-// Inverse: Zero Length -> Move to Front -> Burroughs-Wheeler -> Run Length
+// Forward: [Run Length ->] Burrows-Wheeler -> Move to Front -> Zero Length
+// Inverse: Zero Length -> Move to Front -> Burrows-Wheeler [-> Run Length]
+// The block size determine the balance between speed and compression ratio
+// The max block size is around 250 KB and provides the best compression ratio.
+// The default block size provides a good balance.
 
-// Encoding: Mode (1 byte) + Compressed Length (2 bytes) + BWT index (2 bytes)
-//           + data (up to 0xFFFF bytes)
-// Mode: if 0x80, block copy only, the 4 lowest bits give the length (limited to 16)
-//       else the 2 next bits indicate if RLE and ZLE were performed (bits set to 0)
-//            bits 4-0 (xxx00000) are unused for now and must be set to 0 (if not 0x80)
+// Stream format: Header (5 bytes) Data (n bytes)
+// Header: mode (4 bits) + block size (18 bits) + BWT primary index (18 bits)
+//      or mode (1 bit) + block size (7 bits)
+// * If mode & 0x80 != 0 then the block is no compressed, just copied.
+//   and the block length is cotained in the 7 lower digits
+//   Hence a 0 byte block (use to mark end of stream) is 0x80
+// * Else, the first 4 Most Significant Bits are used to encode extra information.
+//   The next 18 bits encode the block size
+//   The next 18 bits encode the BWT primay digits
+//
 // EG: Mode=0x85 block copy, length = 5 bytes followed by block data
-//     Mode=0x00 regular transform followed by compressed length, BWT index, block data
-//     Mode=0x40 no RLC
-//     Mode=0x20 no ZLC
+//     Mode=0x0? regular transform followed by compressed length, BWT index, block data
+//     Mode & 0x20 != 0 no RLC
+//     Mode & 0x40 != 0 no ZLC
 
 public class BlockCodec implements ByteFunction
 {
-   public static final int COPY_LENGTH_MASK = 0x0F;
+   public static final int COPY_LENGTH_MASK = 0x7F;
    public static final int COPY_BLOCK_MASK  = 0x80;
-   public static final int NO_RLT_MASK      = 0x40;
-   public static final int NO_ZLT_MASK      = 0x20;
+   public static final int NO_RLT_MASK      = 0x20;
+   public static final int NO_ZLT_MASK      = 0x40;
 
-   private static final int DEFAULT_BLOCK_SIZE = 0xFFFF;
+   public static final int DEFAULT_BLOCK_SIZE = 65530;
+   public static final int MAX_BLOCK_SIZE = 0x03FFFF; // 256 KB
    private static final int BLOCK_HEADER_SIZE = 5;
 
    private final IndexedByteArray buffer;
@@ -65,8 +74,8 @@ public class BlockCodec implements ByteFunction
        if (blockSize < 0)
            throw new IllegalArgumentException("The block size must be at least 0");
 
-       if (blockSize > 0xFFFF)
-           throw new IllegalArgumentException("The block size must be at most "+0xFFFF);
+       if (blockSize > MAX_BLOCK_SIZE)
+           throw new IllegalArgumentException("The block size must be at most "+MAX_BLOCK_SIZE);
 
        this.bwt = new BWT();
        this.mtft = new MTFT();
@@ -95,7 +104,7 @@ public class BlockCodec implements ByteFunction
 
    public boolean setSize(int size)
    {
-       if ((size < 0) || (size > 0xFFFF))
+       if ((size < 0) || (size > MAX_BLOCK_SIZE))
           return false;
 
        this.size = size;
@@ -111,7 +120,7 @@ public class BlockCodec implements ByteFunction
 
        int length = (this.size == 0) ? input.array.length - input.index : this.size;
 
-       if ((length < 0) || (length > 0xFFFF))
+       if ((length < 0) || (length > MAX_BLOCK_SIZE))
           return false;
 
        if (length + input.index > input.array.length)
@@ -126,6 +135,8 @@ public class BlockCodec implements ByteFunction
            return true;
        }
 
+       final int headerStartIdx = output.index;
+
        if (length < 16)
        {
           // Since processing the block data will hardly overcome the data added
@@ -133,16 +144,13 @@ public class BlockCodec implements ByteFunction
           if (output.array.length < output.index + length + 1)
               return false;
 
-          // Need to save current output index in case input.array == output.array
-          int savedIdx = output.index;
+          // Add 'mode' byte
+          output.array[headerStartIdx] = (byte) (COPY_BLOCK_MASK | length);
           output.index++;
 
           // Copy block
           for (int i=0; i<length; i++)
               output.array[output.index++] = input.array[input.index++];
-
-          // Add 'mode' byte
-          output.array[savedIdx] = (byte) (COPY_BLOCK_MASK | length);
 
           return true;
        }
@@ -153,26 +161,26 @@ public class BlockCodec implements ByteFunction
 
        if (this.buffer.array.length < length)
           this.buffer.array = new byte[length];
-
-       RLT rlt = new RLT(length);
-
-       // Apply Run Length Encoding
-       if (rlt.forward(input, this.buffer) == false)
-          return false;
-
-       // If the RLE did not compress (it can expand in some pathological cases)
-       // then do not perform it, revert
-       if ((input.index < savedIdx + length) || (this.buffer.index > length))
+         
+//       RLT rlt = new RLT(length);
+//
+//       // Apply Run Length Encoding
+//       if (rlt.forward(input, this.buffer) == false)
+//          return false;
+//
+//       // If the RLE did not compress (it can expand in some pathological cases)
+//       // then do not perform it, revert
+//       if ((input.index < savedIdx + length) || (this.buffer.index > length))
        {
           System.arraycopy(input.array, savedIdx, this.buffer.array, 0, length);
           this.buffer.index = length;
           mode |= NO_RLT_MASK;
        }
 
-       int blockSize = this.buffer.index;
+       final int blockSize = this.buffer.index;
        this.buffer.index = 0;
 
-       // Apply Burroughs-Wheeler Transform
+       // Apply Burrows-Wheeler Transform
        this.bwt.setSize(blockSize);
        this.bwt.forward(this.buffer.array, 0);
        int primaryIndex = this.bwt.getPrimaryIndex();
@@ -181,7 +189,6 @@ public class BlockCodec implements ByteFunction
        this.mtft.setSize(blockSize);
        this.mtft.forward(this.buffer.array, 0);
 
-       int headerStartIdx = output.index;
        output.index += BLOCK_HEADER_SIZE;
        ZLT zlt = new ZLT(blockSize);
 
@@ -201,14 +208,16 @@ public class BlockCodec implements ByteFunction
           mode |= NO_ZLT_MASK;
        }
 
-       int compressedLength = output.index - BLOCK_HEADER_SIZE - headerStartIdx;
-
+       final int compressedLength = output.index - BLOCK_HEADER_SIZE - headerStartIdx;
+       
        // Write block header
-       output.array[headerStartIdx]   = mode;
-       output.array[headerStartIdx+1] = (byte) ((compressedLength >> 8) & 0xFF);
-       output.array[headerStartIdx+2] = (byte) (compressedLength & 0xFF);
-       output.array[headerStartIdx+3] = (byte) ((primaryIndex >> 8) & 0xFF);
-       output.array[headerStartIdx+4] = (byte) (primaryIndex & 0xFF);
+       // Pack: mode (4 bits) + compressed length (18 bits) + primary index (18 bits)
+       output.array[headerStartIdx]    = (byte) (mode | ((compressedLength >> 14) & 0x0F));
+       output.array[headerStartIdx+1]  = (byte) ((compressedLength >> 6) & 0xFF);
+       output.array[headerStartIdx+2]  = (byte) (((compressedLength << 2) & 0xFC) 
+                                                 | ((primaryIndex >> 16) & 0x03));
+       output.array[headerStartIdx+3]  = (byte) ((primaryIndex >> 8) & 0xFF);
+       output.array[headerStartIdx+4]  = (byte) (primaryIndex & 0xFF);
        return true;
     }
 
@@ -216,7 +225,7 @@ public class BlockCodec implements ByteFunction
    @Override
    public boolean inverse(IndexedByteArray input, IndexedByteArray output)
    {
-      // Read 'mode' byte
+      // Read 'mode' byte (8 bits if copy or 4 bits if compression)
       int mode = input.array[input.index++] & 0xFF;
 
       if ((mode & COPY_BLOCK_MASK) != 0)
@@ -232,20 +241,22 @@ public class BlockCodec implements ByteFunction
             output.array[output.index++] = input.array[input.index++];
 
          return true;
-      }
+      }        
 
-      // Extract compressed length
-      int val0 = input.array[input.index++] & 0xFF;
+      // Extract compressed length (18 bits)
+      int val0 = mode & 0x0F;
       int val1 = input.array[input.index++] & 0xFF;
-      int compressedLength = (val0 << 8) | val1;
+      int val2 = input.array[input.index]   & 0xFC;
+      int compressedLength = (val0 << 14) | (val1 << 6) | (val2 >> 2);
 
       if (compressedLength == 0)
          return true;
 
-      // Extract BWT primary index
-      int val2 = input.array[input.index++] & 0xFF;
-      int val3 = input.array[input.index++] & 0xFF;
-      int primaryIndex = (val2 << 8) | val3;
+      // Extract BWT primary index (18 bits)
+      val0 = input.array[input.index++] & 0x03;
+      val1 = input.array[input.index++] & 0xFF;
+      val2 = input.array[input.index++] & 0xFF;
+      int primaryIndex = (val0 << 16) | (val1 << 8) | val2;
 
       this.buffer.index = 0;
 
@@ -283,7 +294,7 @@ public class BlockCodec implements ByteFunction
       this.mtft.setSize(blockSize);
       this.mtft.inverse(this.buffer.array, 0);
 
-      // Apply Burroughs-Wheeler Inverse Transform
+      // Apply Burrows-Wheeler Inverse Transform
       this.bwt.setPrimaryIndex(primaryIndex);
       this.bwt.setSize(blockSize);
       this.bwt.inverse(this.buffer.array, 0);
