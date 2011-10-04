@@ -31,20 +31,22 @@ import kanzi.transform.MTFT;
 // The max block size is around 250 KB and provides the best compression ratio.
 // The default block size provides a good balance.
 
-// Stream format: Header (5 bytes) Data (n bytes)
-// Header: mode (4 bits) + block size (18 bits) + BWT primary index (18 bits)
-//      or mode (1 bit) + block size (7 bits)
+// Stream format: Header (m bytes) Data (n bytes)
+// Header: mode (4 bits) + header data size (4 bits) + compressed data length (8, 16 or 24 bits)
+//         + BWT primary index (8, 16 or 24 bits)
+//         or mode (1 bit) + block size (7 bits)
 // * If mode & 0x80 != 0 then the block is no compressed, just copied.
 //   and the block length is cotained in the 7 lower digits
 //   Hence a 0 byte block (use to mark end of stream) is 0x80
 // * Else, the first 4 Most Significant Bits are used to encode extra information.
-//   The next 18 bits encode the block size
-//   The next 18 bits encode the BWT primay digits
+//   The next 4 bits encode the size (in bytes) of the compressed data length 
+//   (the same size is used for the BWT primary index)
 //
 // EG: Mode=0x85 block copy, length = 5 bytes followed by block data
-//     Mode=0x0? regular transform followed by compressed length, BWT index, block data
-//     Mode & 0x20 != 0 no RLC
-//     Mode & 0x40 != 0 no ZLC
+//     Mode=0x03 regular transform followed by 24 bit compressed length, 24 bit BWT index, block data
+//     Mode=0x02 regular transform followed by 16 bit compressed length, 16 bit BWT index, block data
+//     Mode & 0x2? != 0 no RLC
+//     Mode & 0x4? != 0 no ZLC
 
 public class BlockCodec implements ByteFunction
 {
@@ -54,8 +56,7 @@ public class BlockCodec implements ByteFunction
    public static final int NO_ZLT_MASK      = 0x40;
 
    public static final int DEFAULT_BLOCK_SIZE = 65530;
-   public static final int MAX_BLOCK_SIZE = 0x03FFFF; // 256 KB
-   private static final int BLOCK_HEADER_SIZE = 5;
+   public static final int MAX_BLOCK_SIZE = 0xFFFFFF; // 16 MB (24 bits)
 
    private final IndexedByteArray buffer;
    private final MTFT mtft;
@@ -156,7 +157,7 @@ public class BlockCodec implements ByteFunction
        }
 
        byte mode = 0;
-       int savedIdx = input.index;
+       final int savedIdx = input.index;
        this.buffer.index = 0;
 
        if (this.buffer.array.length < length)
@@ -188,36 +189,55 @@ public class BlockCodec implements ByteFunction
        // Apply Move-To-Front Transform
        this.mtft.setSize(blockSize);
        this.mtft.forward(this.buffer.array, 0);
+       
+       int headerDataSize = 1; // in bytes
+       
+       if (blockSize > 0xFF)
+           headerDataSize++;
+       
+       if (blockSize > 0xFFFF)
+           headerDataSize++;
 
-       output.index += BLOCK_HEADER_SIZE;
+       final int headerSize = 1 + headerDataSize + headerDataSize;
+       mode |= headerDataSize;
+       output.index += headerSize;
        ZLT zlt = new ZLT(blockSize);
 
        // Apply Zero Length Encoding (changes the index of input & output)
        if (zlt.forward(this.buffer, output) == false)
           return false;
 
-       if (output.index + BLOCK_HEADER_SIZE >= output.array.length)
+       if (output.index > output.array.length)
           return false;
 
        // If the ZLE did not compress (it can expand in some pathological cases)
-       // then do not perform it, revert
+       // then revert
        if ((this.buffer.index < blockSize) || (output.index > blockSize))
        {
-          System.arraycopy(this.buffer.array, 0, output.array, headerStartIdx + BLOCK_HEADER_SIZE, blockSize);
-          output.index = headerStartIdx + BLOCK_HEADER_SIZE + blockSize;
+          // Not enough room in output buffer => return error
+          if (output.array.length < headerStartIdx + headerSize + blockSize)
+              return false;
+
+          System.arraycopy(this.buffer.array, 0, output.array, headerStartIdx + headerSize, blockSize);
+          output.index = headerStartIdx + headerSize + blockSize;
           mode |= NO_ZLT_MASK;
        }
 
-       final int compressedLength = output.index - BLOCK_HEADER_SIZE - headerStartIdx;
+       final int compressedLength = output.index - headerSize - headerStartIdx;
        
        // Write block header
-       // Pack: mode (4 bits) + compressed length (18 bits) + primary index (18 bits)
-       output.array[headerStartIdx]    = (byte) (mode | ((compressedLength >> 14) & 0x0F));
-       output.array[headerStartIdx+1]  = (byte) ((compressedLength >> 6) & 0xFF);
-       output.array[headerStartIdx+2]  = (byte) (((compressedLength << 2) & 0xFC) 
-                                                 | ((primaryIndex >> 16) & 0x03));
-       output.array[headerStartIdx+3]  = (byte) ((primaryIndex >> 8) & 0xFF);
-       output.array[headerStartIdx+4]  = (byte) (primaryIndex & 0xFF);
+       output.array[headerStartIdx] =  mode;
+       int shift = (headerDataSize - 1) << 3;
+       int idx = headerStartIdx + 1;
+       
+       for (int i=0; i<headerDataSize; i++)
+       {
+           output.array[idx] = (byte) ((compressedLength >> shift) & 0xFF);
+           output.array[headerDataSize+idx] = (byte) ((primaryIndex >> shift) & 0xFF);
+           shift -= 8;
+           idx++;
+       }
+
        return true;
     }
 
@@ -226,12 +246,12 @@ public class BlockCodec implements ByteFunction
    public boolean inverse(IndexedByteArray input, IndexedByteArray output)
    {
       // Read 'mode' byte (8 bits if copy or 4 bits if compression)
-      int mode = input.array[input.index++] & 0xFF;
+      final int mode = input.array[input.index++] & 0xFF;
 
       if ((mode & COPY_BLOCK_MASK) != 0)
       {
          // Extract block length
-         int length = mode & COPY_LENGTH_MASK;
+         final int length = mode & COPY_LENGTH_MASK;
 
          if (output.array.length < output.index + length)
             return false;
@@ -243,22 +263,30 @@ public class BlockCodec implements ByteFunction
          return true;
       }        
 
-      // Extract compressed length (18 bits)
-      int val0 = mode & 0x0F;
-      int val1 = input.array[input.index++] & 0xFF;
-      int val2 = input.array[input.index]   & 0xFC;
-      int compressedLength = (val0 << 14) | (val1 << 6) | (val2 >> 2);
+      // Extract compressed length
+      final int headerDataSize = mode & 0x0F;
+      int compressedLength = input.array[input.index++] & 0xFF;
+      
+      if (headerDataSize > 1)
+          compressedLength = (compressedLength << 8) | (input.array[input.index++] & 0xFF);
+
+      if (headerDataSize > 2)
+          compressedLength = (compressedLength << 8) | (input.array[input.index++] & 0xFF);
 
       if (compressedLength == 0)
          return true;
 
-      // Extract BWT primary index (18 bits)
-      val0 = input.array[input.index++] & 0x03;
-      val1 = input.array[input.index++] & 0xFF;
-      val2 = input.array[input.index++] & 0xFF;
-      int primaryIndex = (val0 << 16) | (val1 << 8) | val2;
+      // Extract BWT primary index 
+      int primaryIndex = input.array[input.index++] & 0xFF;
+
+      if (headerDataSize > 1)
+          primaryIndex = (primaryIndex << 8) | (input.array[input.index++] & 0xFF);
+
+      if (headerDataSize > 2)
+          primaryIndex = (primaryIndex << 8) | (input.array[input.index++] & 0xFF);
 
       this.buffer.index = 0;
+      final int headerSize = 1 + headerDataSize + headerDataSize;
 
       if ((mode & NO_ZLT_MASK) == 0)
       {
@@ -267,15 +295,15 @@ public class BlockCodec implements ByteFunction
 
          // The size after decompression is not known, let us assume that the output
          // is big enough, otherwise return false after decompression
-         // To be safe the size of the output should be set to 0xFFFF (max size allowed)
+         // To be safe the size of the output should be set to the max size allowed
          if (this.buffer.array.length < output.array.length)
             this.buffer.array = new byte[output.array.length];
 
          if (zlt.inverse(input, this.buffer) == false)
             return false;
 
-         // If buffer is too small, return error (max buffer size is 0xFFFF)
-         if (input.index < compressedLength + BLOCK_HEADER_SIZE)
+         // If buffer is too small, return error 
+         if (input.index < compressedLength + headerSize)
             return false;
       }
       else
@@ -307,7 +335,7 @@ public class BlockCodec implements ByteFunction
          if (rlt.inverse(this.buffer, output) == false)
             return false;
 
-         // If output is too small, return error (max buffer size is 0xFFFF)
+         // If output is too small, return error
          if (this.buffer.index < blockSize)
             return false;
       }
@@ -345,10 +373,11 @@ public class BlockCodec implements ByteFunction
       if (ed == null)
          return -1;
 
-      int mode = ed.decodeByte() & 0xFF;
-      int savedIdx = data.index;
+      final int mode = ed.decodeByte() & 0xFF;
+      final int savedIdx = data.index;
       data.array[data.index++] = (byte) mode;
       int length = 0;
+      int headerSize = 1;
 
       // Extract length
       if ((mode & COPY_BLOCK_MASK) != 0)
@@ -357,19 +386,33 @@ public class BlockCodec implements ByteFunction
       }
       else
       {
-         int val0 = ed.decodeByte();
-         int val1 = ed.decodeByte();
-         length = ((val0 & 0xFF) << 8) | (val1 & 0xFF);
-         data.array[data.index++] = (byte) val0;
-         data.array[data.index++] = (byte) val1;
+         final int headerDataSize = mode & 0x0F;
+         headerSize += headerDataSize; // compressed block size
+         headerSize += headerDataSize; // BWT index
+         byte val = ed.decodeByte();
+         length = val & 0xFF;
+         data.array[data.index++] = val;
+
+         if (headerDataSize > 1)
+         {
+            val = ed.decodeByte();
+            length = (length << 8) | (val & 0xFF);
+            data.array[data.index++] = val;
+         }
+
+         if (headerDataSize > 2)
+         {
+            val = ed.decodeByte();
+            length = (length << 8) | (val & 0xFF);
+            data.array[data.index++] = val;
+         }
       }
       
       if (length == 0)
          return 0;
 
-      int toDecode = length + BLOCK_HEADER_SIZE - (data.index - savedIdx);
-
-      int decoded = ed.decode(data.array, data.index, toDecode);
+      final int toDecode = length + headerSize - (data.index - savedIdx);
+      final int decoded = ed.decode(data.array, data.index, toDecode);
 
       if (decoded != toDecode)
          return -1;
