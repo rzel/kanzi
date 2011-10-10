@@ -34,21 +34,74 @@ public class TestBlockCoder
     {
         try
         {
-            final int blockSize = 100000;
-            String fileName = (args.length > 0) ? args[0] : "c:\\temp\\rt.jar";
+            int blockSize = 100000;
+            boolean debug = false;
+            String fileName = "c:\\temp\\rt.jar";
+
+            for (String arg : args)
+            {
+               arg = arg.trim();
+               
+               if (args.equals("-help"))
+               {
+                   System.out.println("-help             : display this message");
+                   System.out.println("-debug            : display the size of the encoded block pre-entropy coding");
+                   System.out.println("                    or the size of the completely decoded block");
+                   System.out.println("-file=<filename>  : name of the input file to encode or decode");
+                   System.out.println("-block=<size>     : size of the block (max 16 MB)");
+                   System.exit(0);
+               }
+               else if (arg.equals("-debug"))
+               {
+                   debug = true;
+                   System.out.println("Debug set to true");
+               }
+               else if (arg.startsWith("-file="))
+               {
+                  fileName = arg.substring(6);
+                  System.out.println("File name set to '" + fileName + "'");
+               }
+               else if (arg.startsWith("-block="))
+               {
+                  arg = arg.substring(7);
+                  
+                  try
+                  {
+                     int blkzs = Integer.parseInt(arg);
+                     
+                     if (blkzs < 256)
+                         System.err.println("The minimum block size is 256, the provided value is "+arg);
+                     else if (blkzs > 16 * 1024 * 1024 - 7)
+                         System.err.println("The maximum block size is 16777209, the provided value is  "+arg);
+                     else
+                         blockSize = blkzs;
+                     
+                     System.out.println("Block size set to "+blockSize);
+                  }
+                  catch (NumberFormatException e)
+                  {
+                     System.err.println("Invalid block size provided on command line: "+arg);
+                  }
+               }
+               else
+               {
+                   System.out.println("Warning: unknown option: ["+ arg + "]");
+               }
+            }
+            
             String outputName = fileName;
 
             if (outputName.lastIndexOf('.') == outputName.length()-4)
                 outputName = outputName.substring(0, outputName.length()-4);
 
-            outputName += ".bin";
+            outputName += ".knz";
             File output = new File(outputName);
             FileOutputStream fos = new FileOutputStream(output);
             //BitStream obs = new DefaultBitStream(fos, 8192);
             //DebugBitStream dbs = new DebugBitStream(obs, System.out);
             //dbs.showByte(true);
             BitStream dbs = new DefaultBitStream(fos, 16384);
-            byte[] buffer = new byte[blockSize];
+            byte[] buffer = new byte[blockSize+7];
             BlockCodec blockCodec = new BlockCodec();
             IndexedByteArray iba = new IndexedByteArray(buffer, 0);
 
@@ -61,33 +114,33 @@ public class TestBlockCoder
             input = new File(fileName);
             FileInputStream fis = new FileInputStream(input);
             long delta = 0L;
-            int len = -1;
+            int len;
             int read = 0;
-            IndexedByteArray block = new IndexedByteArray (new byte[buffer.length*6/5], 0);
             int step = 0;
+            System.out.println("Encoding ...");
 
-            // Leave some space for block header (if the buffer size is small, there may
-            // be no compression and the block header must still be saved)
-            while ((len = fis.read(iba.array, 0, iba.array.length-7)) != -1)
+            // If the compression ratio is greater than one for this block, 
+            // the compression will fail (unless up to 7 bytes are reserved
+            // in the block for headr data)
+            while ((len = fis.read(iba.array, 0, blockSize)) != -1)
             {
                read += len;
                long before = System.nanoTime();
                iba.index = 0;
-               block.index = 0;
-
-               // For debugging only ...
-               //Arrays.fill(block.array, (byte) 0xAA);
-
                blockCodec.setSize(len);
-
-               if (blockCodec.encode(iba, entropyCoder) < 0)
-               {
-                  System.err.println("Error in block codec forward");
-                  System.exit(1);
-               }
-
+               int written = blockCodec.encode(iba, entropyCoder);
                long after = System.nanoTime();
                delta += (after - before);
+
+               if (written < 0)
+               {
+                  System.err.println("Error in block codec forward()");
+                  System.exit(1);
+               }
+                
+              if (debug)
+                 System.out.println(step+"-->"+written);
+               
                step++;
             }
 
@@ -95,8 +148,8 @@ public class TestBlockCoder
             entropyCoder.encodeByte((byte) 80);
 
             System.out.println();
-            System.out.println("Buffer size:    "+buffer.length);
-            System.out.println("File size:       "+read);
+            System.out.println("Buffer size:      "+buffer.length);
+            System.out.println("File size:        "+read);
             entropyCoder.dispose();
             dbs.close();
             System.out.println();
@@ -116,31 +169,34 @@ public class TestBlockCoder
 
             EntropyDecoder entropyDecoder = new RangeDecoder(dbs2);
             delta = 0L;
-            step = 0;
             int decoded;
-            long before = System.nanoTime();
             int sum = 0;
+            step = 0;
+            System.out.println("Decoding ...");
 
             // Decode next block
             do
-            {
+            {               
                iba.index = 0; 
+               long before = System.nanoTime();
                decoded = blockCodec.decode(iba, entropyDecoder);
+               long after = System.nanoTime();
+               delta += (after - before);
                
                if (decoded < 0)
                {
-                  System.err.println("Error in block codec inverse (block "+step+")");
+                  System.err.println("Error in block codec inverse()");
                   System.exit(1);
                }
            
-               step++;
+               if (debug)
+                 System.out.println(step+"-->"+decoded);
+
                sum += decoded;
+               step++;
             }
             while (decoded != 0);
             
-            long after = System.nanoTime();
-            delta += (after - before);
-
             System.out.println();
             System.out.println("Decoding took "+(delta/1000000)+" ms");
             System.out.println("Decoded:           "+sum);
@@ -155,4 +211,5 @@ public class TestBlockCoder
             e.printStackTrace();
         }
     }
+    
 }
