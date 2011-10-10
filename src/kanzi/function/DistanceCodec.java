@@ -68,9 +68,12 @@ import kanzi.IndexedByteArray;
 
 public class DistanceCodec implements ByteFunction
 {
+    private static int DEFAULT_DISTANCE_THRESHOLD = 0x80;
+    
     private int size;
     private byte[] data;
     private final int[] buffer;
+    private final int logDistThreshold;
 
 
     public DistanceCodec()
@@ -81,9 +84,31 @@ public class DistanceCodec implements ByteFunction
 
     public DistanceCodec(int size)
     {
+       this(size, DEFAULT_DISTANCE_THRESHOLD);
+    }
+    
+    
+    public DistanceCodec(int size, int distanceThreshold)
+    {
+       if (distanceThreshold < 4)
+           throw new IllegalArgumentException("The distance threshold cannot be less than 4");
+       
+       if (distanceThreshold > 0x80)
+           throw new IllegalArgumentException("The distance threshold cannot more than 128");
+       
+       if ((distanceThreshold  & (distanceThreshold - 1)) != 0)
+           throw new IllegalArgumentException("The distance threshold must be a mulitple of 2");
+
        this.size = size;
        this.buffer = new int[256];
        this.data = new byte[0];
+       int log2 = 0;
+       distanceThreshold++;
+
+        for ( ; distanceThreshold>1; distanceThreshold>>=1)
+            log2++;
+
+        this.logDistThreshold = log2;
     }
 
 
@@ -97,8 +122,8 @@ public class DistanceCodec implements ByteFunction
     // else
     // alphabet size (byte) + m (<32) alphabet symbols +
     // n (<256) * encoded distance for each symbol
-    // The distance is encoded as 1 byte if less than 0x80 or else several bytes
-    // (with a 0x80 mask to indicate continuation)
+    // The distance is encoded as 1 byte if less than 'distance threshold' or 
+    // else several bytes (with a mask to indicate continuation)
     // Return success or failure
     private boolean encodeHeader(IndexedByteArray src, IndexedByteArray dst, byte[] significanceFlags)
     {
@@ -181,7 +206,10 @@ public class DistanceCodec implements ByteFunction
                 }
              }
           }
-
+         
+          final int distThreshold = 1 << this.logDistThreshold;
+          final int distMask = distThreshold - 1;
+          
           // For each symbol in the alphabet, encode distance
           for (int i=0; i<256; i++)
           {
@@ -198,12 +226,12 @@ public class DistanceCodec implements ByteFunction
                // Mark symbol as already used
                significanceFlags[position] = 0;
 
-               // Encode distance over one or several bytes with mask 0x80
+               // Encode distance over one or several bytes with mask distThreshold
                // to indicate a continuation
-               while (distance >= 0x80)
+               while (distance >= distThreshold)
                {
-                  dstArray[dst.index++] = (byte) (0x80 | (distance & 0x7F));
-                  distance >>= 7;
+                  dstArray[dst.index++] = (byte) (distThreshold | (distance & distMask));
+                  distance >>= this.logDistThreshold;
                }
 
                dstArray[dst.index++] = (byte) distance;
@@ -245,6 +273,9 @@ public class DistanceCodec implements ByteFunction
 
        try
        {
+           final int distThreshold = 1 << this.logDistThreshold;
+           final int distMask = distThreshold - 1;
+
            while (srcIdx < inLength)
            {
               final byte first = srcArray[srcIdx];
@@ -282,12 +313,12 @@ public class DistanceCodec implements ByteFunction
                  // Mark symbol as already used (first of run only)
                  unprocessedFlags[srcIdx] = 0;
 
-                 // Encode distance over one or several bytes with mask 0x80
+                 // Encode distance over one or several bytes with mask distThreshold
                  // to indicate a continuation
-                 while (distance >= 0x80)
+                 while (distance >= distThreshold)
                  {
-                    dstArray[dstIdx++] = (byte) (0x80 | (distance & 0x7F));
-                    distance >>= 7;
+                    dstArray[dstIdx++] = (byte) (distThreshold | (distance & distMask));
+                    distance >>= this.logDistThreshold;
                  }
 
                  dstArray[dstIdx++] = (byte) distance;
@@ -351,6 +382,9 @@ public class DistanceCodec implements ByteFunction
              }
           }
 
+          final int distThreshold = 1 << this.logDistThreshold;
+          final int distMask = distThreshold - 1;
+          
           // Process alphabet (find first occurence of each symbol)
           for (int i=0; i<256; i++)
           {
@@ -361,10 +395,10 @@ public class DistanceCodec implements ByteFunction
               int shift = 0;
 
               // Decode distance
-              while (val >= 0x80)
+              while (val >= distThreshold)
               {
-                 distance |= ((val & 0x7F) << shift);
-                 shift += 7;
+                 distance |= ((val & distMask) << shift);
+                 shift += this.logDistThreshold;
                  val = srcArray[src.index++] & 0xFF;
               }
 
@@ -416,6 +450,8 @@ public class DistanceCodec implements ByteFunction
        try
        {
            byte current = dstArray[dstIdx];
+           final int distThreshold = 1 << this.logDistThreshold;
+           final int distMask = distThreshold - 1;
 
            // Decode body
            while (true)
@@ -440,17 +476,17 @@ public class DistanceCodec implements ByteFunction
               if (distance == 0)
                 continue;
 
-              if (distance >= 0x80)
+              if (distance >= distThreshold)
               {
                  int val = distance;
                  distance = 0;
                  int shift = 0;
 
                  // Decode distance
-                 while (val >= 0x80)
+                 while (val >= distThreshold)
                  {
-                    distance |= ((val & 0x7F) << shift);
-                    shift += 7;
+                    distance |= ((val & distMask) << shift);
+                    shift += this.logDistThreshold;
                     val = srcArray[srcIdx++] & 0xFF;
                  }
 
