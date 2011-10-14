@@ -228,7 +228,7 @@ public final class SobelFilter implements VideoEffect
           startLine = line;
        }
 
-       startLine = this.height * (this.stride - 1);
+       startLine = this.stride * (this.height - 1);
 
        // Duplicate first and last lines
        for (int i=this.stride-1; i>=0; i--)
