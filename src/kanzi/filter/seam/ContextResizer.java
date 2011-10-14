@@ -290,8 +290,12 @@ public class ContextResizer implements VideoEffect
         if ((this.direction & HORIZONTAL) != 0)
         {
             if ((this.direction & VERTICAL) != 0)
+            {
+                int[] tmp = src;
                 src = dst;
-
+                dst = tmp;
+            }
+            
             Geodesic[] geodesics = this.computeGeodesics(src, HORIZONTAL);
 
             if (geodesics.length > 0)
