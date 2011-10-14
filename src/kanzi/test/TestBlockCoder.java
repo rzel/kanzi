@@ -37,16 +37,17 @@ public class TestBlockCoder
             int blockSize = 100000;
             boolean debug = false;
             String fileName = "c:\\temp\\rt.jar";
+            boolean fileProvided = false;
 
             for (String arg : args)
             {
                arg = arg.trim();
                
-               if (args.equals("-help"))
+               if (arg.equals("-help"))
                {
                    System.out.println("-help             : display this message");
                    System.out.println("-debug            : display the size of the encoded block pre-entropy coding");
-                   System.out.println("                    or the size of the completely decoded block");
+                   System.out.println("                    and the size of the completely decoded block");
                    System.out.println("-file=<filename>  : name of the input file to encode or decode");
                    System.out.println("-block=<size>     : size of the block (max 16 MB)");
                    System.exit(0);
@@ -59,7 +60,7 @@ public class TestBlockCoder
                else if (arg.startsWith("-file="))
                {
                   fileName = arg.substring(6);
-                  System.out.println("File name set to '" + fileName + "'");
+                  fileProvided = true;
                }
                else if (arg.startsWith("-block="))
                {
@@ -67,16 +68,20 @@ public class TestBlockCoder
                   
                   try
                   {
-                     int blkzs = Integer.parseInt(arg);
+                     int blksz = Integer.parseInt(arg);
                      
-                     if (blkzs < 256)
+                     if (blksz < 256)
+                     {
                          System.err.println("The minimum block size is 256, the provided value is "+arg);
-                     else if (blkzs > 16 * 1024 * 1024 - 7)
+                         System.exit(1);
+                     }
+                     else if (blksz > 16 * 1024 * 1024 - 7)
+                     {
                          System.err.println("The maximum block size is 16777209, the provided value is  "+arg);
+                         System.exit(1);
+                     }
                      else
-                         blockSize = blkzs;
-                     
-                     System.out.println("Block size set to "+blockSize);
+                         blockSize = blksz;                     
                   }
                   catch (NumberFormatException e)
                   {
@@ -89,6 +94,12 @@ public class TestBlockCoder
                }
             }
             
+
+            if (fileProvided == false)
+                System.out.println("No input file name provided on command line, using default value");
+            
+            System.out.println("Input file name set to '" + fileName + "'");
+            System.out.println("Block size set to "+blockSize);
             String outputName = fileName;
 
             if (outputName.lastIndexOf('.') == outputName.length()-4)
@@ -139,13 +150,14 @@ public class TestBlockCoder
                }
                 
               if (debug)
-                 System.out.println(step+"-->"+written);
-               
+                 System.out.println(step+": "+written);
+
                step++;
             }
 
             // End block of size 0
-            entropyCoder.encodeByte((byte) 80);
+            // The 'real' value is BlockCodec.COPY_BLOCK_MASK | (0 & BlockCodec.COPY_LENGTH_MASK)
+            entropyCoder.encodeByte((byte) 0x80);
 
             System.out.println();
             System.out.println("Buffer size:      "+buffer.length);
@@ -190,8 +202,8 @@ public class TestBlockCoder
                }
            
                if (debug)
-                 System.out.println(step+"-->"+decoded);
-
+                 System.out.println(step+": "+decoded);
+               
                sum += decoded;
                step++;
             }
