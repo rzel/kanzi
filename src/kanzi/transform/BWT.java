@@ -16,6 +16,8 @@ limitations under the License.
 package kanzi.transform;
 
 import kanzi.ByteTransform;
+import kanzi.IndexedIntArray;
+
 
 // The Burrows-Wheeler Transform is a reversible transform based on
 // permutation of the data in the original message to reduce the entropy.
@@ -30,13 +32,22 @@ import kanzi.ByteTransform;
 // This implementation replaces the 'slow' sorting of permutation strings
 // with the construction of a suffix array (faster but more complex).
 // The suffix array contains the indexes of the sorted suffixes.
-// This implementation (a.k.a KS) is based on the Skew algorithm (KarkKainen & Sanders)
-// The method uses integer sorting to create the suffix array in linear time.
 //
-// It is a port from the C code in [Simple Linear Work Suffix Array Construction]
-// by Juha KarkKainen & Peter Sanders.
+// This implementation is based on the SA_IS (Suffix Array Induction Sorting) algorithm.
+// This is a port of sais.c by Yuta Mori (http://sites.google.com/site/yuta256/sais)
+// See original publication of the algorithm here:
+// [Ge Nong, Sen Zhang and Wai Hong Chan, Two Efficient Algorithms for
+// Linear Suffix Array Construction, 2008]
+// Another good read: http://labh-curien.univ-st-etienne.fr/~bellet/misc/SA_report.pdf
 //
-// e.g. mississippi\0
+// Overview of the algorithm:
+// Step 1 - Problem reduction: the input string is reduced into a smaller string.
+// Step 2 - Recursion: the suffix array of the reduced problem is recursively computed.
+// Step 3 - Problem induction: based on the suffix array of the reduced problem, that of the
+//          unreduced problem is induced
+//
+// E.G.
+// Source: mississippi\0
 // Suffixes:
 // mississippi\0 0
 //  ississippi\0 1
@@ -49,24 +60,19 @@ import kanzi.ByteTransform;
 //         ppi\0 8
 //          pi\0 9
 //           i\0 10
-// Suffix array        10 7 4 1 0 9 8 6 3 5 2 => ipssm\0pissii
+// Suffix array        10 7 4 1 0 9 8 6 3 5 2 => ipssm\0pissii (+ primary index 5)
 // The suffix array and permutation vector are equal when the input is 0 terminated
 // In this example, for a non \0 terminated string the permutation vector is pssmipissii.
 // The insertion of a guard is done internally and is entirely transparent.
 //
-// High level description of the algorithm:
-// - Recursively sort suffixes starting at non-multiple-of-3 positions
-// - Sort the remaining suffixes using the result of the previous sort
-// - Merge the two sorted sets
-
 
 public class BWT implements ByteTransform
 {
     private int size;
-    private final int[] buckets;
-    private int[] sa; //suffix array
-    private byte[] buffer;
-    private int[] array;
+    private int[] data;
+    private int[] buffer1;
+    private int[] buffer2;
+    private int[] buckets;
     private int primaryIndex;
 
 
@@ -83,10 +89,10 @@ public class BWT implements ByteTransform
             throw new IllegalArgumentException("Invalid size parameter (must be at least 0)");
 
         this.size = size;
+        this.data = new int[size];
+        this.buffer1 = new int[size];
+        this.buffer2 = new int[size];
         this.buckets = new int[256];
-        this.buffer = new byte[size];
-        this.sa = new int[size];
-        this.array = new int[(size == 0) ? 0 : size+3];
     }
 
 
@@ -127,63 +133,35 @@ public class BWT implements ByteTransform
     @Override
     public byte[] forward(byte[] input, int blkptr)
     {
-        final int len = (this.size != 0) ? this.size : input.length - blkptr;
+        int len = (this.size == 0) ? input.length - blkptr : this.size;
 
-        // Dynamic memory allocation
-        if (this.sa.length < len)
-           this.sa = new int[len];
+        if (len < 2)
+           return input;
 
-        if (this.buffer.length < len)
-           this.buffer = new byte[len];
+        if (this.data.length < len)
+           this.data = new int[len];
 
-        // Create a list that contains the start index of each permutation
-        // of the string. EG:
-        // index 1: FREDERIC, index 2: CFREDERI, index 3: ICFREDER, etc...
-        final int len8 = len & 0xFFFFFFF8;
+        if (this.buffer1.length < len)
+           this.buffer1 = new int[len];
 
-        for (int i=0; i<len8; )
-        {
-            this.sa[i] = i++;
-            this.sa[i] = i++;
-            this.sa[i] = i++;
-            this.sa[i] = i++;
-            this.sa[i] = i++;
-            this.sa[i] = i++;
-            this.sa[i] = i++;
-            this.sa[i] = i++;
-        }
+        if (this.buffer2.length < len)
+           this.buffer2 = new int[len];
 
-        for (int i=len8; i<len; i++)
-            this.sa[i] = i;
+        for (int i=0; i<len; i++)
+           this.data[i] = input[blkptr+i] & 0xFF;
 
-        // Sort the permutations, get the permutation vector
-        int[] suffixArray = this.sort(input, this.sa, blkptr, len);
-        int i = 0;
+        int[] sa = this.buffer1;
 
-        // The permutation vector can now be used to generate the output
-        for ( ; i<len; i++)
-        {
-            // Get the index of the last byte of each permutation
-            int val = suffixArray[i];
+        int pIdx = computeSuffixArray(new IndexedIntArray(this.data, 0), sa, 0, len, 256, true);
+        input[0] = (byte) this.data[len-1];
 
-            if (val == 0)
-            {
-                // Found the inserted 0, set primary index, do not copy
-                this.setPrimaryIndex(i);
-                break;
-            }
+        for (int i=0; i<pIdx; i++)
+           input[blkptr+i+1] = (byte) sa[i];
 
-            this.buffer[i+1] = input[blkptr+val-1];
-        }
+        for (int i=pIdx+1; i<len; i++)
+            input[blkptr+i] = (byte) sa[i];
 
-        for (i++ ; i<len; i++)
-        {
-            // Get the index of the last byte of each permutation
-            this.buffer[i] = input[blkptr+suffixArray[i]-1];
-        }
-
-        this.buffer[0] = input[blkptr+len-1];
-        System.arraycopy(this.buffer, 0, input, blkptr, len);
+        this.setPrimaryIndex(pIdx+1);
         return input;
     }
 
@@ -195,335 +173,668 @@ public class BWT implements ByteTransform
        int len = (this.size != 0) ? this.size : input.length - blkptr;
 
        // Dynamic memory allocation
-       if (this.array.length < len)
-          this.array = new int[len];
+       if (this.data.length < len)
+          this.data = new int[len];
 
-       if (this.buffer.length < len)
-          this.buffer = new byte[len];
+       if (this.buffer2.length < len)
+          this.buffer2 = new int[len];
 
-       for (int i=0; i<256; i+=8)
-       {
-          this.buckets[i]   = 0;
-          this.buckets[i+1] = 0;
-          this.buckets[i+2] = 0;
-          this.buckets[i+3] = 0;
-          this.buckets[i+4] = 0;
-          this.buckets[i+5] = 0;
-          this.buckets[i+6] = 0;
-          this.buckets[i+7] = 0;
-       }
+        int[] buckets_ = this.buckets;
+        int[] src = this.data;
+        int[] buffer = this.buffer2;
+
+        for (int i=0; i<256; i+=8)
+        {
+           buckets_[i]   = 0;
+           buckets_[i+1] = 0;
+           buckets_[i+2] = 0;
+           buckets_[i+3] = 0;
+           buckets_[i+4] = 0;
+           buckets_[i+5] = 0;
+           buckets_[i+6] = 0;
+           buckets_[i+7] = 0;
+        }
 
        for (int i=0; i<len; i++)
-       {
-          this.array[i] = this.buckets[input[blkptr+i] & 0xFF]++;
-       }
+          src[i] = buckets_[input[blkptr+i] & 0xFF]++;
 
        for (int i=0, sum=0; i<256; i++)
        {
-          int val = this.buckets[i];
-          this.buckets[i] = sum;
+          final int val = buckets_[i];
+          buckets_[i] = sum;
           sum += val;
        }
 
        int pidx = this.getPrimaryIndex();
 
-       for (int i=len-1, val=0; i >= 0; i--)
+       for (int i=len-1, val=0; i>=0; i--)
        {
-          int val2 = input[blkptr+val] & 0xFF;
-          this.buffer[i] = (byte) val2;
-          val = this.array[val] + this.buckets[val2];
+          final int idx = input[blkptr+val] & 0xFF;
+          buffer[i] = idx;
+          val = src[val] + buckets_[idx];
 
-          if (val <= pidx)
+          if (val < pidx)
              val++;
        }
 
-       System.arraycopy(this.buffer, 0, input, blkptr, len);
+       for (int i=0; i<len; i++)
+          input[blkptr+i] = (byte) buffer[i];
+
        return input;
-    }
+     }
 
 
-    // Compute the suffix array in linear time using KarkKainen & Sanders method
-    // In order to use a suffix array in the BWT, the last byte of the input block
-    // must be 0. The suffix array and permutation vector are equal only when
-    // the input is 0 terminated. Also, no 0 is allowed in the rest of the data.
-    // In other word, we add a guard at the end which has the lowest value.
-    protected int[] sort(byte[] block, int[] sa, int blkptr, int len)
-    {
-        if (this.array.length < len + 3)
-           this.array = new int[len+3];
+      // find the start or end of each bucket
+      private void getCounts(IndexedIntArray src, IndexedIntArray dst, int n, int k)
+      {
+        final int[] dstArray = dst.array;
+        final int[] srcArray = src.array;
+        final int dstIdx = dst.index;
+        final int srcIdx = src.index;
 
-        final int len4 = len & 0xFFFFFFFC;
+        for (int i=0; i<k; i++)
+           dstArray[dstIdx+i] = 0;
 
-        // Copy and extend the alphabet from [0..255] to [1..256]
-        for (int i=0; i<len4; )
+        for (int i=0; i<n; i++)
+           dstArray[dstIdx+srcArray[srcIdx+i]]++;
+      }
+
+
+      private static void getBuckets(IndexedIntArray src, IndexedIntArray dst, int k, boolean end)
+      {
+        int sum = 0;
+        final int[] dstArray = dst.array;
+        final int[] srcArray = src.array;
+        final int dstIdx = dst.index;
+        final int srcIdx = src.index;
+
+        if (end == true)
         {
-            this.array[i] = 1 + (block[blkptr+i] & 0xFF);
-            i++;
-            this.array[i] = 1 + (block[blkptr+i] & 0xFF);
-            i++;
-            this.array[i] = 1 + (block[blkptr+i] & 0xFF);
-            i++;
-            this.array[i] = 1 + (block[blkptr+i] & 0xFF);
-            i++;
-        }
-
-        for (int i=len4; i<len; i++)
-           this.array[i] = 1 + (block[blkptr+i] & 0xFF);
-
-        // Add 0 at the end of the data
-        this.array[len]   = 0;
-        this.array[len+1] = 0;
-        this.array[len+2] = 0;
-        suffixArray(this.array, sa, len, 256);
-        return sa;
-    }
-
-
-    // Stably sort input[0..n-1] to output[0..n-1]
-    // Critical path for speed
-    private static void radixPass(int[] input, int[] output, int[] sa, int[] freq,
-            int idx, int n, boolean reset)
-    {
-         // Reset
-         if (reset == true)
-         {
-            final int freq8 = freq.length & 0xFFFFFFF8;
-
-            for (int i=0; i<freq8; i+=8)
-            {
-               freq[i]   = 0;
-               freq[i+1] = 0;
-               freq[i+2] = 0;
-               freq[i+3] = 0;
-               freq[i+4] = 0;
-               freq[i+5] = 0;
-               freq[i+6] = 0;
-               freq[i+7] = 0;
-            }
-
-            for (int i=freq8; i<freq.length; i++)
-               freq[i] = 0;
-         }
-         
-         // Populate
-         final int n8 = n & 0xFFFFFFF8;
-
-         for (int i=0; i<n8; i+=8)
-         {
-            freq[sa[idx+input[i]]]++;
-            freq[sa[idx+input[i+1]]]++;
-            freq[sa[idx+input[i+2]]]++;
-            freq[sa[idx+input[i+3]]]++;
-            freq[sa[idx+input[i+4]]]++;
-            freq[sa[idx+input[i+5]]]++;
-            freq[sa[idx+input[i+6]]]++;
-            freq[sa[idx+input[i+7]]]++;
-         }
-
-         for (int i=n8; i<n; i++)
-            freq[sa[idx+input[i]]]++;
-         
-         // Accumulate
-         for (int i=0, sum=0; i<freq.length; i++)
-         {
-            final int temp = freq[i];
-            freq[i] = sum;
-            sum += temp;
-         }
-
-         // Output
-         for (int i=0; i<n8; i+=8)
-         {
-            final int val0 = input[i];
-            output[freq[sa[idx+val0]]++] = val0;
-            final int val1 = input[i+1];
-            output[freq[sa[idx+val1]]++] = val1;
-            final int val2 = input[i+2];
-            output[freq[sa[idx+val2]]++] = val2;
-            final int val3 = input[i+3];
-            output[freq[sa[idx+val3]]++] = val3;
-            final int val4 = input[i+4];
-            output[freq[sa[idx+val4]]++] = val4;
-            final int val5 = input[i+5];
-            output[freq[sa[idx+val5]]++] = val5;
-            final int val6 = input[i+6];
-            output[freq[sa[idx+val6]]++] = val6;
-            final int val7 = input[i+7];
-            output[freq[sa[idx+val7]]++] = val7;
-         }
-
-         for (int i=n8; i<n; i++)
-         {
-            final int val = input[i];
-            output[freq[sa[idx+val]]++] = val;
-         }
-    }
-
-
-    // Requires s[n]=s[n+1]=s[n+2]=0, n>=2
-    // Requires values in [0..k] range
-    private static void suffixArray(int[] s, int[] sa, int n, int k)
-    {
-        final int n0 = (n + 2) / 3;
-        final int n1 = (n + 1) / 3;
-        final int n2 = n / 3;
-        final int n02 = n0 + n2;
-
-        // Array that contains suffixes for non-multiple-of-3 positions
-        final int[] s12  = new int[n02+3];
-        final int[] sa12 = new int[n02+3];
-        final int end = n + (n0 - n1);
-        final int end3 = 3 * (end / 3);
-        int ii = 0;
-
-        // Generate positions of mod 1 and mod 2 suffixes
-        // '+(n0-n1)' adds a dummy mod 1 suffix if n % 3 == 1
-        for (int i=0; i<end3; i+=3)
-        {
-            s12[ii++] = i + 1;
-            s12[ii++] = i + 2;
-        }
-
-        for (int i=end3+1; i<end; i++)
-            s12[ii++] = i;
-
-        // Radix sort the mod 1 and mod 2 triples
-        final int[] freq = new int[k+1];
-        radixPass(s12 , sa12, s, freq, 2, n02, false);
-        radixPass(sa12, s12 , s, freq, 1, n02, true);
-        radixPass(s12 , sa12, s, freq, 0, n02, true);
-
-        // Find lexicographic names of triples
-        int name = 0;
-        int c0 = -1;
-        int c1 = -1;
-        int c2 = -1;
-
-        for (int i=0; i<n02; i++)
-        {
-            int idx = sa12[i];
-
-            if (s[idx] != c0)
-            {
-                name++;
-                c0 = s[idx];
-                c1 = s[idx+1];
-                c2 = s[idx+2];
-            }
-            else if (s[idx+1] != c1)
-            {
-                name++;
-                c1 = s[idx+1];
-                c2 = s[idx+2];
-            }
-            else if (s[idx+2] != c2)
-            {
-                name++;
-                c2 = s[idx+2];
-            }
-
-            // Just for fun: nice trick !
-            int div3 = (int) (((long) idx * 0xAAAAAAABL) >> 33);
-
-            if (idx == (3 * div3) + 1)
-                s12[div3] = name;
-            else
-                s12[div3+n0] = name;
-        }
-
-        // Recurse if names are not yet unique
-        if (name < n02)
-        {
-            suffixArray(s12, sa12, n02, name);
-
-            // Store unique names in s12 using the suffix array
-            for (int i=0; i<n02; i++)
-                s12[sa12[i]] = i + 1;
+           for (int i=0; i<k; i++)
+           {
+              sum += srcArray[srcIdx+i];
+              dstArray[dstIdx+i] = sum;
+           }
         }
         else
         {
-            // Generate the suffix array of s12 directly
-            for (int i=0; i<n02;  i++)
-                sa12[s12[i]-1] = i;
+           for (int i=0; i<k; i++)
+           {
+              // The temp variable is required if srcArray == dstArray
+              final int tmp = srcArray[srcIdx+i];
+              dstArray[dstIdx+i] = sum;
+              sum += tmp;
+           }
         }
+      }
 
-        // Array that contains suffixes for multiple-of-3 positions
-        final int[] s0  = new int[n0];
-        final int[] sa0 = new int[n0];
 
-        // Stably sort the mod 0 suffixes from sa12 by their first character
-        for (int i=0, j=0; i<n02; i++)
+      // sort all type LMS suffixes
+      private void sortLMSSuffixes(IndexedIntArray src, int[] sa, IndexedIntArray C,
+              IndexedIntArray B, int n, int k)
+      {
+        // compute sal
+        if (C == B)
+           getCounts(src, C, n, k);
+
+        // find starts of buckets
+        getBuckets(C, B, k, false);
+
+        int j = n - 1;
+        final int[] srcArray = src.array;
+        final int srcIdx = src.index;
+        int c1 = srcArray[srcIdx+j];
+        int b = B.array[B.index+c1];
+        j--;
+        sa[b++] = (srcArray[srcIdx+j] < c1) ? ~j : j;
+
+        for (int i=0; i<n; i++)
         {
-            if (sa12[i] < n0)
-                s0[j++] = 3 * sa12[i];
+          j = sa[i];
+
+          if (j > 0)
+          {
+            int c0 = srcArray[srcIdx+j];
+
+            if (c0 != c1)
+            {
+               B.array[B.index+c1] = b;
+               c1 = c0;
+               b = B.array[B.index+c1];
+            }
+
+            j--;
+            sa[b++] = (srcArray[srcIdx+j] < c1) ? ~j : j;
+            sa[i] = 0;
+          }
+          else if (j < 0)
+            sa[i] = ~j;
         }
 
-        radixPass(s0, sa0, s, freq, 0, n0, true);
+        // compute sas
+        if (C == B)
+           getCounts(src, C, n, k);
 
-        // Merge the sorted sa0 suffixes and sorted sa12 suffixes
-        for (int p=0, t=n0-n1, l=0; l<n; l++)
+        // find ends of buckets
+        getBuckets(C, B, k, true);
+        c1 = 0;
+        b = B.array[B.index+c1];
+
+        for (int i=n-1; i>=0; i--)
         {
-            int idx = sa12[t];
+          j = sa[i];
 
-            // Position of current offset 1-2 suffix
-            final int i = (idx < n0) ? (3 * idx) + 1 : (3 * (idx - n0)) + 2;
+          if (j > 0)
+          {
+            int c0 = srcArray[srcIdx+j];
 
-            // Position of current offset 0 suffix
-            int j = sa0[p];
-            int si = s[i];
-            int sj = s[j];
-            boolean leq;
-
-            if (idx < n0)
+            if (c0 != c1)
             {
-                if (si == sj)
-                   leq = (s12[idx+n0] <= s12[j/3]);
-                else
-                   leq = (si < sj);
-            }
-            else
-            {
-                if (si == sj)
-                {
-                   if (s[i+1] == s[j+1])
-                      leq = (s12[idx-n0+1] <= s12[(j/3)+n0]);
-                   else
-                      leq = (s[i+1] < s[j+1]);
-                }
-                else
-                   leq = (si < sj);
+               B.array[B.index+c1] = b;
+               c1 = c0;
+               b = B.array[B.index+c1];
             }
 
-            if (leq == true)
-            {
-                sa[l] = i;
-                t++;
-
-                if (t != n02)
-                   continue;
-
-                // Done: only sa0 suffixes left
-                l++;
-                System.arraycopy(sa0, p, sa, l, n0-p);
-                l += (n0 - p);
-                p = n0;
-
-            }
-            else
-            {
-                sa[l] = j;
-                p++;
-
-                if (p != n0)
-                   continue;
-
-                // Done: only sa12 suffixes left
-                for (l++; t<n02; t++, l++)
-                {
-                   idx = sa12[t];
-                   sa[l] = (idx < n0) ? (3 * idx) + 1 : (3 * (idx - n0)) + 2;
-                }
-            }
+            j--;
+            b--;
+            sa[b] = (srcArray[srcIdx+j] > c1) ? ~(j + 1) : j;
+            sa[i] = 0;
+          }
         }
-    }
+      }
+
+
+      private int postProcessLMS(IndexedIntArray src, int[] sa, int n, int m)
+      {
+        int i = 0;
+        int j;
+        final int index = src.index;
+        final int[] array = src.array;
+
+        // compact all the sorted substrings into the first m items of sa
+        // 2*m must be not larger than n
+        for (int p; (p=sa[i])<0; i++)
+           sa[i] = ~p;
+
+        if (i < m)
+        {
+          j = i;
+          i++;
+
+          while (true)
+          {
+            final int p = sa[i++];
+
+            if (p >= 0)
+               continue;
+
+            sa[j++] = ~p;
+            sa[i-1] = 0;
+
+            if (j == m)
+               break;
+          }
+        }
+
+        // store the length of all substrings
+        i = n - 1;
+        j = n - 1;
+        int c0 = array[index+n-1];
+        int c1;
+
+        do
+        {
+          c1 = c0;
+          i--;
+        }
+        while ((i >= 0) && ((c0 = array[index+i]) >= c1));
+
+        while (i >= 0)
+        {
+          do
+          {
+            c1 = c0;
+            i--;
+          }
+          while ((i >= 0) && ((c0 = array[index+i]) <= c1));
+
+          if (i < 0)
+             break;
+
+          sa[m+((i+1)>>1)] = j - i;
+          j = i + 1;
+
+          do
+          {
+            c1 = c0;
+            i--;
+          }
+          while ((i >= 0) && ((c0 = array[index+i]) >= c1));
+        }
+
+        // find the lexicographic names of all substrings
+        int name = 0;
+        int q = n;
+        int qlen = 0;
+
+        for (int ii=0; ii<m; ii++)
+        {
+          final int p = sa[ii];
+          final int plen = sa[m+(p>>1)];
+          boolean diff = true;
+
+          if ((plen == qlen) && ((q + plen) < n))
+          {
+            j = 0;
+
+            while ((j<plen) && (array[index+p+j] == array[index+q+j]))
+               j++;
+
+            if (j == plen)
+               diff = false;
+          }
+
+          if (diff == true)
+          {
+             name++;
+             q = p;
+             qlen = plen;
+          }
+
+          sa[m+(p>>1)] = name;
+        }
+
+        return name;
+      }
+
+
+      private void induceSuffixArray(IndexedIntArray src, int[] sa, IndexedIntArray buf1,
+              IndexedIntArray buf2, int n, int k)
+      {
+        // compute sal
+        if (buf1 == buf2)
+           getCounts(src, buf1, n, k);
+
+        // find starts of buckets
+        getBuckets(buf1, buf2, k, false);
+
+        final int srcIdx = src.index;
+        final int[] srcArray = src.array;
+        final int bufIdx = buf2.index;
+        final int[] bufArray = buf2.array;
+        int j = n - 1;
+        int c1 = srcArray[srcIdx+j];
+        int b = bufArray[bufIdx+c1];
+        sa[b++] = ((j > 0) && (srcArray[srcIdx+j-1] < c1)) ? ~j : j;
+
+        for (int i=0; i<n; i++)
+        {
+          j = sa[i];
+          sa[i] = ~j;
+
+          if (j > 0)
+          {
+            j--;
+            final int c0 = srcArray[srcIdx+j];
+
+            if (c0 != c1)
+            {
+               bufArray[bufIdx+c1] = b;
+               c1 = c0;
+               b = bufArray[bufIdx+c1];
+            }
+
+            sa[b++] = ((j > 0) && (srcArray[srcIdx+j-1] < c1)) ? ~j : j;
+          }
+        }
+
+        // compute sas
+        if (buf1 == buf2)
+           getCounts(src, buf1, n, k);
+
+        // find ends of buckets
+        getBuckets(buf1, buf2, k, true);
+        c1 = 0;
+        b = bufArray[bufIdx+c1];
+
+        for (int i=n-1; i>=0; i--)
+        {
+          j = sa[i];
+
+          if (j > 0)
+          {
+            j--;
+            final int c0 = srcArray[srcIdx+j];
+
+            if (c0 != c1)
+            {
+               bufArray[bufIdx+c1] = b;
+               c1 = c0;
+               b = bufArray[bufIdx+c1];
+            }
+
+            b--;
+            sa[b] = ((j == 0) || (srcArray[srcIdx+j-1] > c1)) ? ~j : j;
+          }
+          else
+            sa[i] = ~j;
+        }
+      }
+
+
+      private int computeBWT(IndexedIntArray data, int[] sa, IndexedIntArray iia1,
+              IndexedIntArray iia2, int n, int k)
+      {
+        // compute sal
+        if (iia1 == iia2)
+           getCounts(data, iia1, n, k);
+
+        // find starts of buckets
+        getBuckets(iia1, iia2, k, false);
+        int[] array = data.array;
+        int[] buffer = iia2.array;
+        int arrayIdx = data.index;
+        int bufferIdx = iia2.index;
+        int j = n - 1;
+        int c1 = array[arrayIdx+j];
+        int b = buffer[bufferIdx+c1];
+        sa[b++] = ((j > 0) && (array[arrayIdx+j-1] < c1)) ? ~j : j;
+
+        for (int i=0; i<n; i++)
+        {
+          j = sa[i];
+
+          if (j > 0)
+          {
+            j--;
+            final int c0 = array[arrayIdx+j];
+            sa[i] = ~c0;
+
+            if (c0 != c1)
+            {
+               buffer[bufferIdx+c1] = b;
+               c1 = c0;
+               b = buffer[bufferIdx+c1];
+            }
+
+            sa[b++] = ((j > 0) && (array[arrayIdx+j-1] < c1)) ? ~j : j;
+          }
+          else if (j != 0)
+            sa[i] = ~j;
+        }
+
+        // compute sas
+        if (iia1 == iia2)
+           getCounts(data, iia1, n, k);
+
+        // find ends of buckets
+        getBuckets(iia1, iia2, k, true);
+        c1 = 0;
+        b = buffer[bufferIdx+c1];
+        int pidx = -1;
+
+        for (int i=n-1; i>=0; i--)
+        {
+          j = sa[i];
+
+          if (j > 0)
+          {
+            j--;
+            final int c0 = array[arrayIdx+j];
+            sa[i] = c0;
+
+            if (c0 != c1)
+            {
+               buffer[bufferIdx+c1] = b;
+               c1 = c0;
+               b = buffer[bufferIdx+c1];
+            }
+
+            b--;
+            sa[b] = ((j > 0) && (array[arrayIdx+j-1] > c1)) ? ~(array[arrayIdx+j-1]) : j;
+          }
+          else if (j != 0)
+            sa[i] = ~j;
+          else
+            pidx = i;
+        }
+
+        return pidx;
+      }
+
+
+      // find the suffix array sa of T[0..n-1] in {0..k-1}^n
+      private int computeSuffixArray(IndexedIntArray data, int[] sa, int fs, int n, int k, boolean isbwt)
+      {
+        IndexedIntArray C, B;
+        int flags;
+
+        if (k <= 256)
+        {
+          C = new IndexedIntArray(new int[k], 0);
+
+          if (k <= fs)
+          {
+             B = new IndexedIntArray(sa, n+fs-k);
+             flags = 1;
+          }
+          else
+          {
+             B = new IndexedIntArray(new int[k], 0);
+             flags = 3;
+          }
+        }
+        else if (k <= fs)
+        {
+          C = new IndexedIntArray(sa, n+fs-k);
+
+          if (k <= (fs-k))
+          {
+             B = new IndexedIntArray(sa, n+fs-(k+k));
+             flags = 0;
+          }
+          else if (k <= 1024)
+          {
+             B = new IndexedIntArray(new int[k], 0);
+             flags = 2;
+          }
+          else
+          {
+             B = C;
+             flags = 8;
+          }
+        }
+        else
+        {
+          B = new IndexedIntArray(new int[k], 0);
+          C = B;
+          flags = 12;
+        }
+
+        // stage 1: reduce the problem by at least 1/2, sort all the LMS-substrings
+        // find ends of buckets
+        getCounts(data, C, n, k);
+        getBuckets(C, B, k, true);
+
+        for (int ii=0; ii<n; ii++)
+           sa[ii] = 0;
+
+        int b = -1;
+        int i = n - 1;
+        int j = n;
+        int m = 0;
+        final int[] array = data.array;
+        final int arrayIdx = data.index;
+        int c0 = array[arrayIdx+n-1];
+        int c1;
+        int name = 0;
+
+        do
+        {
+           c1 = c0;
+           i--;
+        }
+        while ((i >= 0) && ((c0 = array[arrayIdx+i]) >= c1));
+
+        final int[] buffer = B.array;
+        final int bufferIdx = B.index;
+
+        while (i >= 0)
+        {
+          do
+          {
+             c1 = c0;
+             i--;
+          }
+          while ((i >= 0) && ((c0 = array[arrayIdx+i]) <= c1));
+
+          if (i >= 0)
+          {
+            if (b >= 0)
+               sa[b] = j;
+
+            buffer[bufferIdx+c1]--;
+            b = buffer[bufferIdx+c1];
+            j = i;
+            m++;
+
+            do
+            {
+              c1 = c0;
+              i--;
+            }
+            while((i >= 0) && ((c0 = array[arrayIdx+i]) >= c1));
+          }
+        }
+
+        if (m > 1)
+        {
+          sortLMSSuffixes(data, sa, C, B, n, k);
+          name = postProcessLMS(data, sa, n, m);
+        }
+        else if (m == 1)
+        {
+          sa[b] = j + 1;
+          name = 1;
+        }
+        else
+          name = 0;
+
+        // stage 2: solve the reduced problem recurse if names are not yet unique
+        if (name < m)
+        {
+          int newfs = (n+fs) - (m+m);
+
+          if ((flags & (13)) == 0)
+          {
+            if ((k + name) <= newfs)
+              newfs -= k;
+            else
+              flags |= 8;
+          }
+
+          j = m + m + newfs - 1;
+
+          for (int ii=m+(n>>1)-1; ii>=m; ii--)
+          {
+            if (sa[ii] != 0)
+              sa[j--] = sa[ii] - 1;
+          }
+
+          computeSuffixArray(new IndexedIntArray(sa, m + newfs), sa, newfs, m, name, false);
+
+          i = n - 1;
+          j = m + m - 1;
+          c0 = array[arrayIdx+n-1];
+
+          do
+          {
+            c1 = c0;
+            i--;
+          }
+          while ((i >= 0) && ((c0 = array[arrayIdx+i]) >= c1));
+
+          while (i >= 0)
+          {
+            do
+            {
+              c1 = c0;
+              i--;
+            }
+            while ((i >= 0) && ((c0 = array[arrayIdx+i]) <= c1));
+
+            if (i >= 0)
+            {
+              sa[j--] = i + 1;
+
+              do
+              {
+                c1 = c0;
+                i--;
+              }
+              while ((i >= 0) && ((c0 = array[arrayIdx+i]) >= c1));
+            }
+          }
+
+          for (int ii=0; ii<m; ii++)
+             sa[ii] = sa[m+sa[ii]];
+
+          if ((flags & 4) != 0)
+          {
+            B = new IndexedIntArray(new int[k], 0);
+            C = B;
+          }
+          else if((flags & 2) != 0)
+            B = new IndexedIntArray(new int[k], 0);
+        }
+
+        // stage 3: induce the result for the original problem
+        if ((flags & 8) != 0)
+           getCounts(data, C, n, k);
+
+        // put all left-most S characters into their buckets
+        if (m > 1)
+        {
+          // find ends of buckets
+          getBuckets(C, B, k, true);
+          i = m - 1;
+          j = n;
+          int p = sa[m-1];
+          c1 = array[arrayIdx+p];
+
+          do
+          {
+            c0 = c1;
+            int q = B.array[B.index+c0];
+
+            while (q < j)
+               sa[--j] = 0;
+
+            do
+            {
+              sa[--j] = p;
+
+              if (--i < 0)
+                 break;
+
+              p = sa[i];
+              c1 = array[arrayIdx+p];
+            }
+            while(c1 == c0);
+          }
+          while (i >= 0);
+
+          while (j > 0)
+             sa[--j] = 0;
+        }
+
+        int pidx = 0;
+
+        if (isbwt == false)
+           induceSuffixArray(data, sa, C, B, n, k);
+        else
+           pidx = computeBWT(data, sa, C, B, n, k);
+
+        return pidx;
+     }
 }
