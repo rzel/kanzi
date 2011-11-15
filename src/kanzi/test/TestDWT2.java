@@ -16,7 +16,7 @@ limitations under the License.
 package kanzi.test;
 
 import kanzi.IndexedIntArray;
-import kanzi.transform.DWT_CDF_9_7;
+import kanzi.test.DWT_CDF_9_7;
 import kanzi.function.wavelet.WaveletBandFilter;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
@@ -42,7 +42,7 @@ public class TestDWT2
       String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
       ImageIcon icon = new ImageIcon(fileName);
       Image image = icon.getImage();
-      int w = 512;//image.getWidth(null);
+      int w = 288;//image.getWidth(null);
       int h = 512;//image.getHeight(null);
 
       if (image.getWidth(null) <= 0)
@@ -135,8 +135,8 @@ public class TestDWT2
       int[] u = new int[w * h / 4];
       int[] v = new int[w * h / 4];
       cvt.convertRGBtoYUV(iia1.array, y, u, v, ColorModelType.YUV420);
-      DWT_CDF_9_7 yDWT = new DWT_CDF_9_7(dim);
-      DWT_CDF_9_7 uvDWT = new DWT_CDF_9_7(dim/2);
+      DWT_CDF_9_7 yDWT = new DWT_CDF_9_7(w, h, 4);
+      DWT_CDF_9_7 uvDWT = new DWT_CDF_9_7(w/2, h/2, 4);
       int DIM_LL_BAND = 8;
       int logDimLLBand = 3;
       int log2 = 0;
@@ -145,100 +145,100 @@ public class TestDWT2
           log2++;
 
       yDWT.forward(y, 0);
-      uvDWT.forward(u, 0);
-      uvDWT.forward(v, 0);
+ //     uvDWT.forward(u, 0);
+ //     uvDWT.forward(v, 0);
 
-      int levels = log2 - logDimLLBand;
-
-      // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      boolean quantize = true;
-      //int[] q = { 1, 1, 1, 1, 1, 1, 1, 1, 1};
-      //WaveletBandFilter f = new WaveletBandFilter(dim, 8, levels, q, 1);
-
-      if (quantize == true)
-      {
-         // Quantization
-         int[] quantizers = new int[levels+1];
-         quantizers[0] = 169;
-         quantizers[1] = 19;//26;
-
-         for (int i=2; i<quantizers.length; i++)
-         {
-             // Derive quantizer values for higher bands
-             quantizers[i] = ((quantizers[i-1]) * 129 + 2) >> 7;
-         }
-
-         int[] quantizers2 = new int[levels];
-         quantizers2[0] = 45;
-         quantizers2[1] = 8;
-
-         for (int i=2; i<quantizers2.length; i++)
-         {
-             // Derive quantizer values for higher bands
-             quantizers2[i] = ((quantizers2[i-1]) *  17 + 2) >> 4;
-         }
-
-         int sizeAfter = 0;
-         WaveletBandFilter yFilter = new WaveletBandFilter(dim, DIM_LL_BAND, levels, null/*quantizers*/, 3);
-         iia1.array = y;
-         iia1.index = 0;
-         iia2.index = 0;
-         WaveletRingFilter ringFilter = new WaveletRingFilter(dim, 3, 16);
-         ringFilter.forward(iia1, iia2);
-         iia1.index = 0;
-         iia2.index = 0;
-         yFilter.forward(iia1, iia2);
-         sizeAfter += iia2.index;
-         System.out.println("Y before: "+iia1.index+" coefficients");
-         System.out.println("Y after : "+iia2.index+" coefficients");
-
-
-         int[] arr = new int[w*h];
-         System.arraycopy(y, 0, arr, 0, w*h);
-         GraphicsDevice gs = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
-         GraphicsConfiguration gc = gs.getDefaultConfiguration();
-         BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-         img.getRaster().setDataElements(0, 0, w, h, arr);
-         JFrame frame2 = new JFrame("Wavelet");
-         frame2.setBounds(500, 100, w, h);
-         ImageIcon newIcon2 = new ImageIcon(img);
-         frame2.add(new JLabel(newIcon2));
-         frame2.setVisible(true);
-
-         iia1.index = 0;
-         iia2.index = 0;
-         Arrays.fill(iia1.array, 0);
-         yFilter.inverse(iia2, iia1);
-         iia1.index = 0;
-         iia2.index = 0;
-         iia1.array = u;
-         WaveletBandFilter uvFilter = new WaveletBandFilter(dim/2, 8, levels-1, quantizers2);
-         uvFilter.forward(iia1, iia2);
-         sizeAfter += iia2.index;
-         System.out.println("U before: "+iia1.index+" coefficients");
-         System.out.println("U after : "+iia2.index+" coefficients");
-         iia1.index = 0;
-         iia2.index = 0;
-         Arrays.fill(iia1.array, 0);
-         uvFilter.inverse(iia2, iia1);
-         iia1.index = 0;
-         iia2.index = 0;
-         iia1.array = v;
-         sizeAfter += iia2.index;
-         uvFilter.forward(iia1, iia2);
-         System.out.println("V before: "+iia1.index+" coefficients");
-         System.out.println("V after : "+iia2.index+" coefficients");
-         iia1.index = 0;
-         iia2.index = 0;
-         Arrays.fill(iia1.array, 0);
-         uvFilter.inverse(iia2, iia1);
-         System.out.println("Compression ratio: "+(float) sizeAfter/(3*w*h));
-      }
+//      int levels = log2 - logDimLLBand;
+//
+//      // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//      boolean quantize = true;
+//      //int[] q = { 1, 1, 1, 1, 1, 1, 1, 1, 1};
+//      //WaveletBandFilter f = new WaveletBandFilter(dim, 8, levels, q, 1);
+//
+//      if (quantize == true)
+//      {
+//         // Quantization
+//         int[] quantizers = new int[levels+1];
+//         quantizers[0] = 169;
+//         quantizers[1] = 19;//26;
+//
+//         for (int i=2; i<quantizers.length; i++)
+//         {
+//             // Derive quantizer values for higher bands
+//             quantizers[i] = ((quantizers[i-1]) * 129 + 2) >> 7;
+//         }
+//
+//         int[] quantizers2 = new int[levels];
+//         quantizers2[0] = 45;
+//         quantizers2[1] = 8;
+//
+//         for (int i=2; i<quantizers2.length; i++)
+//         {
+//             // Derive quantizer values for higher bands
+//             quantizers2[i] = ((quantizers2[i-1]) *  17 + 2) >> 4;
+//         }
+//
+//         int sizeAfter = 0;
+//         WaveletBandFilter yFilter = new WaveletBandFilter(dim, DIM_LL_BAND, levels, null/*quantizers*/, 3);
+//         iia1.array = y;
+//         iia1.index = 0;
+//         iia2.index = 0;
+//         WaveletRingFilter ringFilter = new WaveletRingFilter(dim, 3, 16);
+////         ringFilter.forward(iia1, iia2);
+//         iia1.index = 0;
+//         iia2.index = 0;
+////         yFilter.forward(iia1, iia2);
+//         sizeAfter += iia2.index;
+//         System.out.println("Y before: "+iia1.index+" coefficients");
+//         System.out.println("Y after : "+iia2.index+" coefficients");
+//
+//
+//         int[] arr = new int[w*h];
+//         System.arraycopy(y, 0, arr, 0, w*h);
+//         GraphicsDevice gs = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
+//         GraphicsConfiguration gc = gs.getDefaultConfiguration();
+//         BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
+//         img.getRaster().setDataElements(0, 0, w, h, arr);
+//         JFrame frame2 = new JFrame("Wavelet");
+//         frame2.setBounds(500, 100, w, h);
+//         ImageIcon newIcon2 = new ImageIcon(img);
+//         frame2.add(new JLabel(newIcon2));
+//         frame2.setVisible(true);
+//
+//         iia1.index = 0;
+//         iia2.index = 0;
+//         Arrays.fill(iia1.array, 0);
+////         yFilter.inverse(iia2, iia1);
+//         iia1.index = 0;
+//         iia2.index = 0;
+//         iia1.array = u;
+//         WaveletBandFilter uvFilter = new WaveletBandFilter(dim/2, 8, levels-1, quantizers2);
+////         uvFilter.forward(iia1, iia2);
+//         sizeAfter += iia2.index;
+//         System.out.println("U before: "+iia1.index+" coefficients");
+//         System.out.println("U after : "+iia2.index+" coefficients");
+//         iia1.index = 0;
+//         iia2.index = 0;
+//         Arrays.fill(iia1.array, 0);
+////         uvFilter.inverse(iia2, iia1);
+//         iia1.index = 0;
+//         iia2.index = 0;
+//         iia1.array = v;
+//         sizeAfter += iia2.index;
+////         uvFilter.forward(iia1, iia2);
+//         System.out.println("V before: "+iia1.index+" coefficients");
+//         System.out.println("V after : "+iia2.index+" coefficients");
+//         iia1.index = 0;
+//         iia2.index = 0;
+//         Arrays.fill(iia1.array, 0);
+////         uvFilter.inverse(iia2, iia1);
+//         System.out.println("Compression ratio: "+(float) sizeAfter/(3*w*h));
+//      }
 
       // Inverse
       yDWT.inverse(y, 0);
-      uvDWT.inverse(u, 0);
-      uvDWT.inverse(v, 0);
+ //     uvDWT.inverse(u, 0);
+ //     uvDWT.inverse(v, 0);
 
       cvt.convertYUVtoRGB(y, u, v, iia2.array, ColorModelType.YUV420);
    }
