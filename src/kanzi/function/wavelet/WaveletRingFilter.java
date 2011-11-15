@@ -23,18 +23,19 @@ import kanzi.IntFunction;
 // The filter removes coefficients in the outer ring of the high frequency bands
 public class WaveletRingFilter implements IntFunction
 {
-    private final int dimImage;
+    private final int width;
+    private final int height;
     private final int levels;
     private final int ringWidth;
 
     
-    public WaveletRingFilter(int dimImage, int levels, int ringWidth)
+    public WaveletRingFilter(int width, int height, int levels, int ringWidth)
     {
-        if (dimImage < 8)
-            throw new IllegalArgumentException("The dimension of the image must be at least 8");
+        if (width < 8)
+            throw new IllegalArgumentException("The width of the image must be at least 8");
 
-        if ((dimImage & (dimImage-1)) != 0)
-            throw new IllegalArgumentException("Invalid dimImage parameter (must be a power of 2)");
+        if (height < 8)
+            throw new IllegalArgumentException("The height of the image must be at least 8");
 
         if (levels < 1)
             throw new IllegalArgumentException("The number of wavelet sub-band levels must be at least 1");
@@ -45,10 +46,14 @@ public class WaveletRingFilter implements IntFunction
         if (ringWidth < 1)
            throw new IllegalArgumentException("The width of the ring must be at least 1");
 
-        if (ringWidth > (dimImage >> 1))
-           throw new IllegalArgumentException("The width of the ring must be at most "+(dimImage >> 1));
+        if (ringWidth > (width >> 1))
+           throw new IllegalArgumentException("The width of the ring must be at most "+(width >> 1));
 
-        this.dimImage = dimImage;
+        if (ringWidth > (height >> 1))
+           throw new IllegalArgumentException("The width of the ring must be at most "+(height >> 1));
+
+        this.width = width;
+        this.height = height;
         this.levels = levels;
         this.ringWidth = ringWidth;
     }
@@ -56,29 +61,37 @@ public class WaveletRingFilter implements IntFunction
 
     // Remove a ring of coefficients around the borders in the high frequency levels
     // (nullify the details in the outer ring of the frame).
+    @Override
     public boolean forward(IndexedIntArray source, IndexedIntArray destination)
     {
-       int dim = this.dimImage;
-       int srcIdx = source.index;
-       int[] dst = destination.array;
-       int width = this.ringWidth;
+       final int w = this.width;
+       final int h = this.height;
+       final int srcIdx = source.index;
+       final int[] dst = destination.array;
+       int rw = this.ringWidth;
+       int bandW = w;
+       int bandH = h;
 
+       // Sub-bands:
+       // LL HL
+       // LH HH
        for (int level=0; level<this.levels; level++)
        {
-          int halfDim = dim >> 1;
-          int startHL = srcIdx + halfDim;
-          int startLH = srcIdx + ((halfDim - 1) * this.dimImage);
-          int startHH = startLH + halfDim;
-          int endHL = startHH;
-          int endLH = srcIdx + ((dim - 1) * this.dimImage);
-          int endHH = endLH + halfDim;
+          final int halfBandW = bandW >> 1;
+          final int halfBandH = bandH >> 1;
+          final int startHL = srcIdx + halfBandW;
+          final int startLH = srcIdx + ((halfBandH - 1) * w);
+          final int startHH = startLH + halfBandW;
+          final int endHL = startLH;
+          final int endLH = srcIdx + ((bandH - 1) * w);
+          final int endHH = endLH + halfBandW;
           int offs = 0;
 
-          for (int j=0; j<halfDim; j++)
+          for (int j=0; j<halfBandH; j++)
           {
-             if (j < width)
+             if (j < rw)
              {
-                for (int i=halfDim-1; i>=0; i--)
+                for (int i=halfBandW-1; i>=0; i--)
                 {
                    int idx1 = i + offs;
                    int idx2 = i - offs;
@@ -98,10 +111,10 @@ public class WaveletRingFilter implements IntFunction
              }
              else
              {
-                for (int i=0; i<width; i++)
+                for (int i=0; i<rw; i++)
                 {
                    int idx1 = offs + i;
-                   int idx2 = offs + halfDim - 1 - i;
+                   int idx2 = offs + halfBandW - 1 - i;
 
                    // HL quadrant: first and last columns (2 per iteration)
                    dst[startHL+idx1] = 0;
@@ -117,23 +130,25 @@ public class WaveletRingFilter implements IntFunction
                 }
              }
 
-             offs += this.dimImage;
+             offs += w;
           }
 
-          width >>= 2;
-          dim >>= 1;
+          rw >>= 2;
+          bandW >>= 1;
+          bandH >>= 1;
 
-          if (width == 0)
+          if (rw == 0)
              break;
        }
 
-       source.index = this.dimImage * this.dimImage;
-       destination.index = this.dimImage * this.dimImage;
+       source.index = w * h;
+       destination.index = w * h;
        return true;
     }
 
 
     // Cannot be reversed
+    @Override
     public boolean inverse(IndexedIntArray source, IndexedIntArray destination)
     {
        return false;
