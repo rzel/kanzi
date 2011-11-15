@@ -16,20 +16,17 @@ limitations under the License.
 package kanzi.test;
 
 import kanzi.IndexedIntArray;
-import kanzi.test.DWT_CDF_9_7;
-import kanzi.function.wavelet.WaveletBandFilter;
+import kanzi.transform.DWT_CDF_9_7;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Transparency;
 import java.awt.image.BufferedImage;
-import java.util.Arrays;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.ColorModelType;
-import kanzi.function.wavelet.WaveletRingFilter;
 import kanzi.util.color.ColorModelConverter;
 import kanzi.util.ImageQualityMonitor;
 import kanzi.util.color.YSbSrColorModelConverter;
