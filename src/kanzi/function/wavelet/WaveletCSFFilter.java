@@ -109,20 +109,20 @@ public class WaveletCSFFilter implements IntFunction
        { new CSF(16, 16), new CSF(20, 20), new CSF(24, 24), new CSF(29, 29), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) }
     };
 
-    private final int dimImage;
-    private final int dimLLBand;
+    private final int width;
+    private final int height;
     private final int levels;
     private final int[] buffer;
     private int channelType;
 
 
-    public WaveletCSFFilter(int dimImage, int levels, int channelType)
+    public WaveletCSFFilter(int width, int height, int levels, int channelType)
     {
-        if (dimImage < 8)
-            throw new IllegalArgumentException("The dimension of the image must be at least 8");
+        if (width < 8)
+            throw new IllegalArgumentException("The width of the image must be at least 8");
 
-        if ((dimImage & (dimImage-1)) != 0)
-            throw new IllegalArgumentException("Invalid dimImage parameter (must be a power of 2)");
+        if (height < 8)
+            throw new IllegalArgumentException("The height of the image must be at least 8");
 
         if (levels < 2)
             throw new IllegalArgumentException("The number of wavelet sub-band levels must be at least 2");
@@ -134,17 +134,11 @@ public class WaveletCSFFilter implements IntFunction
                && (channelType != Cr_CHANNEL))
            throw new IllegalArgumentException("The channel must be of type Y or Cr or Cb");
 
-        this.dimImage = dimImage;
+        this.width = width;
+        this.height = height;
         this.levels = levels;
-        this.buffer = new int[(dimImage <= 512) ? 16384 : 32768];
+        this.buffer = new int[(Math.max(width, height) <= 512) ? 16384 : 32768];
         this.channelType = channelType;
-
-        int dLLBand = dimImage;
-
-        for (int i=0; i<levels; i++)
-           dLLBand >>= 1;
-
-        this.dimLLBand = dLLBand;
     }
 
 
@@ -167,19 +161,20 @@ public class WaveletCSFFilter implements IntFunction
 
 
     // Apply Contrast Sensitivy Function weights to wavelet coefficients
+    @Override
     public boolean forward(IndexedIntArray source, IndexedIntArray destination)
     {
-        int srcIdx = source.index;
-        int dstIdx = destination.index;
-        int[] src = source.array;
-        int[] dst = destination.array;
+        final int srcIdx = source.index;
+        final int dstIdx = destination.index;
+        final int[] src = source.array;
+        final int[] dst = destination.array;
 
-        WaveletBandIterator it = new WaveletBandIterator(this.dimLLBand,
-                 this.dimImage, WaveletBandIterator.ALL_BANDS, this.levels);
+        WaveletBandScanner sc = new WaveletBandScanner(this.width,
+                 this.height, WaveletBandScanner.ALL_BANDS, this.levels);
 
-        int channel = this.channelType; // protection from concurrent access
+        final int channel = this.channelType; // protection from concurrent access
         int level = 0;
-        int levelSize = 3 * this.dimLLBand * this.dimLLBand;
+        int levelSize = 3 * this.width * this.height;
         int startHHBand = (levelSize + levelSize) / 3;
         int read = 0;
         int length = levelSize;
@@ -196,33 +191,36 @@ public class WaveletCSFFilter implements IntFunction
         int csfWeight = csfWeights[level].HL_LH_bands;
         int offset = 0;
 
-        for (int j=0; j<this.dimLLBand; j++)
+        for (int j=0; j<this.height; j++)
         {
-           for (int i=0; i<this.dimLLBand; i++)
+           for (int i=0; i<this.width; i++)
            {
               int idx = offset + i;
               int val = src[srcIdx+idx];
               dst[dstIdx+idx] = ((csfWeight * val) + 16); // value multiplied by 32S
            }
 
-           offset += this.dimImage;
+           offset += this.width;
         }
 
         level++;
         csfWeight = csfWeights[level].HL_LH_bands;
+        int processed = 0;
 
         // Process sub-bands
-        while (it.hasNext())
+        while (processed < sc.getSize())
         {
-           read += it.getNextIndexes(this.buffer, length);
+           final int l = sc.getIndexes(this.buffer, length, read);
+           processed += l;
+           read += l;
            int n;
            int part1 = (startHHBand < length) ? startHHBand : length;
 
            // Process LH, HL and HH bands
            for (n=0; n<part1; n++)
            {
-               int idx = this.buffer[n];
-               int val = src[srcIdx+idx];
+               final int idx = this.buffer[n];
+               final int val = src[srcIdx+idx];
                dst[dstIdx+idx] = ((csfWeight * val) + 16) >> 2; // range x8 to x1/4
            }
 
@@ -233,8 +231,8 @@ public class WaveletCSFFilter implements IntFunction
 
            for ( ; n<length; n++)
            {
-              int idx = this.buffer[n];
-              int val = src[srcIdx+idx];
+              final int idx = this.buffer[n];
+              final int val = src[srcIdx+idx];
               dst[dstIdx+idx] = ((csfWeight * val) + 16) >> 2; // range x8 to x1/4
            }
 
@@ -255,26 +253,27 @@ public class WaveletCSFFilter implements IntFunction
                length = this.buffer.length;
         }
 
-        source.index = this.dimImage * this.dimImage;
-        destination.index = this.dimImage * this.dimImage;
+        source.index = this.width * this.height;
+        destination.index =  this.width * this.height;
         return true;
     }
 
 
     // Revert Contrast Sensitivy Function weights on wavelet coefficients
+    @Override
     public boolean inverse(IndexedIntArray source, IndexedIntArray destination)
     {
-        int srcIdx = source.index;
-        int dstIdx = destination.index;
-        int[] src = source.array;
-        int[] dst = destination.array;
+        final int srcIdx = source.index;
+        final int dstIdx = destination.index;
+        final int[] src = source.array;
+        final int[] dst = destination.array;
 
-        WaveletBandIterator it = new WaveletBandIterator(this.dimLLBand,
-                 this.dimImage, WaveletBandIterator.ALL_BANDS, this.levels);
+        WaveletBandScanner sc = new WaveletBandScanner(this.width,
+                 this.height, WaveletBandScanner.ALL_BANDS, this.levels);
 
-        int channel = this.channelType; // protection from concurrent access
+        final int channel = this.channelType; // protection from concurrent access
         int level = 0;
-        int levelSize = 3 * this.dimLLBand * this.dimLLBand;
+        int levelSize = 3 * this.width * this.height;
         int startHHBand = (levelSize + levelSize) / 3;
         int read = 0;
         int length = levelSize;
@@ -291,33 +290,36 @@ public class WaveletCSFFilter implements IntFunction
         int csfWeight = csfWeights[level].HL_LH_bands;
         int offset = 0;
 
-        for (int j=0; j<this.dimLLBand; j++)
+        for (int j=0; j<this.height; j++)
         {
-           for (int i=0; i<this.dimLLBand; i++)
+           for (int i=0; i<this.width; i++)
            {
               int idx = this.buffer[offset+i];
               int val = src[srcIdx+idx];
               dst[dstIdx+idx] = val / csfWeight;
            }
 
-           offset += this.dimImage;
+           offset += this.width;
         }
 
         level++;
         csfWeight = csfWeights[level].HL_LH_bands;
+        int processed = 0;
 
         // Process sub-bands
-        while (it.hasNext())
+        while (processed < sc.getSize())
         {
-           read += it.getNextIndexes(this.buffer, length);
+           final int l = sc.getIndexes(this.buffer, length, read);
+           processed += l;
+           read += l;
            int n;
            int part1 = (startHHBand < length) ? startHHBand : length;
 
            // Process LH, HL and HH bands
            for (n=0; n<part1; n++)
            {
-              int idx = this.buffer[n];
-              int val = src[srcIdx+idx];
+              final int idx = this.buffer[n];
+              final int val = src[srcIdx+idx];
               dst[dstIdx+idx] = (val << 2) / csfWeight;
            }
 
@@ -328,8 +330,8 @@ public class WaveletCSFFilter implements IntFunction
 
            for ( ; n<length; n++)
            {
-              int idx = this.buffer[n];
-              int val = src[srcIdx+idx];
+              final int idx = this.buffer[n];
+              final int val = src[srcIdx+idx];
               dst[dstIdx+idx] = (val << 2) / csfWeight;
            }
 
@@ -348,8 +350,8 @@ public class WaveletCSFFilter implements IntFunction
                length = this.buffer.length;
         }
 
-        source.index = this.dimImage * this.dimImage;
-        destination.index = this.dimImage * this.dimImage;
+        source.index = this.width * this.height;
+        destination.index = this.width * this.height;
         return true;
     }
 
