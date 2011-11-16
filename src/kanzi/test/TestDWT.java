@@ -24,6 +24,7 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Transparency;
 import java.awt.image.BufferedImage;
+import java.util.Arrays;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -138,8 +139,8 @@ public class TestDWT
 
       cvt.convertRGBtoYUV(iia1.array, y, u, v, cmType);
       
-      DWT_CDF_9_7 yDWT = new DWT_CDF_9_7(dim);
-      DWT_CDF_9_7 uvDWT = new DWT_CDF_9_7(dim >> shift);
+      DWT_CDF_9_7 yDWT = new DWT_CDF_9_7(w, h, 4);
+      DWT_CDF_9_7 uvDWT = new DWT_CDF_9_7(w >> shift, h >> shift, 4);
 
       int log2 = 0;
 
@@ -179,9 +180,9 @@ public class TestDWT
 
       int sizeAfter = 0;
       iia1.array = y;
-      WaveletBandFilter yFilter = new WaveletBandFilter(dim, 16, levels, quantizers);
+      WaveletBandFilter yFilter = new WaveletBandFilter(w, h, levels, quantizers);
 //      WaveletRateDistorsionFilter yFilter = new WaveletRateDistorsionFilter(dim, 8, levels, 100);
-//      WaveletRingFilter ringFilter = new WaveletRingFilter(dim, 3, 16);
+//      WaveletRingFilter ringFilter = new WaveletRingFilter(w, h, 3, 16);
 //      ringFilter.forward(iia1, iia1);
       iia1.index = 0;
       yFilter.forward(iia1, iia2);
@@ -190,12 +191,12 @@ public class TestDWT
       System.out.println("Y after : "+iia2.index+" coefficients");
       iia1.index = 0;
       iia2.index = 0;
-      //Arrays.fill(iia1.array, 0);
+      Arrays.fill(iia1.array, 0);
       yFilter.inverse(iia2, iia1);
       iia1.index = 0;
       iia2.index = 0;
       iia1.array = u;
-      WaveletBandFilter uvFilter = new WaveletBandFilter(dim >> shift, 8, levels, quantizers2);
+      WaveletBandFilter uvFilter = new WaveletBandFilter(w >> shift, h >> shift, levels, quantizers2);
       uvFilter.forward(iia1, iia2);
       sizeAfter += iia2.index;
       System.out.println("U before: "+iia1.index+" coefficients");

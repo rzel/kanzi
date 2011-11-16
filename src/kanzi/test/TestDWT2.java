@@ -27,6 +27,8 @@ import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.ColorModelType;
+import kanzi.IndexedByteArray;
+import kanzi.function.wavelet.WaveletRingFilter;
 import kanzi.util.color.ColorModelConverter;
 import kanzi.util.ImageQualityMonitor;
 import kanzi.util.color.YSbSrColorModelConverter;
@@ -144,6 +146,17 @@ public class TestDWT2
       yDWT.forward(y, 0);
  //     uvDWT.forward(u, 0);
  //     uvDWT.forward(v, 0);
+
+      boolean doRingFilter = false;
+      
+      if (doRingFilter)
+      {
+        WaveletRingFilter ringFilter = new WaveletRingFilter(w, h, 2, 8);
+        IndexedIntArray iia3 = new IndexedIntArray(new int[w*h], 0);
+        System.arraycopy(y, 0, iia3.array, 0, y.length);
+        ringFilter.forward(iia3, iia3);
+        System.arraycopy(iia3.array, 0, y, 0, y.length);
+      }
 
 //      int levels = log2 - logDimLLBand;
 //
