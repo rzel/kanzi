@@ -33,9 +33,8 @@ public class WaveletBandFilter implements IntFunction
     private static final int IS_LEAF = 0x7F;
     private static final int MIN_NB_COEFFS_FOR_CLUSTER = 2;
 
-    private final int dimImage;
-    private final int dimLLBand;
-    private final int logDimImage;
+    private final int width;
+    private final int height;
     private final int levels;
     private final int minClusterSize;
     private boolean setQuantizers;
@@ -45,31 +44,28 @@ public class WaveletBandFilter implements IntFunction
 
     // image dimension, dimension of LL band, number of wavelet subband levels
     // and quantization value
-    public WaveletBandFilter(int dimImage, int dimLLBand, int levels)
+    public WaveletBandFilter(int width, int height, int levels)
     {
-        this(dimImage, dimLLBand, levels, null);
+        this(width, height, levels, null);
     }
 
 
     // Provide array of quantizers per level (if null, no quantization)
-    public WaveletBandFilter(int dimImage, int dimLLBand, int levels, int[] quantizers)
+    public WaveletBandFilter(int width, int height, int levels, int[] quantizers)
     {
-       this(dimImage, dimLLBand, levels, quantizers, MIN_NB_COEFFS_FOR_CLUSTER);
+       this(width, height, levels, quantizers, MIN_NB_COEFFS_FOR_CLUSTER);
     }
 
     
     // Provide array of quantizers per level (if null, no quantization)
-    public WaveletBandFilter(int dimImage, int dimLLBand, int levels,
+    public WaveletBandFilter(int width, int height, int levels,
             int[] quantizers, int minClusterSize)
     {
-        if (dimImage < 8)
-            throw new IllegalArgumentException("The dimension of the image must be at least 8");
+        if (width < 8)
+            throw new IllegalArgumentException("The width of the image must be at least 8");
 
-        if (dimLLBand < 2)
-            throw new IllegalArgumentException("The dimension of the LL band must be at least 2");
-
-        if ((dimImage & (dimImage-1)) != 0)
-            throw new IllegalArgumentException("Invalid dimImage parameter (must be a power of 2)");
+        if (height < 8)
+            throw new IllegalArgumentException("The height of the image must be at least 8");
 
         if (levels < 2)
             throw new IllegalArgumentException("The number of wavelet sub-band levels must be at least 2");
@@ -83,16 +79,10 @@ public class WaveletBandFilter implements IntFunction
         if (minClusterSize > 8)
             throw new IllegalArgumentException("The minimum size of a coefficients cluster must be 8 at most (8 direct neighbors)");
 
-        this.dimImage = dimImage;
-        this.dimLLBand = dimLLBand;
+        this.width = width;
+        this.height = height;
         this.levels = levels;
         this.minClusterSize = minClusterSize;
-        int log2 = 0;
-
-        for (long val2=this.dimImage+1; val2>1; val2>>=1)
-            log2++;
-
-        this.logDimImage = log2;
 
         if (quantizers == null)
         {
@@ -136,40 +126,47 @@ public class WaveletBandFilter implements IntFunction
     }
 
 
+    @Override
     public boolean forward(IndexedIntArray source, IndexedIntArray destination)
     {
         int srcIdx = source.index;
         int dstIdx = destination.index;
-        int[] src = source.array;
-        int[] dst = destination.array;
-
+        final int[] src = source.array;
+        final int[] dst = destination.array;
+        final int w0 = this.width >> this.levels;
+        final int h0 = this.height >> this.levels;
+        
         this.quantize(src, srcIdx, this.quantizers);
 
         if (this.minClusterSize > 0)
             this.filter(src, srcIdx);
 
         // Process LL band
-        for (int j=0, offset=srcIdx; j<this.dimLLBand; j++)
+        for (int j=0, offset=srcIdx; j<h0; j++)
         {
-            for (int i=0; i<this.dimLLBand; i++, dstIdx++)
-                dst[dstIdx] = src[offset+i];
+            for (int i=0; i<w0; i++)
+                dst[dstIdx++] = src[offset+i];
 
-            offset += this.dimImage;
+            offset += this.width;
         }
 
         // Reorder the coefficients and remove those under leaves
         int start = srcIdx;
-        WaveletBandIterator it = new WaveletBandIterator(this.dimLLBand,
-                this.dimImage, WaveletBandIterator.ALL_BANDS, this.levels);
+        WaveletBandScanner sc = new WaveletBandScanner(this.width,
+                this.height, WaveletBandScanner.ALL_BANDS, this.levels);
+        
+        final int w = this.width;
+        int count = 0;
 
         // Process sub-bands
-        while (it.hasNext())
+        while (count < sc.getSize())
         {
-            int len = it.getNextIndexes(this.buffer, this.buffer.length);
+            final int len = sc.getIndexes(this.buffer, this.buffer.length, count);
+            count += len;
 
             for (int i=0; i<len; i++, srcIdx++)
             {
-                int idx = start + this.buffer[i];
+                final int idx = start + this.buffer[i];
 
                 if (src[idx] != IS_LEAF)
                 {
@@ -178,16 +175,14 @@ public class WaveletBandFilter implements IntFunction
                 }
 
                 // Check if the parent coefficient is a leaf, if so skip
-                int x = idx & (this.dimImage - 1);
-                int y = idx >> this.logDimImage;
-                x >>= 1;
-                y >>= 1;
+                final int x = (idx % w) >> 1;
+                final int y = (idx / w) >> 1;
 
-                if ((x < this.dimLLBand) && (y < this.dimLLBand))
+                if ((x < w0) && (y < h0))
                 {
                     dst[dstIdx++] = IS_LEAF;
                 }
-                else if (src[start+(y<<this.logDimImage)+x] != IS_LEAF)
+                else if (src[start+(y*w)+x] != IS_LEAF)
                 {
                     dst[dstIdx++] = IS_LEAF;
                 }
@@ -202,25 +197,29 @@ public class WaveletBandFilter implements IntFunction
 
     protected void quantize(int[] block, int srcIdx, int[] qt)
     {
-       int levelSize = 3 * this.dimLLBand * this.dimLLBand;
-       WaveletBandIterator it = new WaveletBandIterator(this.dimLLBand,
-                this.dimImage, WaveletBandIterator.ALL_BANDS, this.levels);
+       WaveletBandScanner sc = new WaveletBandScanner(this.width,
+                this.height, WaveletBandScanner.ALL_BANDS, this.levels);
 
+       final int w = this.width;
+       final int w0 = w >> this.levels;
+       final int h0 = this.height >> this.levels;
+       int levelSize = 3 * w0 * h0;
+       
        if (this.setQuantizers == true)
        {
           // Find max in LL band
           int max = 0;
+          final int end = srcIdx + (w * h0);
 
-          for (int i=0, offset=srcIdx; i<this.dimLLBand; i++, offset+=this.dimImage)
+          for (int offset=srcIdx; offset<end; offset+=w)
           {
-             for (int j=0; j<this.dimLLBand; j++)
+             for (int j=0; j<w0; j++)
              {
                 int val = block[offset+j];
+                val = (val + (val >> 31)) ^ (val >> 31); // abs
 
                 if (val > max)
                    max = val;
-                else if (-val > max)
-                   max = -val;
              }
           }
 
@@ -234,9 +233,9 @@ public class WaveletBandFilter implements IntFunction
              int err = 0;
              int adjust = q >> 1;
 
-             for (int i=0, offset=srcIdx; i<this.dimLLBand; i++, offset+=this.dimImage)
+             for (int offset=srcIdx; offset<end; offset+=w)
              {
-                for (int j=0; j<this.dimLLBand; j++)
+                for (int j=0; j<w0; j++)
                 {
                    int val = block[offset+j];
                    int scaled = (val + adjust) / q;
@@ -261,17 +260,16 @@ public class WaveletBandFilter implements IntFunction
 
           this.quantizers[0] = bestQ;
           int[] indexes = new int[levelSize];
-          int len = it.getBandIndexes(indexes, this.dimLLBand);
+          final int len = sc.getBandIndexes(indexes, w0, h0, 0);
           max = 0;
 
           for (int i=0; i<len; i++)
           {
              int val = block[srcIdx+indexes[i]];
+             val = (val + (val >> 31)) ^ (val >> 31); // abs
 
              if (val > max)
                 max = val;
-             else if (-val > max)
-                max = -val;
           }
 
           this.quantizers[1] = ((max >> 8) + 1 < 18) ? (max >> 8) + 1 : 18;
@@ -290,11 +288,11 @@ public class WaveletBandFilter implements IntFunction
        int adjust = quant >> 1;
 
        // Quantize LL band
-       for (int j=0, offset=srcIdx; j<this.dimLLBand; j++, offset+=this.dimImage)
+       for (int j=0, offset=srcIdx; j<h0; j++, offset+=w)
        {
-          for (int i=0; i<this.dimLLBand; i++)
+          for (int i=0; i<w0; i++)
           {
-             int val = block[offset+i];
+             final int val = block[offset+i];
 
              if (val > 0)
                 block[offset+i] = (val + adjust) / quant;
@@ -304,24 +302,24 @@ public class WaveletBandFilter implements IntFunction
        }
 
        int buffSize = levelSize;
-       int startHHBand = (buffSize + buffSize) / 3;
+       int startHHBand = (levelSize + levelSize) / 3;
        int levelWritten = 0;
        level++;
        quant = qt[level];
+       int count = 0;
 
        // Process sub-bands
-       while (it.hasNext())
+       while (count < sc.getSize())
        {
           // Quantize per level (3 sub-bands)
-          levelWritten += it.getNextIndexes(this.buffer, buffSize);
+          final int processed = sc.getIndexes(this.buffer, buffSize, count);
+          count += processed;
           adjust = quant >> 1;
-          int n;
-          int part1 = (startHHBand < buffSize) ? startHHBand : buffSize;
 
           // Process LH, HL and HH bands
-          for (n=0; n<part1; n++)
+          for (int n=0; n<processed; n++)
           {
-             int idx = srcIdx + this.buffer[n];
+             final int idx = srcIdx + this.buffer[n];
              int val = block[idx];
 
              if (val > 0)
@@ -332,35 +330,23 @@ public class WaveletBandFilter implements IntFunction
              // Avoid 'key' value (will be used to encode 'no descendant')
              // Introduces a very small error
              block[idx] = (val != IS_LEAF) ? val : val - 1;
+ 
+             // Use bigger quantizer value for HH sub-band
+             if (levelWritten + n == startHHBand)
+             {
+                quant = (quant * 9) >> 3;
+                adjust = quant >> 1;
+             }
           }
-
-          // Use bigger quantizer value for HH sub-band
-          if (n == startHHBand)
-          {
-              quant = (quant * 9) >> 3;
-              adjust = quant >> 1;
-          }
-
-          for ( ; n<buffSize; n++)
-          {
-             int idx = srcIdx + this.buffer[n];
-             int val = block[idx];
-
-             if (val > 0)
-                val = (val + adjust) / quant;
-             else if (val < 0)
-                val = (val - adjust) / quant;
-
-             // Avoid 'key' value (will be used to encode 'no descendant')
-             // Introduces a very small error
-             block[idx] = (val != IS_LEAF) ? val : val - 1;
-          }
+          
+          levelWritten += processed;
 
           if (levelWritten == levelSize)
           {
              levelSize <<= 2;
              levelWritten = 0;
              level++;
+             startHHBand = (levelSize + levelSize) / 3;
 
              if (level < qt.length)
                 quant = qt[level];
@@ -370,8 +356,6 @@ public class WaveletBandFilter implements IntFunction
 
           if (buffSize > this.buffer.length)
               buffSize = this.buffer.length;
-
-          startHHBand = (buffSize + buffSize) / 3;
        }
     }
 
@@ -379,25 +363,28 @@ public class WaveletBandFilter implements IntFunction
     protected void filter(int[] block, int srcIdx)
     {
         // Keep only clusters of coefficients, remove individual coefficients
-        int end = this.dimImage - 1;
-        int dimWithParent = this.dimLLBand << 1;
+        final int endi = this.width - 1;
+        final int endj = this.height - 1;
+        final int w0 = this.width >> this.levels;
+        final int h0 = this.height >> this.levels;
+        final int w1 = w0 << 1;
+        final int h1 = h0 << 1;
         int offset = 0;
 
-        for (int j=1; j<end; j++)
+        for (int j=1; j<endj; j++)
         {
-            offset += this.dimImage;
-            int parentOffset = (j >> 1) << this.logDimImage;
+            offset += this.width;
+            int parentOffset = (j >> 1) * this.width;
 
-            for (int i=1; i<end; i++)
+            for (int i=1; i<endi; i++)
             {
                 // Ignore LL band
-                if ((j < this.dimLLBand) && (i < this.dimLLBand))
+                if ((j < h0) && (i < w0))
                     continue;
 
                 // Check neighbors, ignore inter-band correlation
-// WARNING, could be out of band (borders) !
                 int val = 0;
-                int idx = offset - this.dimImage + i;
+                int idx = offset - this.width + i;
 
                 if (block[idx-1] != 0)
                    val++;
@@ -408,10 +395,10 @@ public class WaveletBandFilter implements IntFunction
                 if (block[idx+1] != 0)
                    val++;
 
-                idx += this.dimImage;
+                idx += this.width;
 
                 // Check parent (super-band correlation)
-                if ((j >= dimWithParent) && (i >= dimWithParent))
+                if ((j >= h1) && (i >= w1))
                 {
                     if (block[parentOffset+(i>>1)] == 0)
                         val -= 2;
@@ -423,7 +410,7 @@ public class WaveletBandFilter implements IntFunction
                 if (block[idx+1] != 0)
                    val++;
 
-                idx += this.dimImage;
+                idx += this.width;
 
                 if (block[idx-1] != 0)
                    val++;
@@ -436,19 +423,22 @@ public class WaveletBandFilter implements IntFunction
 
                 // Cut the pixels with few neighbors/parents
                 if (val <= MIN_NB_COEFFS_FOR_CLUSTER)
-                    block[offset+i] = 0;
+                   block[offset+i] = 0;
             }
         }
 
         // Scan LL band and find descendants to each coefficient (one pass)
-        int halfDim = this.dimLLBand >> 1;
-        Context ctx = new Context(block, srcIdx, this.logDimImage);
+        final int widthLLBand = this.width >> this.levels;
+        final int heightLLBand = this.height >> this.levels;
+        final int halfW = widthLLBand >> 1;
+        final int halfH = heightLLBand >> 1;
+        Context ctx = new Context(block, srcIdx, this.width, this.height);
 
-        for (int j=0; j<this.dimLLBand; j++)
+        for (int j=0; j<heightLLBand; j++)
         {
-            for (int i=0; i<this.dimLLBand; i++)
+            for (int i=0; i<widthLLBand; i++)
             {
-               if ((i < halfDim) && (j < halfDim))
+               if ((i < halfW) && (j < halfH))
                   continue;
 
                ctx.x = i + i;
@@ -466,7 +456,7 @@ public class WaveletBandFilter implements IntFunction
         int x = ctx.x;
         int y = ctx.y;
         int[] block = ctx.block;
-        int offset = ctx.srcIdx + (y << ctx.logDimImage) + x;
+        int offset = ctx.srcIdx + (y * ctx.width) + x;
         int leaves = 0;
         x <<= 1;
         y <<= 1;
@@ -475,7 +465,7 @@ public class WaveletBandFilter implements IntFunction
         {
             for (int i=x, k=0; i<=x+2; i+=2, k++)
             {
-                if ((i >= ctx.dimImage) || (j >= ctx.dimImage))
+                if ((i >= ctx.width) || (j >= ctx.height))
                 {
                     if (block[offset+k] == 0)
                     {
@@ -489,10 +479,10 @@ public class WaveletBandFilter implements IntFunction
                     // Inline this method to avoid one level of recursion
                     // By avoiding the last level of recursion, the number of
                     // calls to this method is reduced by 4.
-                    int offset2 = ctx.srcIdx + (j << ctx.logDimImage) + i;
+                    int offset2 = ctx.srcIdx + (j * ctx.width) + i;
                     int leaves2 = 0;
-                    int i2 = i << 1;
-                    int j2 = j << 1;
+                    final int i2 = i << 1;
+                    final int j2 = j << 1;
 
                     for (int jj=j2; jj<=j2+2; jj+=2)
                     {
@@ -501,7 +491,7 @@ public class WaveletBandFilter implements IntFunction
                             ctx.x = ii;
                             ctx.y = jj;
 
-                            if (((ii >= ctx.dimImage) || (jj >= ctx.dimImage)
+                            if (((ii >= ctx.width) || (jj >= ctx.height)
                                     || (findDescendants(ctx) == false))
                                     && (block[offset2+kk] == 0))
                             {
@@ -511,7 +501,7 @@ public class WaveletBandFilter implements IntFunction
                             }
                         }
 
-                        offset2 += ctx.dimImage;
+                        offset2 += ctx.width;
                     }
 
                     if ((leaves2 == 4) && (block[offset+k] == 0))
@@ -523,7 +513,7 @@ public class WaveletBandFilter implements IntFunction
                 }
             }
 
-            offset += ctx.dimImage;
+            offset += ctx.width;
         }
 
         return (leaves != 4);
@@ -531,6 +521,7 @@ public class WaveletBandFilter implements IntFunction
 
 
     // The filter MUST know the levels and quantizers !!!
+    @Override
     public boolean inverse(IndexedIntArray source, IndexedIntArray destination)
     {
         int srcIdx = source.index;
@@ -555,19 +546,24 @@ public class WaveletBandFilter implements IntFunction
             dst[i] = 0;
 
         int quant = this.quantizers[0];
+        final int w = this.width;
+        final int w0 = w >> this.levels;
+        final int h = this.height;
+        final int h0 = h >> this.levels;
+        final int end = dstIdx + (w * h0);
 
         // Process LL band
-        for (int j=0, offset=dstIdx; j<this.dimLLBand; j++, offset+=this.dimImage)
+        for (int offset=dstIdx; offset<end; offset+=w)
         {
-            for (int i=0; i<this.dimLLBand; i++, srcIdx++)
+            for (int i=0; i<w0; i++, srcIdx++)
                 dst[offset+i] = src[srcIdx] * quant;
         }
 
         // Process sub-bands: insert leaves under coefficients tagged as LEAF
-        int start = dstIdx;
-        int levelSize = 3 * this.dimLLBand * this.dimLLBand;
+        final int start = dstIdx;
+        int levelSize = 3 * w0 * h0;
         int buffSize = levelSize;
-        int startHHBand = (buffSize + buffSize) / 3;
+        int startHHBand = (levelSize + levelSize) / 3;
         int levelRead = 0;
         int level = 1;
         quant = this.quantizers[level];
@@ -576,15 +572,17 @@ public class WaveletBandFilter implements IntFunction
         // Do NOT provide the number of levels to the it: ALL the bands
         // must be scanned (even the ones not in the source) to fully process
         // the leaves (need to insert 0s in missing sub-bands).
-        WaveletBandIterator it = new WaveletBandIterator(this.dimLLBand,
-                this.dimImage, WaveletBandIterator.ALL_BANDS);
+        WaveletBandScanner sc = new WaveletBandScanner(this.width,
+                this.height, WaveletBandScanner.ALL_BANDS, this.levels);
+        int count = 0;
 
-        while (it.hasNext())
+        while (count < sc.getSize())
         {
             // Retrieve indexes level by level
-            levelRead += it.getNextIndexes(this.buffer, buffSize);
-
-            for (int i=0; i<buffSize; i++, dstIdx++)
+            final int processed = sc.getIndexes(this.buffer, buffSize, count);
+            count += processed;
+            System.out.println(processed+" "+count+" "+levelSize+" "+level);
+            for (int i=0; i<processed; i++, dstIdx++)
             {
                 int idx = start + this.buffer[i];
 
@@ -595,18 +593,16 @@ public class WaveletBandFilter implements IntFunction
 
                     dst[idx] = 0;
 
-                    // Tag children as leaves
-                    int x = idx & (this.dimImage - 1);
-                    int y = idx >> this.logDimImage;
-                    x <<= 1;
-                    y <<= 1;
+                    // Mark children as leaves
+                    final int x = (idx % w) << 1;
+                    final int y = (idx / w) << 1;
 
-                    if ((x < this.dimImage) && (y < this.dimImage))
+                    if ((x < w) && (y < h))
                     {
                         idx <<= 1;
                         dst[idx] = IS_LEAF;
                         dst[idx+1] = IS_LEAF;
-                        idx += this.dimImage;
+                        idx += w;
                         dst[idx] = IS_LEAF;
                         dst[idx+1] = IS_LEAF;
                     }
@@ -615,19 +611,22 @@ public class WaveletBandFilter implements IntFunction
                 }
 
                 // Restore bigger quantizer value for HH band
-                if (i == startHHBand)
+                if (levelRead + i == startHHBand)
                     quant = (quant * 9) >> 3;
 
                 // Reverse quantization (approximate)
                 dst[idx] = src[srcIdx] * quant;
                 srcIdx++;
             }
+            
+            levelRead += processed;
 
             if (levelRead == levelSize)
             {
                levelSize <<= 2;
                levelRead = 0;
                level++;
+               startHHBand = (levelSize + levelSize) / 3;
 
                if (level < this.quantizers.length)
                   quant = this.quantizers[level];
@@ -637,8 +636,6 @@ public class WaveletBandFilter implements IntFunction
 
             if (buffSize > this.buffer.length)
                buffSize = this.buffer.length;
-/// !!!! CHECK levelSize or buffSize
-            startHHBand = (buffSize + buffSize) / 3;
         }
 
         source.index = srcIdx;
@@ -649,19 +646,19 @@ public class WaveletBandFilter implements IntFunction
 
     private static class Context
     {
-       int[] block;
+       final int[] block;
+       final int width;
+       final int height;
        int srcIdx;
        int x;
        int y;
-       int logDimImage;
-       int dimImage;
 
-       Context(int[] block, int srcIdx, int logDimImage)
+       Context(int[] block, int srcIdx, int width, int height)
        {
           this.block = block;
           this.srcIdx = srcIdx;
-          this.logDimImage = logDimImage;
-          this.dimImage = 1 << logDimImage;
+          this.width = width;
+          this.height = height;
        }
     }
 }
