@@ -581,7 +581,6 @@ public class WaveletBandFilter implements IntFunction
             // Retrieve indexes level by level
             final int processed = sc.getIndexes(this.buffer, buffSize, count);
             count += processed;
-            System.out.println(processed+" "+count+" "+levelSize+" "+level);
             for (int i=0; i<processed; i++, dstIdx++)
             {
                 int idx = start + this.buffer[i];
