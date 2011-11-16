@@ -919,6 +919,15 @@ public class ContextResizer implements VideoEffect
                 this.offset, this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
                 SobelFilter.PACKED_IMAGE, SobelFilter.COST);
         gradientFilter.apply(src, costs_);
+        
+        // Add a quadratic contribution to the cost
+        // Favor straight lines if costs of neighbors are all low
+        for (int i=0; i<costs_.length; i++)
+        {
+           final int c = costs_[i];           
+           costs_[i] = (c < 5) ? 0 :  c + ((c * c) >> 8); 
+        }
+        
         return costs_;
     }
 
