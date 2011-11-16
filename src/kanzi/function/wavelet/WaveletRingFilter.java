@@ -80,65 +80,66 @@ public class WaveletRingFilter implements IntFunction
           final int halfBandW = bandW >> 1;
           final int halfBandH = bandH >> 1;
           final int startHL = srcIdx + halfBandW;
-          final int startLH = srcIdx + ((halfBandH - 1) * w);
+          final int startLH = srcIdx + (halfBandH * w);
           final int startHH = startLH + halfBandW;
-          final int endHL = startLH;
-          final int endLH = srcIdx + ((bandH - 1) * w);
+          final int endHL = startHL + ((halfBandH - 1) * w);
+          final int endLH = srcIdx + ((h-1) * w);
           final int endHH = endLH + halfBandW;
           int offs = 0;
 
-          for (int j=0; j<halfBandH; j++)
+          for (int j=0; j<rw; j++)
           {
-             if (j < rw)
-             {
-                for (int i=halfBandW-1; i>=0; i--)
-                {
-                   int idx1 = i + offs;
-                   int idx2 = i - offs;
+            for (int i=halfBandW-1; i>=0; i--)
+            {
+               int firstLine = i + offs;
+               int lastLine = i - offs;
 
-                   // HL quadrant: first and last lines (2 per iteration)
-                   dst[startHL+idx1] = 0;
-                   dst[endHL+idx2] = 0;
+               // HL quadrant: first and last lines (2 per iteration)
+               dst[startHL+firstLine] = 0;
+               dst[endHL+lastLine] = 0;
 
-                   // HH quadrant: first and last lines (2 per iteration)
-                   dst[startHH+idx1] = 0;
-                   dst[endHH+idx2] = 0;
+               // HH quadrant: first and last lines (2 per iteration)
+               dst[startHH+firstLine] = 0;
+               dst[endHH+lastLine] = 0;
 
-                   // LH quadrant: first and last lines (2 per iteration)
-                   dst[startLH+idx1] = 0;
-                   dst[endLH+idx2] = 0;
-                }
-             }
-             else
-             {
-                for (int i=0; i<rw; i++)
-                {
-                   int idx1 = offs + i;
-                   int idx2 = offs + halfBandW - 1 - i;
+               // LH quadrant: first and last lines (2 per iteration)
+               dst[startLH+firstLine] = 0;
+               dst[endLH+lastLine] = 0;
+            }
 
-                   // HL quadrant: first and last columns (2 per iteration)
-                   dst[startHL+idx1] = 0;
-                   dst[startHL+idx2] = 0;
-
-                   // HH quadrant: first and last columns (2 per iteration)
-                   dst[startHH+idx1] = 0;
-                   dst[startHH+idx2] = 0;
-
-                   // LH quadrant: first and last columns (2 per iteration)
-                   dst[startLH+idx1] = 0;
-                   dst[startLH+idx2] = 0;
-                }
-             }
-
-             offs += w;
+            offs += w;
           }
+
+          for (int j=rw; j<halfBandH; j++)
+          {
+            for (int i=0; i<rw; i++)
+            {
+               int idx1 = offs + i;
+               int idx2 = offs + halfBandW - 1 - i;
+
+               // HL quadrant: first and last columns (2 per iteration)
+               dst[startHL+idx1] = 0;
+               dst[startHL+idx2] = 0;
+
+               // HH quadrant: first and last columns (2 per iteration)
+               dst[startHH+idx1] = 0;
+               dst[startHH+idx2] = 0;
+
+               // LH quadrant: first and last columns (2 per iteration)
+               dst[startLH+idx1] = 0;
+               dst[startLH+idx2] = 0;
+            }
+
+            offs += w;
+          }
+
+
+          if (rw < 4)
+             break;
 
           rw >>= 2;
           bandW >>= 1;
           bandH >>= 1;
-
-          if (rw == 0)
-             break;
        }
 
        source.index = w * h;
