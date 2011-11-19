@@ -48,8 +48,6 @@ public class TestWHTImage
     {
         String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
         ImageIcon icon = new ImageIcon(fileName);
-  //      ImageIcon icon = new ImageIcon("C:\\temp\\big_buck_bunny_09500.png");
-        //ImageIcon icon = new ImageIcon("f:\\temp\\daggers\\daggers0500.jpg");
         Image image = icon.getImage();
         int w = image.getWidth(null);
         int h = image.getHeight(null);
@@ -65,39 +63,55 @@ public class TestWHTImage
         // Do NOT use img.getRGB(): it is more than 10 times slower than
         // img.getRaster().getDataElements()
         img.getRaster().getDataElements(0, 0, w, h, rgb);
-        BlockCodec codec = new BlockCodec(32768);
-        byte[] output = new byte[w*h];
-        // byte[] tmp = new byte[w*h];
+        byte[] tmp = new byte[w*h];
 
         int[] yy = new int[rgb.length];
         int[] uu = new int[rgb.length/4];
         int[] vv = new int[rgb.length/4];
 
         ColorModelConverter cvt;
-        cvt = new YSbSrColorModelConverter(w, h);
+        //cvt = new YSbSrColorModelConverter(w, h);
         cvt = new YCbCrColorModelConverter(w, h);
         cvt.convertRGBtoYUV(rgb, yy, uu, vv, ColorModelType.YUV420);
 
-        IndexedByteArray iba1 = new IndexedByteArray(output, 0);
-        // IndexedByteArray iba2 = new IndexedByteArray(tmp, 0);
+        IndexedByteArray iba = new IndexedByteArray(tmp, 0);
         OutputStream os = new ByteArrayOutputStream(w*h);
         BitStream bs = new DefaultBitStream(os, w*h);
         EntropyEncoder ee = new RangeEncoder(bs);
+        BlockCodec bc = new BlockCodec(w*h);
 
         int nonZero = 0;
         nonZero += forward(yy,   w,   h, data);
+        
+        for (int i=0; i<tmp.length; i++)
+            tmp[i] = (byte) data[i];
+        
+        bc.encode(iba, ee);
         reverse(data,   w,   h, yy);
         nonZero += forward(uu, w/2, h/2, data);
+        
+        for (int i=0; i<tmp.length; i++)
+            tmp[i] = (byte) data[i];
+        
+        bc.encode(iba, ee);
         reverse(data, w/2, h/2, uu);
         nonZero += forward(vv, w/2, h/2, data);
+        
+        for (int i=0; i<tmp.length; i++)
+            tmp[i] = (byte) data[i];
+        
+        bc.encode(iba, ee);
         reverse(data, w/2, h/2, vv);
+        ee.encodeByte((byte) 0x80);
+        ee.dispose();
+        bs.close();
 
         cvt.convertYUVtoRGB(yy, uu, vv, rgb2, ColorModelType.YUV420);
 
-        ee.dispose();
-        //System.out.println("Compressed length: "+ee.getBitStream().written() / 8);
+        System.out.println("Encoding size: "+(bs.written() >> 3));
         System.out.println("Not null coeffs: "+nonZero+"/"+((w*h)+(w*h/2)));
         System.out.println("PNSR: "+new ImageQualityMonitor(w, h).computePSNR(rgb, rgb2)/1024.0);
+        System.out.println("SSIM: "+new ImageQualityMonitor(w, h).computeSSIM(rgb, rgb2)/1024.0);
 
         BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
         img2.getRaster().setDataElements(0, 0, w, h, rgb2);
