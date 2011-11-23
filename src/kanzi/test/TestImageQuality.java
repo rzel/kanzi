@@ -43,7 +43,6 @@ public class TestImageQuality
         ImageQualityMonitor monitor;
         int psnr, ssim;
         Random rnd = new Random();
-        YCbCrColorModelConverter cm = new YCbCrColorModelConverter(w, h);
 
         // Do NOT use img.getRGB(): it is more than 10 times slower than
         // img.getRaster().getDataElements()

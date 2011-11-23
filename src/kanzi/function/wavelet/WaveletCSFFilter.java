@@ -94,20 +94,20 @@ public class WaveletCSFFilter implements IntFunction
        { new CSF(27, 25), new CSF(27, 25), new CSF(27, 25), new CSF(24, 21), new CSF(19, 15), new CSF(12, 8), new CSF(5, 2) }
     };
 
-    // ----- Other model -----
-    // Highest value adjusted to scaling of 1 (x32)
-    // No difference between HL_LH and HH bands
-    private static final CSF[][] Y2_BAND_CSF_WEIGHTS_32 =
-    {
-       { new CSF(15, 15) },
-       { new CSF(32, 32) },
-       { new CSF(32, 32), new CSF(10, 10) },
-       { new CSF(31, 31), new CSF(26, 26), new CSF(10, 10) },
-       { new CSF(25, 25), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) },
-       { new CSF(24, 24), new CSF(29, 29), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) },
-       { new CSF(20, 20), new CSF(24, 24), new CSF(29, 29), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) },
-       { new CSF(16, 16), new CSF(20, 20), new CSF(24, 24), new CSF(29, 29), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) }
-    };
+//    // ----- Other model -----
+//    // Highest value adjusted to scaling of 1 (x32)
+//    // No difference between HL_LH and HH bands
+//    private static final CSF[][] Y2_BAND_CSF_WEIGHTS_32 =
+//    {
+//       { new CSF(15, 15) },
+//       { new CSF(32, 32) },
+//       { new CSF(32, 32), new CSF(10, 10) },
+//       { new CSF(31, 31), new CSF(26, 26), new CSF(10, 10) },
+//       { new CSF(25, 25), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) },
+//       { new CSF(24, 24), new CSF(29, 29), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) },
+//       { new CSF(20, 20), new CSF(24, 24), new CSF(29, 29), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) },
+//       { new CSF(16, 16), new CSF(20, 20), new CSF(24, 24), new CSF(29, 29), new CSF(32, 32), new CSF(26, 26), new CSF(10, 10) }
+//    };
 
     private final int width;
     private final int height;

@@ -15,7 +15,6 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.EntropyDecoder;
 import kanzi.BitStream;
 import kanzi.BitStreamException;
 

@@ -27,7 +27,6 @@ import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.ColorModelType;
-import kanzi.IndexedByteArray;
 import kanzi.function.wavelet.WaveletRingFilter;
 import kanzi.util.color.ColorModelConverter;
 import kanzi.util.ImageQualityMonitor;
