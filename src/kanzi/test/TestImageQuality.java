@@ -18,7 +18,6 @@ package kanzi.test;
 import java.util.Arrays;
 import java.util.Random;
 import kanzi.util.ImageQualityMonitor;
-import kanzi.util.color.YCbCrColorModelConverter;
 
 
 public class TestImageQuality
