@@ -191,13 +191,13 @@ public class WaveletBandScanner
                 
                 for (int i=offs; i<endStep; i++, count++)
                 {
-                  if (count >= offsetInBand)
-                  {                  
-                    if (idx == block.length)
-                       return idx - blockIdx;
+                  if (count < offsetInBand)
+                     continue;
+                                    
+                  if (idx == block.length)
+                     return idx - blockIdx;
                     
-                     block[idx++] = i;
-                  }
+                  block[idx++] = i;
                 }
             }
         }
@@ -219,13 +219,13 @@ public class WaveletBandScanner
 
                 for (int i=offs; i<endStep; i+=this.width, count++)
                 {
-                  if (count >= offsetInBand)
-                  {                 
-                    if (idx == block.length)
-                       return idx - blockIdx;
+                  if (count < offsetInBand)
+                     continue;
+                                  
+                  if (idx == block.length)
+                     return idx - blockIdx;
 
-                    block[idx++] = i;
-                  }
+                  block[idx++] = i;
                 }
             }
         }
@@ -242,15 +242,16 @@ public class WaveletBandScanner
                 
                 for (int i=0; i<=j; i++, count++)
                 {
-                   if (count >= offsetInBand)
-                   {                 
-                     if (idx == block.length)
-                       return idx - blockIdx;
-                   
-                     block[idx++] = offs + i;
-
+                   if (count < offsetInBand)
+                   {
+                     offs -= this.width;
+                     continue;
                    }
+                                  
+                   if (idx == block.length)
+                     return idx - blockIdx;
                    
+                   block[idx++] = offs + i;                 
                    offs -= this.width;
                 }
                 
@@ -263,14 +264,16 @@ public class WaveletBandScanner
                 
                 for (int i=0; i<w; i++, count++)
                 {
-                   if (count >= offsetInBand)
+                   if (count < offsetInBand)
                    {
-                      if (idx == block.length)
-                        return idx - blockIdx;
-                      
-                      block[idx++] = offs + i;
+                      offs -= this.width;
+                      continue;
                    }
-                   
+                    
+                   if (idx == block.length)
+                      return idx - blockIdx;
+                      
+                   block[idx++] = offs + i;
                    offs -= this.width;
                 }
                 
@@ -285,14 +288,16 @@ public class WaveletBandScanner
                 
                 for (int j=0; j<h; j++, count++)
                 {
-                   if (count >= offsetInBand)
-                   {                 
-                     if (idx == block.length)
-                       return idx - blockIdx;
-
-                     block[idx++] = offs;
+                   if (count < offsetInBand)
+                   {    
+                      offs -= (this.width - 1);
+                      continue;
                    }
+                   
+                   if (idx == block.length)
+                     return idx - blockIdx;
 
+                   block[idx++] = offs;
                    offs -= (this.width - 1);
                 }
                 
@@ -306,14 +311,16 @@ public class WaveletBandScanner
                 
                 for (int j=0; j<min-i; j++, count++)
                 {
-                   if (count >= offsetInBand)
+                   if (count < offsetInBand)
                    {
-                     if (idx == block.length)
-                       return idx - blockIdx;
-                     
-                      block[idx++] = offs;
+                      offs -= (this.width - 1);
+                      continue;                     
                    }
-                   
+                     
+                   if (idx == block.length)
+                     return idx - blockIdx;
+                     
+                   block[idx++] = offs;
                    offs -= (this.width - 1);
                 }
                 
