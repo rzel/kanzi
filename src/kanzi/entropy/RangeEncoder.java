@@ -26,10 +26,10 @@ import kanzi.BitStream;
 // Not thread safe
 public final class RangeEncoder extends AbstractEncoder
 {
-    protected static final long TOP       = 1L << 48;
-    protected static final long BOTTOM    = (1L << 40) - 1;
-    protected static final long MAX_RANGE = BOTTOM + 1;
-    protected static final long MASK      = 0x00FFFFFFFFFFFFFFL;
+    private static final long TOP       = 1L << 48;
+    private static final long BOTTOM    = (1L << 40) - 1;
+    private static final long MAX_RANGE = BOTTOM + 1;
+    private static final long MASK      = 0x00FFFFFFFFFFFFFFL;
 
     private static final int NB_SYMBOLS = 257; //256 + EOF
 

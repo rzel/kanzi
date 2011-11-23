@@ -27,9 +27,9 @@ import kanzi.BitStreamException;
 // Not thread safe
 public final class RangeDecoder extends AbstractDecoder
 {
-    protected static final long TOP       = 1L << 48;
-    protected static final long BOTTOM    = 1L << 40;
-    protected static final long MASK      = 0x00FFFFFFFFFFFFFFL;
+    private static final long TOP       = 1L << 48;
+    private static final long BOTTOM    = 1L << 40;
+    private static final long MASK      = 0x00FFFFFFFFFFFFFFL;
 
     private static final int NB_SYMBOLS = 257; //256 + EOF
     private static final int LAST = NB_SYMBOLS - 1;
