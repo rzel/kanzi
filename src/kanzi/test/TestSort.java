@@ -51,7 +51,6 @@ public class TestSort
        long sum1  = 0;
        long sum2  = 0;
        long sum3  = 0;
-       long sum4  = 0;
        long sum5  = 0;
        long sum6  = 0;
        long sum7  = 0;
@@ -177,7 +176,6 @@ public class TestSort
        sum1 = 0;
        sum2 = 0;
        sum3 = 0;
-       sum4 = 0;
        sum5 = 0;
        sum6 = 0;
        sum7 = 0;
