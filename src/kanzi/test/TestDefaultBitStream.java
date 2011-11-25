@@ -37,7 +37,7 @@ public class TestDefaultBitStream
       {
         int[] values = new int[] { 1, 7, -9, 123, 0, 12, -63, -64, 275, -555, 100000, 123 };
         byte[] input = new byte[values.length * 4];
-        Random rnd = new Random();
+//        Random rnd = new Random();
         
 //        for (int i=0; i<4*values.length; i+=4)
 //        {
