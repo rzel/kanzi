@@ -45,7 +45,6 @@ public class TestSobelFilter
             BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
             img.getGraphics().drawImage(image, 0, 0, null);
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            BufferedImage img3 = null;
             int[] source = new int[w*h];
             int[] dest = new int[w*h];
             int[] tmp = new int[w*h];
