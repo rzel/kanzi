@@ -38,29 +38,29 @@ public class BucketSort implements IntSorter, ByteSorter
 
     public BucketSort(int size)
     {
-        this(8, size);
+        this(size, 8);
     }
 
     
     // Limit size to handle shorts
-    public BucketSort(int logDataSize, int size)
+    public BucketSort(int size, int logMaxValue)
     {
         if (size < 0)
             throw new IllegalArgumentException("The size parameter must be at least 0");
 
-        if (logDataSize < 2)
+        if (logMaxValue < 2)
             throw new IllegalArgumentException("The log data size parameter must be at least 2");
         
-        if (logDataSize > 16)
+        if (logMaxValue > 16)
             throw new IllegalArgumentException("The log data size parameter must be at most 16");
 
         this.size = size;
-        this.count = new int[1 << logDataSize];
+        this.count = new int[1 << logMaxValue];
     }
     
     
     // Not thread safe
-    // all input data must be smaller than 1 << logDataSize
+    // all input data must be smaller than 1 << logMaxValue
     @Override
     public void sort(int[] input, int blkptr)
     {
@@ -137,6 +137,7 @@ public class BucketSort implements IntSorter, ByteSorter
 
 
     // Not thread safe
+    @Override
     public void sort(byte[] input, int blkptr)
     {
         final int sz = (this.size == 0) ? input.length : this.size;
