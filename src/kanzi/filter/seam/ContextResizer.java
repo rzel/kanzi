@@ -145,7 +145,7 @@ public class ContextResizer implements VideoEffect
             log++;
 
         // Used to sort coordinates of geodesics
-        this.sorter = (log < 12) ? new BucketSort(log, 0) : new RadixSort(log, 0);
+        this.sorter = (log < 12) ? new BucketSort(0, log) : new RadixSort(8, 0, log);
     }
 
 
