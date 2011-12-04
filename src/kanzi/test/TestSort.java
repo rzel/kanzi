@@ -31,7 +31,7 @@ public class TestSort
 {
    public static void main(String[] args)
    {
-       int len = 40000;
+       int len = 20000;
        int[] array = new int[len];
        int[] rnd = new int[len];
        int[] copy = new int[len];
@@ -40,7 +40,8 @@ public class TestSort
        BucketSort bucketSort = new BucketSort(8, array.length);
        HeapSort heapSort = new HeapSort();
        InsertionSort insertionSort = new InsertionSort(array.length);
-       RadixSort radixSort = new RadixSort(8, array.length);
+       RadixSort radix4Sort = new RadixSort(4, array.length, 8); //radix 4
+       RadixSort radix8Sort = new RadixSort(8, array.length, 8); //radix 8
        QuickSort quickSort = new QuickSort(array.length);
        FlashSort flashSort = new FlashSort(array.length);
        MergeSort mergeSort = new MergeSort(array.length);
@@ -49,8 +50,9 @@ public class TestSort
 
        long sum0  = 0;
        long sum1  = 0;
-       long sum2  = 0;
+//       long sum2  = 0;
        long sum3  = 0;
+       long sum4  = 0;
        long sum5  = 0;
        long sum6  = 0;
        long sum7  = 0;
@@ -81,8 +83,11 @@ public class TestSort
                 insertionSort.sort(array, 0);
                 check("Insertion Sort", array);
                 System.arraycopy(copy, 0, array, 0, array.length);
-                radixSort.sort(array, 0);
-                check("Radix Sort", array);
+                radix4Sort.sort(array, 0);
+                check("Radix 4 Sort", array);
+                System.arraycopy(copy, 0, array, 0, array.length);
+                radix4Sort.sort(array, 0);
+                check("Radix 8 Sort", array);
                 System.arraycopy(copy, 0, array, 0, array.length);
                 quickSort.sort(array, 0);
                 check("Quick Sort", array);
@@ -114,16 +119,20 @@ public class TestSort
                 sum1 += (after - before);
                 before = System.nanoTime();
                 System.arraycopy(copy, 0, array, 0, array.length);
-                before = System.nanoTime();
+//                before = System.nanoTime();
 //                insertionSort.sort(array, 0);
-                after = System.nanoTime();
-                sum2 += (after - before);
-                System.arraycopy(copy, 0, array, 0, array.length);
+//                after = System.nanoTime();
+//                sum2 += (after - before);
+//                System.arraycopy(copy, 0, array, 0, array.length);
                 before = System.nanoTime();
-                radixSort.sort(array, 0);
+                radix4Sort.sort(array, 0);
                 after = System.nanoTime();
                 sum3 += (after - before);
                 System.arraycopy(copy, 0, array, 0, array.length);
+                before = System.nanoTime();
+                radix8Sort.sort(array, 0);
+                after = System.nanoTime();
+                sum4 += (after - before);
                 System.arraycopy(copy, 0, array, 0, array.length);
                 before = System.nanoTime();
                 quickSort.sort(array, 0);
@@ -163,7 +172,8 @@ public class TestSort
        System.out.println("BucketSort      Elapsed [ms]: " + (sum0  / 1000000));
        System.out.println("HeapSort        Elapsed [ms]: " + (sum1  / 1000000));
        System.out.println("InsertionSort   Elapsed [ms]: " + "too slow, skipped");//(sum2  / 1000000));
-       System.out.println("RadixSort       Elapsed [ms]: " + (sum3  / 1000000));
+       System.out.println("Radix4Sort      Elapsed [ms]: " + (sum3  / 1000000));
+       System.out.println("Radix8Sort      Elapsed [ms]: " + (sum4  / 1000000));
        System.out.println("QuickSort       Elapsed [ms]: " + (sum5  / 1000000));
        System.out.println("Arrays.sort     Elapsed [ms]: " + (sum6  / 1000000));
        System.out.println("FlashSort       Elapsed [ms]: " + (sum7  / 1000000));
@@ -174,8 +184,9 @@ public class TestSort
 
        sum0 = 0;
        sum1 = 0;
-       sum2 = 0;
+//       sum2 = 0;
        sum3 = 0;
+       sum4 = 0;
        sum5 = 0;
        sum6 = 0;
        sum7 = 0;
@@ -183,8 +194,7 @@ public class TestSort
        sum9 = 0;
        sum10 = 0;
 
-        radixSort = new RadixSort(array.length);
-
+        RadixSort radixSort = new RadixSort(8, array.length); // radix 8
 
         for (int k=0; k<max; k++)
         {
@@ -198,7 +208,7 @@ public class TestSort
              // Validation test
              System.arraycopy(copy, 0, array, 0, array.length);
              radixSort.sort(array, 0);
-             check("Radix Sort", array);
+             check("Radix 8 Sort", array);
              System.arraycopy(copy, 0, array, 0, array.length);
              quickSort.sort(array, 0);
              check("Quick Sort", array);
@@ -261,7 +271,7 @@ public class TestSort
        System.out.println("\n\n -------------------------------------- \n");
        System.out.println("Speed test - integer values\n");
        System.out.println((iter*max)+" iterations\n");
-       System.out.println("RadixSort       Elapsed [ms]: " + (sum3  / 1000000));
+       System.out.println("Radix8Sort      Elapsed [ms]: " + (sum3  / 1000000));
        System.out.println("QuickSort       Elapsed [ms]: " + (sum5  / 1000000));
        System.out.println("Arrays.sort     Elapsed [ms]: " + (sum6  / 1000000));
        System.out.println("FlashSort       Elapsed [ms]: " + (sum7  / 1000000));
