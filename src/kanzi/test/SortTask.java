@@ -72,7 +72,7 @@ public class SortTask extends RecursiveAction
    {
       this.size = len;
       this.startIdx = startIdx;
-      this.bDelegate = new BucketSort(8, len);
+      this.bDelegate = new BucketSort(len, 8);
       this.bDst = buffer;
       this.bSrc = array;
       this.iDelegate = null;
