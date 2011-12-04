@@ -64,7 +64,7 @@ public class TestBucketSort
             java.util.Random random = new java.util.Random();
             long before, after;
             
-            BucketSort iSort = new BucketSort(16, 10000);
+            BucketSort iSort = new BucketSort(10000, 16);
             
             for (int k=0; k<3; k++)
             {
