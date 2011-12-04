@@ -37,7 +37,7 @@ public class TestSort
        int[] copy = new int[len];
        java.util.Random random = new java.util.Random();
        long before, after;
-       BucketSort bucketSort = new BucketSort(8, array.length);
+       BucketSort bucketSort = new BucketSort(array.length, 8);
        HeapSort heapSort = new HeapSort();
        InsertionSort insertionSort = new InsertionSort(array.length);
        RadixSort radix4Sort = new RadixSort(4, array.length, 8); //radix 4
