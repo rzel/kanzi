@@ -25,7 +25,7 @@ public class TestRadixSort
         System.out.println("TestRadixSort");
 
         // Test behavior
-        for (int ii=1; ii<20; ii++)
+        for (int ii=0; ii<20; ii++)
         {
             System.out.println("\n\nTest "+ii);
             final int[] array = new int[64];
@@ -45,7 +45,11 @@ public class TestRadixSort
                 System.out.print(array[i]+" ");
             
             System.out.println();
-            new RadixSort().sort(array, 0);
+            
+            // Alternate radix 1, 2, 4 & 8
+            int radix = 1 << (ii & 3);
+            System.out.println("Radix "+radix);
+            new RadixSort(radix).sort(array, 0);
             
             for (int i=0; i<b.length; i++)
                 b[i] = (byte) (array[i] & 255);
@@ -109,15 +113,48 @@ public class TestRadixSort
             System.out.println("");
         }
         
-            // Test speed
+
+        // Test speed -- radix 4
         {
-            System.out.println("\n\nSpeed test");
-            int[] array = new int[10000];
-            int[] rnd = new int[10000];
+            System.out.println("\n\nSpeed test (radix 4)");
+            int[] array = new int[20000];
+            int[] rnd = new int[20000];
             java.util.Random random = new java.util.Random();
             long before, after;
             
-            RadixSort rSort = new RadixSort();
+            RadixSort rSort = new RadixSort(4);
+            
+            for (int k=0; k<3; k++)
+            {
+                long sum = 0;
+                
+                for (int i=0; i<rnd.length; i++)
+                    rnd[i] = Math.abs(random.nextInt());
+                
+                for (int ii=0; ii<8000; ii++)
+                {
+                    for (int i=0; i<array.length; i++)
+                        array[i] = rnd[i];// & 255;
+                    
+                    before = System.nanoTime();
+                    rSort.sort(array, 0);
+                    after = System.nanoTime();
+                    sum += (after - before);
+                }
+                
+                System.out.println("Elapsed [ms]: "+sum/1000000);
+            }
+        }
+            
+        // Test speed -- radix 8
+        {
+            System.out.println("\n\nSpeed test (radix 8)");
+            int[] array = new int[20000];
+            int[] rnd = new int[20000];
+            java.util.Random random = new java.util.Random();
+            long before, after;
+            
+            RadixSort rSort = new RadixSort(8);
             
             for (int k=0; k<3; k++)
             {
