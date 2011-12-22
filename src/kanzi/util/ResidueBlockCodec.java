@@ -34,7 +34,7 @@ public final class ResidueBlockCodec
     private final int maxNonZeros;
     private final int logMaxNonZeros;
 
-    private static final int MAX_NON_ZEROS = 32;
+    private static final int MAX_NON_ZEROS = 16;// enough ?
     private static final byte SCAN_H  = 0;
     private static final byte SCAN_V  = 1;
     private static final byte SCAN_Z  = 2;
@@ -95,9 +95,9 @@ public final class ResidueBlockCodec
     {
         this(width, height, blockDim, threshold, stream, MAX_NON_ZEROS);
     }
-    
-    
-    public ResidueBlockCodec(int width, int height, int blockDim, int threshold, 
+
+
+    public ResidueBlockCodec(int width, int height, int blockDim, int threshold,
             BitStream stream, int maxNonZeros)
     {
         if (width < 8)
@@ -120,14 +120,14 @@ public final class ResidueBlockCodec
         this.gDecoder = new ExpGolombDecoder(this.stream, false);
         this.rleThreshold = 5;
         this.width = width;
-        this.height = height;      
+        this.height = height;
+        this.maxNonZeros = maxNonZeros;
         int log = 0;
 
         for (int n=maxNonZeros+1; n>1; n>>=1)
           log++;
 
         this.logMaxNonZeros = log;
-        this.maxNonZeros = maxNonZeros;
     }
 
 
@@ -135,61 +135,41 @@ public final class ResidueBlockCodec
     // Bit encode the residue data
     public boolean encode(int[] data, int blkptr)
     {
-       boolean res = true;
-
        // Test horizontal scan order
        final int resH = this.getStatistics(data, blkptr, SCAN_TABLE_H);
-       final int nonZeros = (resH >> 16) & 0xFF;
-       final int skipH = resH & 0x01;
+       final int max = (resH >> 16) & 0xFF;
+       final int nonZeros = (resH >> 24) & 0xFF;
+       final int scoreH = (resH >> 8) & 0xFF;
+       final int skipBlockBits = this.logMaxNonZeros;
 
-       if (skipH == 1)
-       {
-          // Skip block: write '1'
-          res &= this.stream.writeBit(1);
-          return res;
-       }
-
-       final int endH = (resH >> 8) & 0xFF;
-       final boolean allSameSign = (((resH >> 1) & 0x01) == 1) ? true : false;
+       if ((max <= 1) && (scoreH < this.scoreThreshold))
+          return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
 
        // Test vertical scan order
+       final int endH = resH & 0xFF;
        final int resV = this.getStatistics(data, blkptr, SCAN_TABLE_V);
-       final int skipV = resV & 0x01;
+       final int scoreV = (resV >> 8) & 0xFF;
 
-       if (skipV == 1)
-       {
-          // Skip block: write '1'
-          res &= this.stream.writeBit(1);
-          return res;
-       }
-
-       final int endV = (resV >> 8) & 0xFF;
+       if ((max <= 1) && (scoreV < this.scoreThreshold))
+          return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
 
        // Test zigzag scan order
+       final int endV = resV & 0xFF;
        final int resZ = this.getStatistics(data, blkptr, SCAN_TABLE_Z);
-       final int skipZ = resZ & 0x01;
+       final int scoreZ = (resZ >> 8) & 0xFF;
 
-       if (skipZ == 1)
-       {
-          // Skip block: write '1'
-          res &= this.stream.writeBit(1);
-          return res;
-       }
-
-       final int endZ = (resZ >> 8) & 0xFF;
+       if ((max <= 1) && (scoreZ < this.scoreThreshold))
+          return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
 
        // Test horizontal+vertical scan order
+       final int endZ = resZ & 0xFF;
        final int resHV = this.getStatistics(data, blkptr, SCAN_TABLE_HV);
-       final int skipHV = resHV & 0x01;
+       final int scoreHV = (resHV >> 8) & 0xFF;
 
-       if (skipHV == 1)
-       {
-          // Skip block: write '1'
-          res &= this.stream.writeBit(1);
-          return res;
-       }
-       
-       final int endHV = (resHV >> 8) & 0xFF;
+       if ((max <= 1) && (scoreHV < this.scoreThreshold))
+          return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
+
+       final int endHV = resHV & 0xFF;
        final int min1 = (endH < endV) ? endH : endV;
        final int min2 = (endZ < endHV) ? endZ : endHV;
        final int min = (min1 < min2) ? min1 : min2;
@@ -202,7 +182,7 @@ public final class ResidueBlockCodec
        else if (min == endZ)
           scan_order = SCAN_Z;
 
-       return this.encodeDirectional(data, blkptr, allSameSign, nonZeros, scan_order);
+       return this.encodeDirectional(data, blkptr, nonZeros, scan_order);
     }
 
 
@@ -213,8 +193,6 @@ public final class ResidueBlockCodec
        int score = 0;
        int max = 0;
        int nonZeros = 0;
-       int allPositives = 1;
-       int allNegatives = 1;
 
        // Find last non zero coefficient
        while ((end > 0) && (data[blkptr+scanTable[end]] == 0))
@@ -232,53 +210,47 @@ public final class ResidueBlockCodec
           }
           else
           {
-             allPositives &= (1 - (val >>> 31));
-             allNegatives &= (val >>> 31);
              val = (val + (val >> 31)) ^ (val >> 31); //abs
              score += val;
              nonZeros++;
 
              if (val > max)
                 max = val;
-             
+
              // Limit non zeros coefficients, ignore others
-             if (nonZeros > this.maxNonZeros)
+             if (nonZeros >= this.maxNonZeros)
              {
-                end = idx;            
+                end = idx;
                 break;
              }
           }
        }
 
-       final int skip = ((max <= 1) && (score < this.scoreThreshold)) ? 1 : 0;
-       final int allSameSign = allPositives | allNegatives;
-       return ((nonZeros & 0xFF) << 16) | ((end & 0xFF) << 8) | (allSameSign << 1) | skip;
+       return ((nonZeros & 0xFF) << 24) | ((max & 0xFF) << 16) | ((score & 0xFF)  << 8) | end;
     }
 
 
-    private boolean encodeDirectional(int[] data, int blkptr, boolean allSameSign, 
-            int nonZeros, byte scan_order)
+    private boolean encodeDirectional(int[] data, int blkptr, int nonZeros, byte scan_order)
     {
-       // Encode scan order
-       if (this.stream.writeBits(scan_order, 3) != 3)
-          return false;
-
        // Encode number of non-zero coefficients
-       if (this.stream.writeBits(nonZeros-1, this.logMaxNonZeros) != this.logMaxNonZeros)
+       if (nonZeros < (1 << this.logMaxNonZeros) - 1)
+       {
+          if (this.stream.writeBits(nonZeros, this.logMaxNonZeros) != this.logMaxNonZeros)
+             return false;
+       }
+       else
+       {
+          if (this.stream.writeBits(1<<this.logMaxNonZeros, this.logMaxNonZeros) != this.logMaxNonZeros)
+            return false;
+          
+          if (this.stream.writeBits(3, 2) != 2)
+            return false;
+       }
+
+       // Encode scan order
+       if (this.stream.writeBits(scan_order, 2) != 2)
           return false;
 
-       int writeSigns = nonZeros;
-       
-//       if ((nonZeros > 1) && (nonZeros <= 6))
-//       {
-//         // If there is a 'decent' choice of success (nonZeros not too high),
-//         // store the fact that all coefficients have the same sign (or not)           
-//         if (this.stream.writeBit((allSameSign == true) ? 1 : 0) == false)
-//           return false;
-//         
-//         writeSigns = (allSameSign == true) ? 1 : nonZeros;
-//       }
-       
        int idx = 0;
        boolean res = true;
        int run = 0;
@@ -336,9 +308,7 @@ public final class ResidueBlockCodec
          else
            res &= this.stream.writeBit(0); //end of value
 
-         if (writeSigns-- > 0)
-           res &= this.stream.writeBit(sign);
-         
+         res &= this.stream.writeBit(sign);
          nonZeros--;
        }
 
@@ -354,7 +324,10 @@ public final class ResidueBlockCodec
 
        while (blkptr < end)
        {
-          if (this.stream.readBit() == 1)
+          // Decode number of non-zero coefficients
+          int nonZeros = (int) this.stream.readBits(this.logMaxNonZeros);
+
+          if (nonZeros == 0)
           {
               // Block skipped
               final int endi = blkptr + dim2;
@@ -381,19 +354,8 @@ public final class ResidueBlockCodec
           scan_order |= this.stream.readBit();
           final int[] scanTable = SCAN_TABLES[scan_order];
 
-          // Decode number of non-zero coefficients
-          int nonZeros = (int) (1 + this.stream.readBits(this.logMaxNonZeros));
           int idx = 0;
           int counter = 1;
-          int readSigns = nonZeros;
-          
-//          if ((nonZeros > 1) && (nonZeros <= 6))
-//          {
-//             // Check if all coefficients have a sign or only the first one
-//             if (this.stream.readBit() == 1)
-//                readSigns = 1;
-//          }
-              
           int val = this.stream.readBit();
 
           while (nonZeros > 0)
@@ -415,7 +377,7 @@ public final class ResidueBlockCodec
              if (val == 1)
              {
                 // If reading a value, need to get the sign
-                if ((readSigns-- > 0) && (this.stream.readBit() == 1))
+                if (this.stream.readBit() == 1)
                    counter = -counter;
 
                 // Output a value
