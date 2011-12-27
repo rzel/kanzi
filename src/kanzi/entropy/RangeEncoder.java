@@ -50,8 +50,7 @@ public final class RangeEncoder extends AbstractEncoder
         // Since the frequency update after each byte encoded is the bottleneck,
         // split the frequency table into an array of absolute frequencies (with
         // indexes multiple of 16) and delta frequencies (relative to the previous
-        // abosulte frequency) with indexes in the [0..15] range
-        // This way, the update of frequencies is much faster
+        // absolute frequency) with indexes in the [0..15] range
         this.deltaFreq = new int[NB_SYMBOLS+1];
         this.baseFreq = new int[(NB_SYMBOLS>>4)+1];
 
@@ -59,7 +58,7 @@ public final class RangeEncoder extends AbstractEncoder
             this.deltaFreq[i] = i & 15; // DELTA
 
         for (int i=0; i<this.baseFreq.length; i++)
-            this.baseFreq[i] = i << 4; // DELTA
+            this.baseFreq[i] = i << 4; // BASE
     }
 
 
