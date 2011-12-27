@@ -35,8 +35,8 @@ import kanzi.transform.MTFT;
 // Header: mode (4 bits) + header data size (4 bits) + compressed data length (8, 16 or 24 bits)
 //         + BWT primary index (8, 16 or 24 bits)
 //         or mode (1 bit) + block size (7 bits)
-// * If mode & 0x80 != 0 then the block is no compressed, just copied.
-//   and the block length is cotained in the 7 lower digits
+// * If mode & 0x80 != 0 then the block is not compressed, just copied.
+//   and the block length is contained in the 7 lower digits
 //   Hence a 0 byte block (use to mark end of stream) is 0x80
 // * Else, the first 4 Most Significant Bits are used to encode extra information.
 //   The next 4 bits encode the size (in bytes) of the compressed data length 
