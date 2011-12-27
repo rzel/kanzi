@@ -28,10 +28,9 @@ public final class MTFT implements ByteTransform
     private static final int RESET_THRESHOLD = 64;
 
     private int size;
-    private Payload tail0;
     private final Payload[] heads; // linked lists
     private final int[] lengths; // length of linked list
-    private final int[] buckets; // index of list
+    private final byte[] buckets; // index of list
 
 
     public MTFT()
@@ -48,15 +47,14 @@ public final class MTFT implements ByteTransform
         this.size = size;
         this.heads = new Payload[16];
         this.lengths = new int[16];
-        this.buckets = new int[256];
-
+        this.buckets = new byte[256];
+ 
         // Initialize the linked lists: 1 item in bucket 0 and 17 in each other
-        this.tail0 = new Payload((byte) 0);
-        this.heads[0] = tail0;
+        Payload previous = new Payload((byte) 0);
+        this.heads[0] = previous;
         this.lengths[0] = 1;
         this.buckets[0] = 0;
-        Payload previous = this.tail0;
-        int listIdx = 0;
+        byte listIdx = 0;
 
         for (int i=1; i<256; i++)
         {
@@ -77,50 +75,50 @@ public final class MTFT implements ByteTransform
     }
 
 
-    // Reset the payload values, do not rebuild balanced buckets
-    private void reset()
+    @Override
+    public byte[] forward(byte[] input, int blkptr)
     {
-       Payload p = this.heads[0];
-       p.value = 0;
-       this.buckets[0] = 0;
-       int listIdx = 0;
+        this.balanceLists(true);
+        final int end = (this.size == 0) ? input.length : blkptr + this.size;
 
-       // Reset the values of the payloads
-       for (int i=1, n=1; i<256; i++)
-       {
-          while (n >= this.lengths[listIdx])
-          {
-             listIdx++;
-             n = 0;
-          }
-
-          p = p.next;
-          p.value = (byte) i;
-          this.buckets[i] = listIdx;
-          n++;
-       }
+        // This section is in the critical speed path 
+        return this.moveToFront(input, blkptr, end);
     }
 
 
     @Override
-    public byte[] forward(byte[] input, int idx)
+    public byte[] inverse(byte[] input, int blkptr)
     {
-        this.reset();
-        int len = (this.size == 0) ? input.length - idx : this.size;
+        final byte[] indexes = this.buckets;
+        
+        for (int i=0; i<indexes.length; i++)
+            indexes[i] = (byte) i;
+        
+        final int end = (this.size == 0) ? input.length : blkptr + this.size;
 
-        // This section is in the critical speed path 
-        return this.moveToFront(input, idx, len, false);
-    }
+        for (int i=blkptr; i<end; i++)
+        {
+           final int idx = input[i] & 0xFF;                      
+           final byte value = indexes[idx];
+           input[i] = value;
 
+           if (idx == 0)
+              continue;
+           
+           if (idx < 8)
+           {
+              for (int j=idx-1; j>=0; j--)
+                 indexes[j+1] = indexes[j];
+           }
+           else
+           {
+              System.arraycopy (indexes, 0, indexes, 1, idx);
+           }
+           
+           indexes[0] = value;
+        }
 
-    @Override
-    public byte[] inverse(byte[] input, int idx)
-    {
-        this.reset();
-        int len = (this.size == 0) ? input.length - idx : this.size;
-
-        // This section is in the critical speed path 
-        return this.moveToFront(input, idx, len, true);
+        return input;
     }
 
 
@@ -141,21 +139,26 @@ public final class MTFT implements ByteTransform
     }
 
 
+    
     // Recreate one list with 1 item and 15 lists with 17 items
     // Update lengths and buckets accordingly. This is a time consuming operation
-    private void rebuild()
+    private void balanceLists(boolean resetValues)
     {
        this.lengths[0] = 1;
-       this.tail0 = this.heads[0];
-       int listIdx = 0;
-       Payload p = this.tail0.next;
+       byte listIdx = 0;
+       Payload p = this.heads[0].next;
+
+       if (resetValues == true)
+       {
+          this.heads[0].value = (byte) 0;
+          this.buckets[0] = 0;
+       }
 
        for (int i=1, n=0; i<256; i++)
        {
-          // Early exit if the last list has been reached
-          if ((i > 240) && (this.buckets[p.value & 0xFF] == 15))
-             break;
-
+          if (resetValues == true)
+             p.value = (byte) i;
+          
           if (n == 0)
           {
              listIdx++;
@@ -169,86 +172,38 @@ public final class MTFT implements ByteTransform
        }
     }
 
-
-    private byte[] moveToFront(byte[] values, int start, int len, boolean getIndex)
+    
+    private byte[] moveToFront(byte[] values, int start, int end)
     {
-       int end = start + len;
        byte previous = this.heads[0].value;
 
        for (int ii=start; ii<end; ii++)
        {
-          byte current;
-          Payload p = null;
-          int listIdx;
-
-          if (getIndex == false)
-          {
-             current = values[ii];
-
-             if (current == previous)
-             {
-                values[ii] = 0;
-                continue;
-             }
-
-             // Find list index
-             listIdx = this.buckets[current & 0xFF];
-             p = this.heads[listIdx];
-             int idx = 0;
-
-             for (int i=0; i<listIdx; i++)
-                idx += this.lengths[i];
-
-             // Find index in list (less than RESET_THRESHOLD iterations)
-             while (p.value != current)
-             {
-                p = p.next;
-                idx++;
-             }
-
-             values[ii] = (byte) idx;
+          final byte current = values[ii];
+          
+          if (current == previous)
+          { 
+             values[ii] = 0;
+             continue;
           }
-          else
+
+          // Find list index
+          int listIdx = this.buckets[current & 0xFF];
+          
+          Payload p = this.heads[listIdx];
+          int idx = 0;
+
+          for (int i=0; i<listIdx; i++)
+             idx += this.lengths[i];
+          
+          // Find index in list (less than RESET_THRESHOLD iterations)
+          while (p.value != current)
           {
-             // ----- start getIndex 'Macro' -----
-             listIdx = 0;
-             int index = values[ii] & 0xFF;
-
-             // Find list index and index in list
-             while (index >= this.lengths[listIdx])
-             {
-                index -= this.lengths[listIdx];
-                listIdx++;
-             }
-
-             if ((listIdx == 0) && (index + index > this.lengths[0]))
-             {
-                // Start from the tail instead of the head
-                p = this.tail0;
-                index = this.lengths[0] - 1 - index;
-
-                // Find index in list
-                for (int i=0; i<index; i++)
-                   p = p.previous;
-             }
-             else
-             {
-                p = this.heads[listIdx];
-
-                // Find index in list
-                for (int i=0; i<index; i++)
-                   p = p.next;
-             }
-             // ----- end getIndex 'Macro' -----
-
-             current = p.value;
-             values[ii] = current;
-
-             if (current == previous)
-                continue;
-
-             listIdx = this.buckets[current & 0xFF];
+             p = p.next;
+             idx++;
           }
+
+          values[ii] = (byte) idx;
 
           // Unlink
           if (p.previous != null)
@@ -257,12 +212,9 @@ public final class MTFT implements ByteTransform
           if (p.next != null)
               p.next.previous = p.previous;
 
-          // Update head and tail0 if needed
+          // Update head if needed
           if (p == this.heads[listIdx])
              this.heads[listIdx] = p.next;
-
-          if (p == this.tail0)
-             this.tail0 = p.previous;
 
           // Add to head of first list
           Payload q = this.heads[0];
@@ -277,8 +229,8 @@ public final class MTFT implements ByteTransform
              this.lengths[0]++;
              this.buckets[current & 0xFF] = 0;
 
-             if (this.lengths[0] > RESET_THRESHOLD)
-                this.rebuild();
+             if ((this.lengths[0] > RESET_THRESHOLD) || (this.lengths[listIdx] == 0))
+                this.balanceLists(false);
           }
 
           previous = current;
