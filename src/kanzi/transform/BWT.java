@@ -71,7 +71,7 @@ public class BWT implements ByteTransform
     private int size;
     private int[] data;
     private int[] buffer1;
-    private int[] buffer2;
+    private byte[] buffer2;
     private int[] buckets;
     private int primaryIndex;
 
@@ -91,7 +91,7 @@ public class BWT implements ByteTransform
         this.size = size;
         this.data = new int[size];
         this.buffer1 = new int[size];
-        this.buffer2 = new int[size];
+        this.buffer2 = new byte[size];
         this.buckets = new int[256];
     }
 
@@ -144,9 +144,6 @@ public class BWT implements ByteTransform
         if (this.buffer1.length < len)
            this.buffer1 = new int[len];
 
-        if (this.buffer2.length < len)
-           this.buffer2 = new int[len];
-
         for (int i=0; i<len; i++)
            this.data[i] = input[blkptr+i] & 0xFF;
 
@@ -176,12 +173,11 @@ public class BWT implements ByteTransform
        if (this.data.length < len)
           this.data = new int[len];
 
-       if (this.buffer2.length < len)
-          this.buffer2 = new int[len];
+        if (this.buffer2.length < len)
+           this.buffer2 = new byte[len];
 
         int[] buckets_ = this.buckets;
         int[] src = this.data;
-        int[] buffer = this.buffer2;
 
         for (int i=0; i<256; i+=8)
         {
@@ -195,9 +191,11 @@ public class BWT implements ByteTransform
            buckets_[i+7] = 0;
         }
 
+       // Create histogram
        for (int i=0; i<len; i++)
           src[i] = buckets_[input[blkptr+i] & 0xFF]++;
 
+       // Create cumulative histogram
        for (int i=0, sum=0; i<256; i++)
        {
           final int val = buckets_[i];
@@ -206,20 +204,19 @@ public class BWT implements ByteTransform
        }
 
        int pidx = this.getPrimaryIndex();
+       byte[] buffer = this.buffer2;
 
        for (int i=len-1, val=0; i>=0; i--)
        {
-          final int idx = input[blkptr+val] & 0xFF;
+          final byte idx = input[blkptr+val];
           buffer[i] = idx;
-          val = src[val] + buckets_[idx];
-
+          val = src[val] + buckets_[idx & 0xFF];
+          
           if (val < pidx)
              val++;
        }
 
-       for (int i=0; i<len; i++)
-          input[blkptr+i] = (byte) buffer[i];
-
+       System.arraycopy(buffer, 0, input, blkptr, len);
        return input;
      }
 
@@ -231,12 +228,14 @@ public class BWT implements ByteTransform
         final int[] srcArray = src.array;
         final int dstIdx = dst.index;
         final int srcIdx = src.index;
+        final int end1 = dstIdx + k;
+        final int end2 = srcIdx + n;
 
-        for (int i=0; i<k; i++)
-           dstArray[dstIdx+i] = 0;
+        for (int i=dstIdx; i<end1; i++)
+           dstArray[i] = 0;
 
-        for (int i=0; i<n; i++)
-           dstArray[dstIdx+srcArray[srcIdx+i]]++;
+        for (int i=srcIdx; i<end2; i++)
+           dstArray[dstIdx+srcArray[i]]++;
       }
 
 
