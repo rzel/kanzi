@@ -25,16 +25,17 @@ public final class ResidueBlockCodec
 {
     private final int width;
     private final int height;
-    private final int blockDim;
     private final int scoreThreshold;
     private final BitStream stream;
     private final ExpGolombEncoder gEncoder;
     private final ExpGolombDecoder gDecoder;
     private final int rleThreshold;
     private final int maxNonZeros;
-    private final int logMaxNonZeros;
 
-    private static final int MAX_NON_ZEROS = 16;// enough ?
+    private static final int MAX_NON_ZEROS = 30;// enough ?
+    private static final int LOG_THRESHOLD_NZ = 4;
+    private final int BLOCK_DIM = 8;
+    private final int BLOCK_SIZE = BLOCK_DIM * BLOCK_DIM;
     private static final byte SCAN_H  = 0;
     private static final byte SCAN_V  = 1;
     private static final byte SCAN_Z  = 2;
@@ -91,13 +92,13 @@ public final class ResidueBlockCodec
     private static final int[] SCAN_TABLE_HV = SCAN_TABLES[SCAN_HV];
 
 
-    public ResidueBlockCodec(int width, int height, int blockDim, int threshold, BitStream stream)
+    public ResidueBlockCodec(int width, int height, int threshold, BitStream stream)
     {
-        this(width, height, blockDim, threshold, stream, MAX_NON_ZEROS);
+        this(width, height, threshold, stream, MAX_NON_ZEROS);
     }
 
 
-    public ResidueBlockCodec(int width, int height, int blockDim, int threshold,
+    protected ResidueBlockCodec(int width, int height, int threshold,
             BitStream stream, int maxNonZeros)
     {
         if (width < 8)
@@ -106,14 +107,6 @@ public final class ResidueBlockCodec
         if (height < 8)
             throw new IllegalArgumentException("The width parameter must be at least 8");
 
-        if ((blockDim != 8) && (blockDim != 16))
-            throw new IllegalArgumentException("The block dimension must be either 8 or 16");
-
-        if ((maxNonZeros & (maxNonZeros - 1)) != 0)
-            throw new IllegalArgumentException("Maximum number of non zero coefficients "
-                    + "must be a power of 2");
-
-        this.blockDim = blockDim;
         this.scoreThreshold = threshold;
         this.stream = stream;
         this.gEncoder = new ExpGolombEncoder(this.stream, false);
@@ -122,12 +115,6 @@ public final class ResidueBlockCodec
         this.width = width;
         this.height = height;
         this.maxNonZeros = maxNonZeros;
-        int log = 0;
-
-        for (int n=maxNonZeros+1; n>1; n>>=1)
-          log++;
-
-        this.logMaxNonZeros = log;
     }
 
 
@@ -140,7 +127,7 @@ public final class ResidueBlockCodec
        final int max = (resH >> 16) & 0xFF;
        final int nonZeros = (resH >> 24) & 0xFF;
        final int scoreH = (resH >> 8) & 0xFF;
-       final int skipBlockBits = this.logMaxNonZeros;
+       final int skipBlockBits = LOG_THRESHOLD_NZ;
 
        if ((max <= 1) && (scoreH < this.scoreThreshold))
           return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
@@ -186,13 +173,14 @@ public final class ResidueBlockCodec
     }
 
 
+    // Extract statistics of the coefficients in the residue block
     private int getStatistics(int[] data, int blkptr, int[] scanTable)
     {
-       int idx = 1; // skip DC coefficient
-       int end = (this.blockDim * this.blockDim) - 1;
-       int score = 0;
+       int idx = 1; // exclude DC coefficient
+       int end = BLOCK_SIZE - 1;
+       int score = (data[blkptr] == 0) ? 0 : 5; // DC coefficient
        int max = 0;
-       int nonZeros = 0;
+       int nonZeros = (data[blkptr] == 0) ? 0 : 1; // DC coefficient
 
        // Find last non zero coefficient
        while ((end > 0) && (data[blkptr+scanTable[end]] == 0))
@@ -217,7 +205,7 @@ public final class ResidueBlockCodec
              if (val > max)
                 max = val;
 
-             // Limit non zeros coefficients, ignore others
+             // Limit number of non zeros coefficients, ignore others
              if (nonZeros >= this.maxNonZeros)
              {
                 end = idx;
@@ -232,26 +220,43 @@ public final class ResidueBlockCodec
 
     private boolean encodeDirectional(int[] data, int blkptr, int nonZeros, byte scan_order)
     {
-       // Encode number of non-zero coefficients
-       if (nonZeros < (1 << this.logMaxNonZeros) - 1)
+       // Encode number of non-zero coefficients: 4 bits (+ 4 bits)
+       // If the number of coefficients is [0..14], use 4 bits
+       // If the number of coefficients is in [15..30], add 4 bits for the difference
+       // EG: N=7  => 0111
+       // EG: N=15 => 1111 0000      N=30 => 1111 1111
+       final int thresholdNonZeros = (1 << LOG_THRESHOLD_NZ) - 1;
+       
+       if (nonZeros < thresholdNonZeros)
        {
-          if (this.stream.writeBits(nonZeros, this.logMaxNonZeros) != this.logMaxNonZeros)
+          if (this.stream.writeBits(nonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ)
              return false;
        }
        else
        {
-          if (this.stream.writeBits(1<<this.logMaxNonZeros, this.logMaxNonZeros) != this.logMaxNonZeros)
+          final int diffNonZeros = nonZeros - thresholdNonZeros;
+          
+          // Write theshold
+          if (this.stream.writeBits(thresholdNonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ)
             return false;
           
-          if (this.stream.writeBits(3, 2) != 2)
+          // Write difference
+          if (this.stream.writeBits(diffNonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ) 
             return false;
        }
 
        // Encode scan order
        if (this.stream.writeBits(scan_order, 2) != 2)
           return false;
+       
+       // Encode DC coefficient
+       if (this.stream.writeBits(data[blkptr] & 0xFF, 8) != 8)
+          return false;
 
-       int idx = 0;
+       if (data[blkptr] != 0)
+          nonZeros--;
+       
+       int idx = 1; // exclude DC coefficient
        boolean res = true;
        int run = 0;
        final int[] scanTable = SCAN_TABLES[scan_order];
@@ -320,17 +325,16 @@ public final class ResidueBlockCodec
     public boolean decode(int[] data, int blkptr)
     {
        final int end = blkptr + this.width * this.height;
-       final int dim2 = this.blockDim * this.blockDim;
 
        while (blkptr < end)
        {
           // Decode number of non-zero coefficients
-          int nonZeros = (int) this.stream.readBits(this.logMaxNonZeros);
+          int nonZeros = (int) this.stream.readBits(LOG_THRESHOLD_NZ);
 
           if (nonZeros == 0)
           {
               // Block skipped
-              final int endi = blkptr + dim2;
+              final int endi = blkptr + BLOCK_SIZE;
 
               for (int i=blkptr; i<endi; i+=8)
               {
@@ -348,13 +352,22 @@ public final class ResidueBlockCodec
               continue;
           }
 
+          if (nonZeros == (1 << LOG_THRESHOLD_NZ) - 1)
+              nonZeros += (int) this.stream.readBits(LOG_THRESHOLD_NZ); 
+          
           // Decode scan order
           int scan_order = this.stream.readBit();
           scan_order <<= 1;
           scan_order |= this.stream.readBit();
           final int[] scanTable = SCAN_TABLES[scan_order];
+       
+          // Decode DC coefficient
+          data[blkptr] = (byte) this.stream.readBits(8);
 
-          int idx = 0;
+          if (data[blkptr] != 0)
+             nonZeros--;       
+
+          int idx = 1; // exclude DC coefficient
           int counter = 1;
           int val = this.stream.readBit();
 
@@ -376,7 +389,7 @@ public final class ResidueBlockCodec
 
              if (val == 1)
              {
-                // If reading a value, need to get the sign
+                // If reading a value (not a run), need to get the sign
                 if (this.stream.readBit() == 1)
                    counter = -counter;
 
@@ -395,11 +408,11 @@ public final class ResidueBlockCodec
              val ^= 1;
           }
 
-          // Add remaining 0s
-          while (idx < dim2)
+          // Add remaining 0s (not encoded)
+          while (idx < BLOCK_SIZE)
              data[blkptr+scanTable[idx++]] = 0;
 
-          blkptr += dim2;
+          blkptr += BLOCK_SIZE;
        }
 
        return true;
