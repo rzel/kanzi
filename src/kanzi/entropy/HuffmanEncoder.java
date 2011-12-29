@@ -23,30 +23,33 @@ import kanzi.BitStreamException;
 public class HuffmanEncoder extends AbstractEncoder
 {
     private final BitStream bitstream;
-    private final HuffmanTree tree;
     private final boolean canonical;
+    private HuffmanTree tree;
+    private int[] buffer;
 
 
-    public HuffmanEncoder(BitStream bitstream, boolean canonical, int[] frequencies) throws BitStreamException
+    public HuffmanEncoder(BitStream bitstream, boolean canonical) throws BitStreamException
     {
         if (bitstream == null)
             throw new NullPointerException("Invalid null bitstream parameter");
 
-        if (frequencies == null)
-            throw new NullPointerException("Invalid null frequencies parameter");
-
         this.bitstream = bitstream;
         this.canonical = canonical;
-        this.tree = new HuffmanTree(frequencies, canonical);
-        this.init(frequencies);
+        this.buffer = new int[256];
+
+        // Write encoder type and max length (32 bits max)
+        final int bit = (this.canonical == true) ? 1 : 0;
+        this.bitstream.writeBit(bit);
     }
 
 
-    private void init(int[] frequencies) throws BitStreamException
+    public boolean updateFrequencies(int[] frequencies) throws BitStreamException
     {
-        // Write encoder type and max length (32 bits max)
-        int bit = (this.canonical == true) ? 1 : 0;
-        this.bitstream.writeBit(bit);
+        if (frequencies == null)
+           return false;
+        
+        this.tree = new HuffmanTree(frequencies, this.canonical);
+ 
         int maxSize = 0;
 
         if (this.canonical == false)
@@ -79,18 +82,42 @@ public class HuffmanEncoder extends AbstractEncoder
             maxSize = 32 - Integer.numberOfLeadingZeros(maxSize);
             this.bitstream.writeBits(maxSize, 5);
 
-            // Transmit code lengths only, frequencies and code do not matter !
+            // Transmit code lengths only, frequencies and code do not matter 
             for (int i=0; i<frequencies.length; i++)
                 this.bitstream.writeBits(this.tree.getSize(i), maxSize);
         }
+        
+        return true;
     }
 
+    
+    // Do a dynamic computation of the frequencies of the input data
+    @Override
+    public int encode(byte[] array, int blkptr, int len)
+    {
+       for (int i=0; i<256; i++)
+          this.buffer[i] = 0;
 
+       final int end = blkptr + len;
+
+       for (int i=blkptr; i<end; i++)
+          this.buffer[array[i] & 0xFF]++;
+
+       this.updateFrequencies(this.buffer);    
+       return super.encode(array, blkptr, len);
+    }
+
+    
+    // Frequencies of the data block must have been previously set
     @Override
     public boolean encodeByte(byte val)
     {
-        this.bitstream.writeBits(this.tree.getCode(val & 0xFF), this.tree.getSize(val & 0xFF));
-        return true;
+        if (this.tree == null)
+           return false;
+        
+        final long bits = this.tree.getCode(val & 0xFF);
+        final int size = this.tree.getSize(val & 0xFF);
+        return (this.bitstream.writeBits(bits, size) == size);
     }
 
 
