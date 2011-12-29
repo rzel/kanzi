@@ -94,27 +94,20 @@ public final class DefaultBitStream implements BitStream
     public long readBits(int length)
     {
         if ((length == 0) || (length > 64))
-            throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
+           throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
 
         return this.ibs.readBits(length);
     }
     
     
     @Override
-    public synchronized void flush()
+    public synchronized void flush() throws BitStreamException
     {
-        try
-        {
-            if (this.ibs != null)
-                this.ibs.flush();
-            
-            if (this.obs != null)
-                this.obs.flush();
-        }
-        catch (IOException e)
-        {
-            throw new BitStreamException(e.getMessage(), BitStreamException.INPUT_OUTPUT);
-        }
+        if (this.ibs != null)
+            this.ibs.flush();
+
+        if (this.obs != null)
+            this.obs.flush();
     }
     
     
