@@ -70,7 +70,8 @@ public class TestHuffmanCoder
                 for (int i=0; i<values.length; i++)
                     freq[values[i] & 255]++;
 
-                HuffmanEncoder rc = new HuffmanEncoder(dbgbs, false, freq);
+                HuffmanEncoder rc = new HuffmanEncoder(dbgbs, false);
+                rc.updateFrequencies(freq);
 
                 for (int i=0; i<values.length; i++)
                 {
@@ -85,6 +86,7 @@ public class TestHuffmanCoder
                 dbgbs = new DebugBitStream(bs, System.out);
                 dbgbs.setMark(true);
                 HuffmanDecoder rd = new HuffmanDecoder(dbgbs);
+                rd.readFrequencies();                
                 System.out.println("\nDecoded:");
                 int len = values.length; // buf.length >> 3;
                 boolean ok = true;
@@ -123,43 +125,54 @@ public class TestHuffmanCoder
 
 
         // Test speed
+        System.out.println("\n\nSpeed Test");
+        
+        for (int jj=0; jj<3; jj++)
         {
-            System.out.println("\n\nSpeed Test");
-            int[] values = new int[10000];
+            byte[] values1 = new byte[10000];
+            byte[] values2 = new byte[10000];
             int[] freq = new int[256];
             long delta = 0;
 
-            for (int i=0; i<values.length; i++)
-            {
-                values[i] = (i & 255);
-                freq[values[i]]++;
-           }
-
-
             for (int ii=0; ii<5000; ii++)
             {
+                for (int i=0; i<256; i++)
+                   freq[i] = 0;
+                
+                for (int i=0; i<values1.length; i++)
+                {
+                    values1[i] = (byte) (i & 255);
+                    freq[values1[i] & 0xFF]++;
+                }
+                 
+                // Encode
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
                 BitStream bs = new DefaultBitStream(os, 16384);
-                HuffmanEncoder rc = new HuffmanEncoder(bs, true, freq);
+                HuffmanEncoder rc = new HuffmanEncoder(bs, true);
                 long before = System.nanoTime();
-
-                for (int i=0; i<values.length; i++)
-                {
-                    rc.encodeByte((byte) (values[i] & 255));
-                }
-
+                rc.encode(values1, 0, values1.length);
                 rc.dispose();
+                
+                // Decode
                 byte[] buf = os.toByteArray();
                 bs = new DefaultBitStream(new ByteArrayInputStream(buf), 256);
                 HuffmanDecoder rd = new HuffmanDecoder(bs);
-
-                for (int i=0; i<values.length; i++)
-                   rd.decodeByte();
-
+                rd.decode(values2, 0, values2.length);
                 long after = System.nanoTime();
-                delta += (after - before);
-            }
+                delta += (after - before);            
 
+                // Sanity check
+                for (int i=0; i<values1.length; i++)
+                {
+                   if (values1[i] != values2[i])
+                   {
+                      System.out.println("Error at index "+i+" ("+values1[i]
+                              +"<->"+values2[i]+")");
+                      break;
+                   }
+                }
+            }
+ 
             System.out.println("Elapsed [ms]: "+delta/1000000);
         }
     }
