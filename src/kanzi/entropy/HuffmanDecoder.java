@@ -23,8 +23,8 @@ import kanzi.BitStreamException;
 public class HuffmanDecoder extends AbstractDecoder
 {
     private final BitStream bitstream;
-    private final boolean canonical;
-    private final HuffmanTree tree;
+    private boolean canonical;
+    private HuffmanTree tree;
 
 
     public HuffmanDecoder(BitStream bitstream) throws BitStreamException
@@ -34,6 +34,11 @@ public class HuffmanDecoder extends AbstractDecoder
 
         this.bitstream = bitstream;
         this.canonical = (this.bitstream.readBit() == 1) ? true : false;
+    }
+    
+    
+    public boolean readFrequencies() throws BitStreamException
+    {
         int[] data = new int[256];
         int dataSize = (int) this.bitstream.readBits(5);
 
@@ -62,16 +67,27 @@ public class HuffmanDecoder extends AbstractDecoder
            // Create Huffman tree        
            this.tree = new HuffmanTree(data, maxSize);
         }
+        
+        return true;
     }
 
 
+    // Rebuild the Huffman tree for each block of data before decoding
+    @Override
+    public int decode(byte[] array, int blkptr, int len)
+    {
+       this.readFrequencies();
+       return super.decode(array, blkptr, len);
+    }
+       
+    
+    // The data block header must have been read before
     @Override
     public final byte decodeByte()
     {
         return this.tree.getSymbol(this.bitstream);
     }
     
-
 
     @Override
     public void dispose()
