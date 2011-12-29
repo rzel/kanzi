@@ -33,7 +33,7 @@ public class TestEntropyCoders
         try
         {
             EntropyEncoder encoder;
-            String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.ppm";
+            String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
             FileInputStream fis = new FileInputStream(new File(fileName));
             BitStream obs;
             FileOutputStream fos;
@@ -106,7 +106,8 @@ public class TestEntropyCoders
                 fis = new FileInputStream(new File(fileName));
                 fos = new FileOutputStream(new File(outputFileName));
                 obs = new DefaultBitStream(fos, 16384);
-                encoder = new HuffmanEncoder(obs, true, freq);
+                encoder = new HuffmanEncoder(obs, true);
+                ((HuffmanEncoder) encoder).updateFrequencies(freq);
                 before = System.nanoTime();
 
                 do
