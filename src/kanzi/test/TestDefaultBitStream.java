@@ -103,8 +103,19 @@ public class TestDefaultBitStream
         for (int i=0; i<values.length; i++)
             values[i] = rnd.nextInt() & (1 + (i & 63));
 
-        try
-        {
+
+         System.out.println("Initial");
+
+         for (int i=0; i<values.length; i++)
+         {
+            System.out.print(((+values[i] < 10) ? " 0" : " ") + values[i]);
+
+            if ((i & 63) == 63)
+               System.out.println();
+         }
+
+         try
+         {
             ByteArrayOutputStream baos = new ByteArrayOutputStream(values.length);
             OutputStream os = new BufferedOutputStream(baos);
             DefaultBitStream obs = new DefaultBitStream(os, 16384);
@@ -129,7 +140,7 @@ public class TestDefaultBitStream
             for (int i=0; i<values.length; i++)
             {
                 int x = (int) ibs.readBits((1 + (i & 63)));
-                System.out.print(((x<10)?"   ":" ")+x+" ("+values[i]+") ");
+                System.out.print(((x<10)?" 0":" ")+x+" ("+values[i]+") ");
                 ok &= (x == values[i]);
 
                 if ((i & 63) == 63)
