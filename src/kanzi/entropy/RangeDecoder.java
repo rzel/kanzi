@@ -75,25 +75,26 @@ public final class RangeDecoder extends AbstractDecoder
             this.code = this.bitstream.readBits(56) & 0xFFFFFFFF;
         }
 
-        this.range /= (this.baseFreq[NB_SYMBOLS>>4] + this.deltaFreq[NB_SYMBOLS]);
-        final int count = (int) ((this.code - this.low) / this.range);
+        final int[] bfreq = this.baseFreq;
+        final int[] dfreq = this.deltaFreq;        
+        this.range /= (bfreq[NB_SYMBOLS>>4] + dfreq[NB_SYMBOLS]);
+        int count = (int) ((this.code - this.low) / this.range);
 
         // Find first frequency less than 'count'
-        int value = this.baseFreq.length - 1;
-
-        while ((value > 0) && (count < this.baseFreq[value]))
+        int value = bfreq.length - 1;
+        
+        while ((value > 0) && (count < bfreq[value]))
             value--;
 
-        int base = this.baseFreq[value];
+        count -= bfreq[value];
         value <<= 4;
 
-        if (count != base)
+        if (count > 0)
         {
-           final int count2 = count - base;
            final int end = value;
            value = ((value + 15) > NB_SYMBOLS) ? NB_SYMBOLS : value+15;
 
-           while ((value >= end) && (count2 < this.deltaFreq[value]))
+           while ((value >= end) && (count < dfreq[value]))
               value--;
         }
 
@@ -105,8 +106,8 @@ public final class RangeDecoder extends AbstractDecoder
             throw new BitStreamException("Unknown symbol: "+value, BitStreamException.INVALID_STREAM);
         }
 
-        int symbolLow = this.baseFreq[value>>4] + this.deltaFreq[value];
-        int symbolHigh = this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1];
+        final int symbolLow = bfreq[value>>4] + dfreq[value];
+        final int symbolHigh = bfreq[(value+1)>>4] + dfreq[value+1];
 
         // Decode symbol
         this.low += (symbolLow * this.range);
