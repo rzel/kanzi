@@ -111,48 +111,59 @@ public class TestRangeCoder
 
 
         // Test speed
+        System.out.println("\n\nSpeed Test");
+
+        for (int jj=0; jj<3; jj++)
         {
-            System.out.println("\n\nSpeed Test");
-            int[] values = new int[10000];
+            byte[] values1 = new byte[10000];
+            byte[] values2 = new byte[10000];
             long delta1 = 0;
             long delta2 = 0;
 
-            for (int i=0; i<values.length; i++)
-                values[i] = (i & 255);
+            for (int i=0; i<values1.length; i++)
+                values1[i] = (byte) (i & 63);
             
-            int iter = 20000;
-
+            int iter = 10000;
 
             for (int ii=0; ii<iter; ii++)
             {
+                long before, after;
+
+                // Encode
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
                 BitStream bs = new DefaultBitStream(os, 16384);
                 RangeEncoder rc = new RangeEncoder(bs);
-                long before, after;
                 before = System.nanoTime();
-
-                for (int i=0; i<values.length; i++)
-                   rc.encodeByte((byte) (values[i] & 255));
+                rc.encode(values1, 0, values1.length);
 
                 after = System.nanoTime();
                 delta1 += (after - before);
                 bs.flush();
                 rc.dispose();
 
+                // Decode
                 byte[] buf = os.toByteArray();
                 bs = new DefaultBitStream(new ByteArrayInputStream(buf), 64);
                 RangeDecoder rd = new RangeDecoder(bs);
-                int len = values.length; // buf.length >> 3;
                 before = System.nanoTime();
-
-                for (int i=0; i<len; i++)
-                   rd.decodeByte();
-
+                rd.decode(values2, 0, values2.length);
                 after = System.nanoTime();
                 delta2 += (after - before);
+                
+                // Sanity check
+                for (int i=0; i<values1.length; i++)
+                {
+                   if (values1[i] != values2[i])
+                   {
+                      System.out.println("Error at index "+i+" ("+values1[i]
+                              +"<->"+values2[i]+")");
+                      break;
+                   }
+                }
+                
             }
 
-            System.out.println("Iterations: "+iter);
+            System.out.println();
             System.out.println("Encoding [ms]: "+delta1/1000000);
             System.out.println("Decoding [ms]: "+delta2/1000000);
         }
