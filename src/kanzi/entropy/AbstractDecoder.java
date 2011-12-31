@@ -22,18 +22,20 @@ import kanzi.BitStreamException;
 
 public abstract class AbstractDecoder implements EntropyDecoder
 {
-
+   @Override
    public abstract byte decodeByte();
-
+   
+   
+   @Override
    public abstract BitStream getBitStream();
 
    
-   // Decode the next chunk of data from the bitstream and return in the
-   // provided buffer.
+   // Default implementation: fallback to decodeByte
+   @Override
    public int decode(byte[] array, int blkptr, int len)
    {
       if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
-           return -1;
+         return -1;
 
       int end = blkptr + len;
       int i = blkptr;
@@ -41,9 +43,7 @@ public abstract class AbstractDecoder implements EntropyDecoder
       try
       {
          while (i < end)
-         {
             array[i++] = this.decodeByte();
-         }
       }
       catch (BitStreamException e)
       {
@@ -54,6 +54,7 @@ public abstract class AbstractDecoder implements EntropyDecoder
    }
 
 
+   @Override
    public void dispose()
    {
    }
