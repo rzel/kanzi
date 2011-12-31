@@ -22,13 +22,16 @@ import kanzi.BitStreamException;
 
 public abstract class AbstractEncoder implements EntropyEncoder
 {
-
+    @Override
     public abstract boolean encodeByte(byte val);
 
+    
+    @Override
     public abstract BitStream getBitStream();
 
     // Default implementation: fallback to encodeByte
     // Some implementations should be able to use an optimized algorithm
+    @Override
     public int encode(byte[] array, int blkptr, int len)
     {
         if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
@@ -39,8 +42,8 @@ public abstract class AbstractEncoder implements EntropyEncoder
 
         try
         {
-           while (i<end)
-           {
+           while (i < end)
+           {            
               if (this.encodeByte(array[i]) == false)
                  return i;
 
@@ -56,6 +59,7 @@ public abstract class AbstractEncoder implements EntropyEncoder
     }
 
 
+    @Override
     public void dispose()
     {
     }
