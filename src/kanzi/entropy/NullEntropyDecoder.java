@@ -16,7 +16,6 @@ limitations under the License.
 package kanzi.entropy;
 
 import kanzi.BitStream;
-import kanzi.BitStreamException;
 
 
 // Null entropy encoder and decoder
@@ -39,14 +38,7 @@ public final class NullEntropyDecoder extends AbstractDecoder
     @Override
     public byte decodeByte()
     {
-        try
-        {
-            return (byte) this.bitstream.readBits(8);
-        }
-        catch (BitStreamException e)
-        {
-            throw new RuntimeException(e);
-        }
+       return (byte) this.bitstream.readBits(8);
     }
    
      
