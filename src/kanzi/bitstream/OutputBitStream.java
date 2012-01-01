@@ -40,13 +40,14 @@ import java.io.OutputStream;
    // Processes the least significant bit of the input integer
    public synchronized boolean writeBit(int bit)
    {
-      if (this.closed == true)
-         throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
+      if ((this.position > this.buffer.length)
+              || ((this.bitIndex == 7) && (this.position == this.buffer.length)))
+         this.flush();
 
       this.buffer[this.position] |= ((bit & 1) << this.bitIndex);
 
       if (this.bitIndex == 0)
-        this.buffer[++this.position] = 0;
+        this.position++;
 
       this.bitIndex = (this.bitIndex + 7) & 7;
       this.written++;
@@ -56,13 +57,7 @@ import java.io.OutputStream;
 
    // 'length' must be max 64
    public synchronized int writeBits(long value, int length)
-   {
-      if (this.closed == true)
-         throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
-
-      if (this.position >= this.buffer.length - 8)
-         this.flush();
-
+   {      
       int remaining = length;
 
       // Pad the current position in buffer
@@ -81,10 +76,17 @@ import java.io.OutputStream;
             this.position++;
       }
 
-      // Use a fast path
+      // Need to write more bits ?
       if (this.bitIndex == 7)
       {
-         // Progress byte by byte
+         final int inBufferBytes = (this.position <= this.buffer.length) ? 
+               this.buffer.length - this.position : 0;
+         final int inBufferBits = (inBufferBytes << 3);
+       
+         if (inBufferBits < remaining)
+            this.flush();
+         
+          // We are byte aligned, fast track
          while (remaining >= 8)
          {
             remaining -= 8;
@@ -92,13 +94,13 @@ import java.io.OutputStream;
             this.written += 8;
          }
 
-         // Process remaining bits
+         // Write last bits into current position
          if (remaining > 0)
          {
             final int bits = (int) (value & ((1 << remaining) - 1));
             this.buffer[this.position] |= (bits << (8 - remaining));
             this.written += remaining;
-            this.bitIndex = (15 - remaining) & 7;
+            this.bitIndex -= remaining;
          }
       }
 
@@ -108,6 +110,9 @@ import java.io.OutputStream;
 
    public synchronized void flush() throws BitStreamException
    {
+      if (this.isClosed() == true)
+         throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
+
       try
       {
          if (this.position > 0)
@@ -151,6 +156,8 @@ import java.io.OutputStream;
          this.written += 8;
       }
 
+      // Force flush() (that will throw an exception) on writeBit() or writeBits()
+      this.position = this.buffer.length; 
       this.flush();
       this.closed = true;
       this.os.close();
