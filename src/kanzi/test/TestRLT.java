@@ -48,7 +48,11 @@ public class TestRLT
               }
               else if (ii == 1)
               {
-                 arr = new int[] { 0, 1, 3, 4, 5, 6, 7, 7 };
+                 arr = new int[500];
+                 arr[0] = 1;
+                 
+                 for (int i=1; i<500; i++)
+                    arr[i] = 8;
               }
               else if (ii == 0)
               {
@@ -153,23 +157,37 @@ public class TestRLT
       }
 
       // Test speed
+      int iter = 50000;
+      System.out.println("\n\nSpeed test");
+      System.out.println("Iterations: "+iter);
+      
+      for (int jj=0; jj<3; jj++)
       {
-         System.out.println("\n\nSpeed test\n");
          input = new byte[30000];
          output = new byte[input.length];
+         reverse = new byte[input.length];
          IndexedByteArray iba1 = new IndexedByteArray(input, 0);
          IndexedByteArray iba2 = new IndexedByteArray(output, 0);
+         IndexedByteArray iba3 = new IndexedByteArray(reverse, 0);
 
-         for (int i = 0; i < input.length; i++)
+         // Generate random data with runs
+         int n = 0;
+                 
+         while (n < input.length)        
          {
-            input[i] = (byte) (i & 255);
+            byte val = (byte) (rnd.nextInt() & 255);
+            input[n++] = val;
+            int run = rnd.nextInt() & 255;
+            run -= 200;
+            
+            while ((--run > 0) && (n < input.length))       
+               input[n++] = val;
          }
 
          RLT rlt = new RLT();
          long before, after;
          long delta1 = 0;
          long delta2 = 0;
-         int iter = 100000;
 
          before = System.nanoTime();
 
@@ -188,14 +206,29 @@ public class TestRLT
          for (int ii = 0; ii < iter; ii++)
          {
             rlt = new RLT(); // Required to reset internal attributes
-            iba1.index = 0;
+            iba3.index = 0;
             iba2.index = 0;
-            rlt.inverse(iba2, iba1);
+            rlt.inverse(iba2, iba3);
          }
 
          after = System.nanoTime();
          delta2 += (after - before);
-         System.out.println("Iterations: "+iter);
+         System.out.println();
+         int idx = -1;
+         
+         // Sanity check
+         for (int i=0; i<iba1.index; i++)
+         {
+            if (iba1.array[i] != iba3.array[i])
+            {
+               idx = i;
+               break;
+            }
+         }
+         
+         if (idx >= 0)
+            System.out.println("Failure at index "+idx+" ("+iba1.array[idx]+"<->"+iba3.array[idx]+")");
+         
          System.out.println("RLT encoding [ms]: " + delta1 / 1000000);
          System.out.println("RLT decoding [ms]: " + delta2 / 1000000);
       }
