@@ -18,15 +18,15 @@ package kanzi.function;
 import kanzi.ByteFunction;
 import kanzi.IndexedByteArray;
 
-// Simple implementation of a Run Length Encoding
+// Simple implementation of a Run Length Codec
 // Length is transmitted as 1 or 2 bytes (minus 1 bit for the mask that indicates
 // whether a second byte is used). The run threshold is 2.
-// EG input:  0x10 0x11 0x11 0x17 0x13 0x13 0x13 0x13 0x13 0x13 0x12 (160 times) 0x14
-//   output: 0x10 0x11 0x11 0x00 0x17 0x13 0x13 0x05 0x12 0x12 0x80 0xA0 0x14
+// EG input: 0x10 0x11 0x11 0x17 0x13 0x13 0x13 0x13 0x13 0x13 0x12 (160 times) 0x14
+//   output: 0x10 0x11 0x11 0x17 0x13 0x13 0x13 0x05 0x12 0x12 0x80 0xA0 0x14
 
 public class RLT implements ByteFunction
 {
-   private static final int TWO_BYTE_LENGTH_MASK = 0x80;
+   private static final int TWO_BYTE_RLE_MASK = 0x80;
    private static final int MAX_RUN_VALUE = 0x8000;
 
    private final int size;
@@ -58,22 +58,22 @@ public class RLT implements ByteFunction
    {
       int srcIdx = source.index;
       int dstIdx = destination.index;
-      byte[] src = source.array;
-      byte[] dst = destination.array;
-      int end = (this.size == 0) ? src.length : srcIdx + this.size;
-      byte prev = 0;
+      final byte[] src = source.array;
+      final byte[] dst = destination.array;
+      final int end = (this.size == 0) ? src.length : srcIdx + this.size;
       int run = 0;
-      int threshold = dst.length - 4;
 
+      if ((srcIdx >= src.length) || (dstIdx >= dst.length))
+         return false;
+      
       // Initialize with a value different from the first data
-      if (srcIdx < end)
-         prev = (byte) (~src[srcIdx]);
+      byte prev = (byte) (~src[srcIdx]);
 
       while ((srcIdx < end) && (dstIdx < dst.length))
       {
          byte val = src[srcIdx];
 
-         // Encode up to 0x7F7F repetitions in the 'length' information
+         // Encode up to 0x7FFF repetitions in the 'length' information
          if ((prev == val) && (run < MAX_RUN_VALUE))
          {
             run++;
@@ -83,40 +83,26 @@ public class RLT implements ByteFunction
 
          if (run > 0)
          {
-            run--;
+            run--;         
+            dst[dstIdx++] = prev;
 
-            if (dstIdx < threshold)
+            if (dstIdx == dst.length)
+               break;
+
+            // Force MSB to indicate a 2 byte encoding of the length
+            if (run > 0x7F)
             {
-               dst[dstIdx++] = prev;
-
-               if (run > 0x7F)
-                  dst[dstIdx++] = (byte) (((run >> 8) & 0x7F) | TWO_BYTE_LENGTH_MASK);
-
-               dst[dstIdx++] = (byte) (run & 0xFF);
-               run = 0;
-            }
-            else
-            {
-               dst[dstIdx++] = prev;
-
-               if (dstIdx == dst.length)
-                  break;
-
-               // Add MSB to indicate a 2 byte encoding of the length
-               if (run > 0x7F)
-               {
-                  dst[dstIdx++] = (byte) (((run >> 8) & 0x7F) | TWO_BYTE_LENGTH_MASK);
-
-                  if (dstIdx == dst.length)
-                     break;
-               }
-
-               dst[dstIdx++] = (byte) (run & 0xFF);
-               run = 0;
+               dst[dstIdx++] = (byte) (((run >> 8) & 0x7F) | TWO_BYTE_RLE_MASK);
 
                if (dstIdx == dst.length)
                   break;
             }
+
+            dst[dstIdx++] = (byte) (run & 0xFF);
+            run = 0;
+
+            if (dstIdx == dst.length)
+               break;
          }
 
          srcIdx++;
@@ -130,21 +116,15 @@ public class RLT implements ByteFunction
          run--;
          dst[dstIdx++] = prev;
 
-         // Add MSB to indicate a 2 byte encoding of the length
+         // Force MSB to indicate a 2 byte encoding of the length
          if (run > 0x7F)
          {
             if (dstIdx < dst.length)
-            {
-               dst[dstIdx++] = (byte) (((run >> 8) & 0xFF) | TWO_BYTE_LENGTH_MASK);
-               run &= 0xFF;
-            }
+               dst[dstIdx++] = (byte) (((run >> 8) & 0x7F) | TWO_BYTE_RLE_MASK);
          }
 
          if (dstIdx < dst.length)
-         {
             dst[dstIdx++] = (byte) (run & 0xFF);
-            run = 0;
-         }
       }
 
       source.index = srcIdx;
@@ -158,30 +138,31 @@ public class RLT implements ByteFunction
    {
       int srcIdx = source.index;
       int dstIdx = destination.index;
-      byte[] src = source.array;
-      byte[] dst = destination.array;
-      int end = (this.size == 0) ? src.length : srcIdx + this.size;
-      byte prev = 0;
+      final byte[] src = source.array;
+      final byte[] dst = destination.array;
+      final int end = (this.size == 0) ? src.length : srcIdx + this.size;
       int run = 0;
 
+      if ((srcIdx >= src.length) || (dstIdx >= dst.length))
+         return false;
+
       // Initialize with a value different from the first data
-      if (srcIdx < end)
-         prev = (byte) (~src[srcIdx]);
+      byte prev = (byte) (~src[srcIdx]);
 
       while ((srcIdx < end) && (dstIdx < dst.length))
       {
          if (run > 0)
          {
             int iter = run < (dst.length - dstIdx) ? run : dst.length - dstIdx;
+            run -= iter;
 
-            for (int i=0; i<iter; i++)
+            while (--iter >= 0)
                dst[dstIdx++] = prev;
 
-            run -= iter;
             continue;
          }
 
-         byte val = src[srcIdx++];
+         final byte val = src[srcIdx++];
 
          if (prev == val)
          {
@@ -191,21 +172,15 @@ public class RLT implements ByteFunction
                return false;
             }
 
-            int length = src[srcIdx++];
+            run = src[srcIdx++] & 0xFF;
 
             // If the length is encoded in 2 bytes, process next byte
-            if ((length & TWO_BYTE_LENGTH_MASK) != 0)
+            if ((run & TWO_BYTE_RLE_MASK) != 0)
             {
                if (srcIdx == end)
                   return false;
 
-               length = (length & 0x7F) << 8;
-               length |= (src[srcIdx++] & 0xFF);
-               run = (short) length;
-            }
-            else
-            {
-               run = (length & 0xFF);
+               run = ((run & 0x7F) << 8) | (src[srcIdx++] & 0xFF);
             }
          }
 
@@ -216,19 +191,16 @@ public class RLT implements ByteFunction
       if (run > 0)
       {
          int iter = run < (dst.length - dstIdx) ? run : dst.length - dstIdx;
-
-         for (int i=0; i<iter; i++)
-            dst[dstIdx++] = prev;
-
          run -= iter;
-      }
 
-      // Not enough space in destination array
-      if (run != 0)
-         return false;
+         while (--iter >= 0)
+            dst[dstIdx++] = prev;
+      }
 
       source.index = srcIdx;
       destination.index = dstIdx;
-      return true;
+
+      // Not enough space in destination array
+      return (run == 0) ? true : false;
    }
 }
