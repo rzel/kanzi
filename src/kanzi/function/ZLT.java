@@ -52,6 +52,7 @@ public final class ZLT implements ByteFunction
 
 
    // Not thread safe
+   @Override
    public boolean forward(IndexedByteArray source, IndexedByteArray destination)
    {
       int srcIdx = source.index;
@@ -59,6 +60,7 @@ public final class ZLT implements ByteFunction
       final byte[] src = source.array;
       final byte[] dst = destination.array;
       final int end = (this.size == 0) ? src.length : srcIdx + this.size;
+      int runLength = this.copies;
 
       while ((srcIdx < end) && (dstIdx < dst.length))
       {
@@ -66,18 +68,18 @@ public final class ZLT implements ByteFunction
 
          if (val == 0)
          {
-            this.copies++;
+            runLength++;
             srcIdx++;
 
-            if ((srcIdx < end) && (this.copies < Integer.MAX_VALUE))
+            if ((srcIdx < end) && (runLength < Integer.MAX_VALUE))
                 continue;
          }
 
-         if (this.copies > 0)
+         if (runLength > 0)
          {
              // Write length
             int log2 = 0;
-            int run = this.copies + 1;
+            final int run = runLength + 1;
 
             for (int val2=run; val2>1; val2>>=1)
                log2++;
@@ -91,7 +93,7 @@ public final class ZLT implements ByteFunction
                    dst[dstIdx++] = (byte) ((run >> log2) & 1);
                 }
                 
-                this.copies = 0;
+                runLength = 0;
                 continue;
             }
             else // will reach end of destination array, must truncate block
@@ -106,7 +108,7 @@ public final class ZLT implements ByteFunction
                 // The most significant bit is not encoded, so log2 corresponds
                 // to the max value of (1 << ((log2+1) + 1)) - 1
                 int delta = (1 << (log2 + 2)) - 1;
-                this.copies -= delta;
+                runLength -= delta;
                 srcIdx -= delta;
                 break;
             }
@@ -130,6 +132,7 @@ public final class ZLT implements ByteFunction
          srcIdx++;
       }
 
+      this.copies = runLength;
       source.index = srcIdx;
       destination.index = dstIdx;
       return true;
@@ -137,6 +140,7 @@ public final class ZLT implements ByteFunction
 
 
    // Not thread safe
+   @Override
    public boolean inverse(IndexedByteArray source, IndexedByteArray destination)
    {
       int srcIdx = source.index;
@@ -144,12 +148,13 @@ public final class ZLT implements ByteFunction
       final byte[] src = source.array;
       final byte[] dst = destination.array;
       final int end = (this.size == 0) ? src.length : srcIdx + this.size;
+      int runLength = this.copies;
 
       while ((srcIdx < end) && (dstIdx < dst.length))
       {
-         if (this.copies > 0)
+         if (runLength > 0)
          {
-            this.copies--;
+            runLength--;
             dst[dstIdx++] = 0;
             continue;
          }
@@ -175,7 +180,7 @@ public final class ZLT implements ByteFunction
             }
 
             // Update run length
-            this.copies = run - 1;
+            runLength = run - 1;
             continue;
          }
 
@@ -191,11 +196,12 @@ public final class ZLT implements ByteFunction
          srcIdx++;
       }
 
-      int min = (this.copies <= (dst.length-dstIdx)) ? this.copies : dst.length-dstIdx;
+      int min = (runLength <= (dst.length-dstIdx)) ? runLength : dst.length-dstIdx;
 
-      for (int i=min; i>0; i--)
+      while (--min >= 0)
          dst[dstIdx++] = 0;
 
+      this.copies = runLength;
       source.index = srcIdx;
       destination.index = dstIdx;
       return true;
