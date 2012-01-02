@@ -29,6 +29,7 @@ public class TestZLT
       byte[] input;
       byte[] output;
       byte[] res;
+      Random rnd = new Random();
 
       // Test behavior
       {
@@ -136,7 +137,7 @@ int[] arr = new int[] {
                 ok = false;
          }
 
-         System.out.print((ok == true) ? "\n=> Identical" : "\n=> Different");
+         System.out.print((ok == true) ? "\nIdentical" : "\nDifferent");
 
          System.out.println();
       }
@@ -145,9 +146,7 @@ int[] arr = new int[] {
       for (int ii=2; ii<=20; ii++)
       {
          System.out.println("\n\nCorrectness test "+ii);
-
          int[] arr = new int[64];
-         Random rnd = new Random();
 
          for (int i=0; i<arr.length; i++)
          {
@@ -212,23 +211,38 @@ int[] arr = new int[] {
       }
 
       // Test speed
+      // Test speed
+      int iter = 50000;
+      System.out.println("\n\nSpeed test");
+      System.out.println("Iterations: "+iter);
+      
+      for (int jj=0; jj<3; jj++)
       {
-         System.out.println("\n\nSpeed test\n");
-         input = new byte[10000];
+         input = new byte[30000];
          output = new byte[input.length];
+         res = new byte[input.length];
          IndexedByteArray iba1 = new IndexedByteArray(input, 0);
          IndexedByteArray iba2 = new IndexedByteArray(output, 0);
+         IndexedByteArray iba3 = new IndexedByteArray(res, 0);
 
-         for (int i = 100; i < input.length; i++)
+         // Generate random data with runs
+         int n = 0;
+                 
+         while (n < input.length)        
          {
-            input[i] = (byte) (i & 255);
+            byte val = (byte) (rnd.nextInt() & 3);
+            input[n++] = val;
+            int run = rnd.nextInt() & 255;
+            run -= 200;
+            
+            while ((--run > 0) && (n < input.length))       
+               input[n++] = val;
          }
          
          ZLT zlt = new ZLT();
          long before, after;
          long delta1 = 0;
          long delta2 = 0;
-         int iter = 100000;
 
          before = System.nanoTime();
          
@@ -247,14 +261,31 @@ int[] arr = new int[] {
          for (int ii = 0; ii < iter; ii++)
          {
             zlt = new ZLT(); // Required to reset internal attributes
-            iba1.index = 0;
             iba2.index = 0;
-            zlt.inverse(iba2, iba1);
+            iba3.index = 0;
+            zlt.inverse(iba2, iba3);
          }
 
          after = System.nanoTime();
          delta2 += (after - before);
-         System.out.println("Iterations: "+iter);
+         after = System.nanoTime();
+         delta2 += (after - before);
+         System.out.println();
+         int idx = -1;
+         
+         // Sanity check
+         for (int i=0; i<iba1.index; i++)
+         {
+            if (iba1.array[i] != iba3.array[i])
+            {
+               idx = i;
+               break;
+            }
+         }
+         
+         if (idx >= 0)
+            System.out.println("Failure at index "+idx+" ("+iba1.array[idx]+"<->"+iba3.array[idx]+")");
+
          System.out.println("ZLT encoding [ms]: " + delta1 / 1000000);
          System.out.println("ZLT decoding [ms]: " + delta2 / 1000000);
       }
