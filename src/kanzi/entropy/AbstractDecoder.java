@@ -47,7 +47,7 @@ public abstract class AbstractDecoder implements EntropyDecoder
       }
       catch (BitStreamException e)
       {
-         return i;
+         return i - blkptr;
       }
 
       return len;
