@@ -52,7 +52,7 @@ public abstract class AbstractEncoder implements EntropyEncoder
         }
         catch (BitStreamException e)
         {
-           return i;
+           return i - blkptr;
         }
 
         return len;
