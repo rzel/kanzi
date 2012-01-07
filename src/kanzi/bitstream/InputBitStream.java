@@ -46,13 +46,14 @@ import java.io.InputStream;
               || ((this.bitIndex == 7) && (this.position == this.maxPosition)))
          this.readFromInputStream(0, this.buffer.length);
 
+      final int bit = (this.buffer[this.position] >> this.bitIndex) & 1;
       this.bitIndex = (this.bitIndex + 7) & 7;
       this.read++;
 
       if (this.bitIndex == 7)
          this.position++;
 
-      return (this.buffer[this.position] >> this.bitIndex) & 1;
+      return bit;
    }
 
 
