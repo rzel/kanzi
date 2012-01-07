@@ -19,7 +19,6 @@ import kanzi.BitStream;
 import kanzi.ArrayComparator;
 import kanzi.util.sort.DefaultArrayComparator;
 import kanzi.util.sort.QuickSort;
-import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.TreeMap;
 
@@ -83,7 +82,7 @@ import java.util.TreeMap;
 
         for (int i=array.length-1; i>=0; i--)
         {
-           int val = array[i];
+            final int val = array[i];
 
             if (frequencies[val] != 0)
               queue1.addFirst(new Node((byte) val, frequencies[val]));
@@ -198,13 +197,16 @@ import java.util.TreeMap;
         // Sort by decreasing size (first key) and increasing value (second key)
         QuickSort sorter = new QuickSort(array.length, new HuffmanArrayComparator(this.sizes));
         sorter.sort(array, 0);
-        Arrays.fill(this.codes, 0);
+
+        for (int i=this.codes.length-1; i>=0; i--)
+           this.codes[i] = 0;
+        
         int code = 0;
         int len = this.sizes[array[0]];
 
         for (int i=0; i<array.length; i++)
         {
-            int idx = array[i];
+            final int idx = array[i];
 
             // Since the sizes are decreasing, exit on the first occurence of 0
             if (this.sizes[idx] == 0)
