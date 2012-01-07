@@ -19,7 +19,6 @@ import kanzi.BitStream;
 import kanzi.BitStreamException;
 
 
-
 public class HuffmanEncoder extends AbstractEncoder
 {
     private final BitStream bitstream;
@@ -34,8 +33,8 @@ public class HuffmanEncoder extends AbstractEncoder
             throw new NullPointerException("Invalid null bitstream parameter");
 
         this.bitstream = bitstream;
-        this.canonical = canonical;
         this.buffer = new int[256];
+        this.canonical = canonical;
 
         // Write encoder type and max length (32 bits max)
         final int bit = (this.canonical == true) ? 1 : 0;
@@ -49,8 +48,6 @@ public class HuffmanEncoder extends AbstractEncoder
            return false;
         
         this.tree = new HuffmanTree(frequencies, this.canonical);
- 
-        int maxSize = 0;
 
         if (this.canonical == false)
         {
@@ -62,7 +59,7 @@ public class HuffmanEncoder extends AbstractEncoder
                     maxFreq = frequencies[i];
             }
 
-            maxSize = 32 - Integer.numberOfLeadingZeros(maxFreq);
+            final int maxSize = 32 - Integer.numberOfLeadingZeros(maxFreq);
             this.bitstream.writeBits(maxSize, 5);
 
             // Transmit frequencies
@@ -71,20 +68,18 @@ public class HuffmanEncoder extends AbstractEncoder
         }
         else
         {
-            for (int i=0; i<frequencies.length; i++)
+            int prevSize = this.tree.getSize(0);
+            this.bitstream.writeBits(prevSize, 5);
+            ExpGolombEncoder egenc = new ExpGolombEncoder(this.bitstream, true);
+
+            // Transmit code lengths only, frequencies and code do not matter
+            // Unary encode the length difference
+            for (int i=1; i<frequencies.length; i++)
             {
-                int sz = this.tree.getSize(i);
-
-                if (maxSize < sz)
-                    maxSize = sz;
+                final int nextSize = this.tree.getSize(i);
+                egenc.encodeByte((byte) (nextSize - prevSize));
+                prevSize = nextSize;
             }
-
-            maxSize = 32 - Integer.numberOfLeadingZeros(maxSize);
-            this.bitstream.writeBits(maxSize, 5);
-
-            // Transmit code lengths only, frequencies and code do not matter 
-            for (int i=0; i<frequencies.length; i++)
-                this.bitstream.writeBits(this.tree.getSize(i), maxSize);
         }
         
         return true;
@@ -95,15 +90,17 @@ public class HuffmanEncoder extends AbstractEncoder
     @Override
     public int encode(byte[] array, int blkptr, int len)
     {
+       final int[] buf = this.buffer;
+
        for (int i=0; i<256; i++)
-          this.buffer[i] = 0;
+          buf[i] = 0;
 
        final int end = blkptr + len;
 
        for (int i=blkptr; i<end; i++)
-          this.buffer[array[i] & 0xFF]++;
+          buf[array[i] & 0xFF]++;
 
-       this.updateFrequencies(this.buffer);    
+       this.updateFrequencies(buf);
        return super.encode(array, blkptr, len);
     }
 
@@ -124,7 +121,7 @@ public class HuffmanEncoder extends AbstractEncoder
     @Override
     public void dispose()
     {
-       this.bitstream.close();
+       this.bitstream.flush();
     }
 
 
