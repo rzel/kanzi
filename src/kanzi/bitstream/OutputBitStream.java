@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
  */
+
 package kanzi.bitstream;
 
 import kanzi.BitStreamException;
@@ -23,9 +24,9 @@ import java.io.OutputStream;
 {
    private final OutputStream os;
    private final byte[] buffer;
+   private boolean closed;
    private int position;
    private int bitIndex;
-   private boolean closed;
    private long written;
 
 
@@ -40,71 +41,82 @@ import java.io.OutputStream;
    // Processes the least significant bit of the input integer
    public synchronized boolean writeBit(int bit)
    {
-      if ((this.position > this.buffer.length)
-              || ((this.bitIndex == 7) && (this.position == this.buffer.length)))
-         this.flush();
+      try
+      {
+         this.buffer[this.position] |= ((bit & 1) << this.bitIndex);
+         this.bitIndex = (this.bitIndex + 7) & 7;
+         this.written++;
 
-      this.buffer[this.position] |= ((bit & 1) << this.bitIndex);
+         if (this.bitIndex == 7)
+         {
+            if (++this.position >= this.buffer.length)
+               this.flush();
+         }
+      }
+      catch (ArrayIndexOutOfBoundsException e)
+      {
+         throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
+      }
 
-      if (this.bitIndex == 0)
-        this.position++;
-
-      this.bitIndex = (this.bitIndex + 7) & 7;
-      this.written++;
       return true;
    }
 
 
    // 'length' must be max 64
    public synchronized int writeBits(long value, int length)
-   {      
-      int remaining = length;
-
-      // Pad the current position in buffer
-      if (this.bitIndex != 7)
+   {
+      try
       {
-         int idx = this.bitIndex;
-         final int len = (remaining <= idx + 1) ? remaining : idx + 1;
-         remaining -= len;
-         final int bits = (int) ((value >> remaining) & ((1 << len) - 1));
-         this.buffer[this.position] |= (bits << (idx + 1 - len));
-         idx = (idx + 8 - len) & 7;
-         this.written += len;
-         this.bitIndex = idx;
+         int remaining = length;
 
-         if (idx == 7)
-            this.position++;
-      }
-
-      // Need to write more bits ?
-      if (this.bitIndex == 7)
-      {
-         final int inBufferBytes = (this.position <= this.buffer.length) ? 
-               this.buffer.length - this.position : 0;
-         final int inBufferBits = (inBufferBytes << 3);
-       
-         if (inBufferBits < remaining)
-            this.flush();
-         
-          // We are byte aligned, fast track
-         while (remaining >= 8)
+         // Pad the current position in buffer
+         if (this.bitIndex != 7)
          {
-            remaining -= 8;
-            this.buffer[this.position++] = (byte) ((value >> remaining) & 0xFF);
-            this.written += 8;
+            int idx = this.bitIndex;
+            final int len = (remaining <= idx + 1) ? remaining : idx + 1;
+            remaining -= len;
+            final int bits = (int) ((value >> remaining) & ((1 << len) - 1));
+            this.buffer[this.position] |= (bits << (idx + 1 - len));
+            idx = (idx + 8 - len) & 7;
+            this.written += len;
+            this.bitIndex = idx;
+
+            if (idx == 7)
+            {
+               if (++this.position >= this.buffer.length)
+                  this.flush();
+            }
          }
 
-         // Write last bits into current position
-         if (remaining > 0)
+         if (this.bitIndex == 7)
          {
-            final int bits = (int) (value & ((1 << remaining) - 1));
-            this.buffer[this.position] |= (bits << (8 - remaining));
-            this.written += remaining;
-            this.bitIndex -= remaining;
-         }
-      }
+            // Progress byte by byte
+            while (remaining >= 8)
+            {
+               remaining -= 8;
+               this.buffer[this.position] = (byte) ((value >> remaining) & 0xFF);
+               this.written += 8;
 
-      return length;
+               if (++this.position >= this.buffer.length)
+                  this.flush();
+            }
+
+            // Process remaining bits
+            if (remaining > 0)
+            {
+               final int bits = (int) (value & ((1 << remaining) - 1));
+               this.buffer[this.position] |= (bits << (8 - remaining));
+               this.written += remaining;
+               this.bitIndex -= remaining;
+            }
+         }
+
+         return length;
+      }
+      catch (ArrayIndexOutOfBoundsException e)
+      {
+         throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
+      }
    }
 
 
@@ -116,13 +128,18 @@ import java.io.OutputStream;
       try
       {
          if (this.position > 0)
-            this.os.write(this.buffer, 0, this.position);
+         {
+            final int len = this.position;
+            this.os.write(this.buffer, 0, len);
+            this.buffer[0] = (this.bitIndex != 7) ? this.buffer[this.position] : 0;
+
+            for (int i=1; i<len; i++) // do not reset buffer[0]
+               this.buffer[i] = 0;
+
+            this.position = 0;
+         }
 
          this.os.flush();
-         this.position = 0;
-
-         for (int i=0; i<this.buffer.length; i++)
-            this.buffer[i] = 0;
       }
       catch (IOException e)
       {
@@ -138,7 +155,9 @@ import java.io.OutputStream;
 
       if ((this.written > 0) && (this.bitIndex != 7))
       {
-         this.position++;
+         if (++this.position >= this.buffer.length)
+            this.flush();
+
          this.written -= (7 - this.bitIndex);
          this.written += 8;
          this.bitIndex = 7;
@@ -147,20 +166,21 @@ import java.io.OutputStream;
       // Adjust stream size to multiple of 8 bytes (to allow decoding of long)
       while ((this.written & 63) != 0)
       {
-         if (this.position >= this.buffer.length)
-            this.flush();
-
-         // Pad with 0xFF (do not choose 0x00)
+         // Pad with 0xFF
          this.buffer[this.position] = (byte) 0xFF;
-         this.position++;
          this.written += 8;
+
+         if (++this.position >= this.buffer.length)
+            this.flush();
       }
 
-      // Force flush() (that will throw an exception) on writeBit() or writeBits()
-      this.position = this.buffer.length; 
       this.flush();
-      this.closed = true;
       this.os.close();
+      this.closed = true;
+
+      // Force an exception on any write attempt
+      this.position = this.buffer.length;
+      this.bitIndex = 7;
    }
 
 
