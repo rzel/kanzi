@@ -23,6 +23,7 @@ import kanzi.BitStreamException;
 public class HuffmanDecoder extends AbstractDecoder
 {
     private final BitStream bitstream;
+    private final int[] buffer;
     private boolean canonical;
     private HuffmanTree tree;
 
@@ -33,39 +34,43 @@ public class HuffmanDecoder extends AbstractDecoder
             throw new NullPointerException("Invalid null bitstream parameter");
 
         this.bitstream = bitstream;
+        this.buffer = new int[256];
         this.canonical = (this.bitstream.readBit() == 1) ? true : false;
     }
     
     
     public boolean readFrequencies() throws BitStreamException
     {
-        int[] data = new int[256];
-        int dataSize = (int) this.bitstream.readBits(5);
+        final int[] buf = this.buffer;
 
         if (this.canonical == false)
         {
+            final int dataSize = (int) this.bitstream.readBits(5);
+            
             // Read frequencies
-            for (int i=0; i<data.length; i++)
-                data[i] = (int) this.bitstream.readBits(dataSize);
+            for (int i=0; i<buf.length; i++)
+                buf[i] = (int) this.bitstream.readBits(dataSize);
             
             // Create Huffman tree        
-            this.tree = new HuffmanTree(data, this.canonical);
+            this.tree = new HuffmanTree(buf, this.canonical);
         }
         else
         {
            int maxSize = 0;
+           buf[0] = (int) this.bitstream.readBits(5);
+           ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
            
            // Read lengths
-           for (int i=0; i<data.length; i++)
+           for (int i=1; i<buf.length; i++)
            {
-               data[i] = (int) this.bitstream.readBits(dataSize);
+               buf[i] = buf[i-1] + egdec.decodeByte();
                
-               if (maxSize < data[i])
-                  maxSize = data[i];
+               if (maxSize < buf[i])
+                  maxSize = buf[i];
            }
            
            // Create Huffman tree        
-           this.tree = new HuffmanTree(data, maxSize);
+           this.tree = new HuffmanTree(buf, maxSize);
         }
         
         return true;
