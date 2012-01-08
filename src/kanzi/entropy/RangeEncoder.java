@@ -44,6 +44,9 @@ public final class RangeEncoder extends AbstractEncoder
 
     public RangeEncoder(BitStream bitstream)
     {
+        if (bitstream == null)
+            throw new NullPointerException("Invalid null bitstream parameter");
+
         this.range = (TOP << 8) - 1;
         this.bitstream = bitstream;
 
@@ -121,7 +124,7 @@ public final class RangeEncoder extends AbstractEncoder
     {
         if ((this.written == true) && (this.flushed == false))
         {
-            // After this call the frequency tables may not be up to date. Do not care
+            // After this call the frequency tables may not be up to date
             this.flushed = true;
 
             for (int i=0; i<7; i++)
