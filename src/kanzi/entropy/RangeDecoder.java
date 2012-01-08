@@ -45,6 +45,9 @@ public final class RangeDecoder extends AbstractDecoder
 
     public RangeDecoder(BitStream bitstream)
     {
+        if (bitstream == null)
+            throw new NullPointerException("Invalid null bitstream parameter");
+
         this.range = (TOP << 8) - 1;
         this.bitstream = bitstream;
         
