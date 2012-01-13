@@ -34,8 +34,8 @@ public final class ResidueBlockCodec
 
     private static final int MAX_NON_ZEROS = 30;// enough ?
     private static final int LOG_THRESHOLD_NZ = 4;
-    private final int BLOCK_DIM = 8;
-    private final int BLOCK_SIZE = BLOCK_DIM * BLOCK_DIM;
+    private static final int BLOCK_DIM = 8;
+    private static final int BLOCK_SIZE = BLOCK_DIM * BLOCK_DIM;
     private static final byte SCAN_H  = 0;
     private static final byte SCAN_V  = 1;
     private static final byte SCAN_Z  = 2;
