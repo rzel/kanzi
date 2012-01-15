@@ -37,6 +37,9 @@ public final class IndexedIntArray
     {
         try
         {
+            if (o == null)
+               return false;
+
             if (this == o)
                return true;
 
@@ -47,10 +50,6 @@ public final class IndexedIntArray
         {
             return false;
         }
-        catch (NullPointerException e)
-        {
-            return false;
-        }
     }
         
 
@@ -58,7 +57,7 @@ public final class IndexedIntArray
     public int hashCode()
     {
        // Non constant !
-       return (this.index + (17 * this.array.hashCode()));
+       return this.index + ((this.array == null) ? 0 :(17 * this.array.hashCode()));
     }
 
 
@@ -67,7 +66,7 @@ public final class IndexedIntArray
     {
         StringBuilder builder = new StringBuilder(100);
         builder.append("[");
-        builder.append(this.array.toString());
+        builder.append(String.valueOf(this.array));
         builder.append(","); 
         builder.append(this.index); 
         builder.append("]"); 
