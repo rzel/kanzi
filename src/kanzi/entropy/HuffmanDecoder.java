@@ -30,14 +30,28 @@ public class HuffmanDecoder extends AbstractDecoder
 
     public HuffmanDecoder(BitStream bitstream) throws BitStreamException
     {
-        if (bitstream == null)
-            throw new NullPointerException("Invalid null bitstream parameter");
-
-        this.bitstream = bitstream;
-        this.buffer = new int[256];
-        this.canonical = (this.bitstream.readBit() == 1) ? true : false;
+       this(bitstream, true);
     }
     
+ 
+    public HuffmanDecoder(BitStream bitstream, boolean canonical) throws BitStreamException
+    {
+        if (bitstream == null)
+            throw new NullPointerException("Invalid null bitstream parameter");
+      
+        this.bitstream = bitstream;
+        this.buffer = new int[256];
+        this.canonical = canonical;
+        int maxSize = 8;
+
+        // Default frequencies
+        for (int i=0; i<256; i++)
+           this.buffer[i] = 1;
+         
+        this.tree = (this.canonical == true) ? new HuffmanTree(this.buffer, maxSize) : 
+                new HuffmanTree(this.buffer, false);
+    }
+       
     
     public boolean readFrequencies() throws BitStreamException
     {
@@ -52,7 +66,7 @@ public class HuffmanDecoder extends AbstractDecoder
                 buf[i] = (int) this.bitstream.readBits(dataSize);
             
             // Create Huffman tree        
-            this.tree = new HuffmanTree(buf, this.canonical);
+            this.tree = new HuffmanTree(buf, false);
         }
         else
         {
@@ -90,7 +104,7 @@ public class HuffmanDecoder extends AbstractDecoder
     @Override
     public final byte decodeByte()
     {
-        return this.tree.getSymbol(this.bitstream);
+       return this.tree.getSymbol(this.bitstream);
     }
     
 
