@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.function;
 
+import kanzi.BitStream;
 import kanzi.ByteFunction;
 import kanzi.EntropyDecoder;
 import kanzi.EntropyEncoder;
@@ -198,7 +199,7 @@ public class BlockCodec implements ByteFunction
        if (blockSize > 0xFFFF)
            headerDataSize++;
 
-       final int headerSize = 1 + headerDataSize + headerDataSize;
+       final int headerSize = 1 + headerDataSize + headerDataSize; 
        mode |= headerDataSize;
        output.index += headerSize;
        ZLT zlt = new ZLT(blockSize);
@@ -226,7 +227,7 @@ public class BlockCodec implements ByteFunction
        final int compressedLength = output.index - headerSize - headerStartIdx;
        
        // Write block header
-       output.array[headerStartIdx] =  mode;
+       output.array[headerStartIdx] = mode;
        int shift = (headerDataSize - 1) << 3;
        int idx = headerStartIdx + 1;
        
@@ -256,7 +257,7 @@ public class BlockCodec implements ByteFunction
          if (output.array.length < output.index + length)
             return false;
 
-         // Just copy block
+         // Just copy (small) block
          for (int i=0; i<length; i++)
             output.array[output.index++] = input.array[input.index++];
 
@@ -363,67 +364,154 @@ public class BlockCodec implements ByteFunction
       if (this.forward(data, output) == false)
          return -1;
 
-      return ee.encode(data.array, 0, output.index);
+      // Extract header info and write it to the bitstream directly
+      // (some entropy decoders need block data statistics before decoding a byte)
+      BWTBlockHeader header = new BWTBlockHeader(data.array, data.index);
+      final BitStream bs = ee.getBitStream();
+      bs.writeBits(header.mode, 8);
+      bs.writeBits(header.blockLength, 8*header.dataSize);
+      bs.writeBits(header.primaryIndex, 8*header.dataSize);
+
+      // Entropy encode data block
+      return ee.encode(data.array, (2*header.dataSize)+1, header.blockLength);
    }
 
 
    // Return -1 if error, otherwise the number of bytes read from the encoder
    public int decode(IndexedByteArray data, EntropyDecoder ed)
    {
-      if (ed == null)
-         return -1;
+      // Extract header directly from bitstream
+      BWTBlockHeader header = new BWTBlockHeader(ed.getBitStream());
 
-      final int mode = ed.decodeByte() & 0xFF;
-      final int savedIdx = data.index;
-      data.array[data.index++] = (byte) mode;
-      int length = 0;
-      int headerSize = 1;
-
-      // Extract length
-      if ((mode & COPY_BLOCK_MASK) != 0)
-      {
-         length = mode & COPY_LENGTH_MASK;
-      }
-      else
-      {
-         final int headerDataSize = mode & 0x0F;
-         headerSize += headerDataSize; // compressed block size
-         headerSize += headerDataSize; // BWT index
-         byte val = ed.decodeByte();
-         length = val & 0xFF;
-         data.array[data.index++] = val;
-
-         if (headerDataSize > 1)
-         {
-            val = ed.decodeByte();
-            length = (length << 8) | (val & 0xFF);
-            data.array[data.index++] = val;
-         }
-
-         if (headerDataSize > 2)
-         {
-            val = ed.decodeByte();
-            length = (length << 8) | (val & 0xFF);
-            data.array[data.index++] = val;
-         }
-      }
-      
-      if (length == 0)
+      if (header.blockLength == 0)
          return 0;
+ 
+      int savedIdx = data.index;
+      data.array[data.index++] = header.mode;
+      int shift = (header.dataSize - 1) << 3;
+                    
+      for (int i=0; i<header.dataSize; i++, shift-=8)
+         data.array[data.index++] = (byte) ((header.blockLength >> shift) & 0xFF);
+         
+      shift = (header.dataSize - 1) << 3;
+                    
+      for (int i=0; i<header.dataSize; i++, shift-=8)
+         data.array[data.index++] = (byte) ((header.primaryIndex >> shift) & 0xFF);     
+      
+      // Block entropy decode 
+      final int decoded = ed.decode(data.array, data.index, header.blockLength);
 
-      final int toDecode = length + headerSize - (data.index - savedIdx);
-      final int decoded = ed.decode(data.array, data.index, toDecode);
-
-      if (decoded != toDecode)
+      if (decoded != header.blockLength)
          return -1;
 
       data.index = savedIdx;
-      this.setSize(length);
+      this.setSize(header.blockLength);
 
       if (this.inverse(new IndexedByteArray(data.array, data.index), data) == false)
          return -1;
 
       return data.index - savedIdx;
+   }
+   
+   
+   // Internal utility class to build a block header
+   private static class BWTBlockHeader
+   {
+      byte mode;
+      int blockLength;
+      int primaryIndex;
+      int dataSize;
+
+
+      public BWTBlockHeader(byte[] array, int idx)
+      {
+         this.mode = (byte) (array[idx++] & 0xFF);
+         this.blockLength = 0;
+
+         if ((this.mode & COPY_BLOCK_MASK) != 0)
+         {
+            this.blockLength = this.mode & COPY_LENGTH_MASK;
+            this.dataSize = 0;
+         } 
+         else
+         {
+            this.dataSize = this.mode & 0x0F;
+            int val = array[idx++] & 0xFF;
+            this.blockLength = val;
+
+            if (this.dataSize > 1)
+            {
+               val = array[idx++] & 0xFF;
+               this.blockLength = (this.blockLength << 8) | val;
+            }
+
+            if (this.dataSize > 2)
+            {
+               val = array[idx++] & 0xFF;
+               this.blockLength = (this.blockLength << 8) | val;
+            }
+            
+            val = array[idx++] & 0xFF;
+            this.primaryIndex = val;
+
+            if (this.dataSize > 1)
+            {
+               val = array[idx++] & 0xFF;
+               this.primaryIndex = (this.primaryIndex << 8) | val;
+            }
+
+            if (this.dataSize > 2)
+            {
+               val = array[idx++] & 0xFF;
+               this.primaryIndex = (this.primaryIndex << 8) | val;
+            }
+         }
+      }
+
+      
+      public BWTBlockHeader(BitStream bs)
+      {
+         this.mode = (byte) (bs.readBits(8) & 0xFF);
+         this.blockLength = 0;
+
+         if ((this.mode & COPY_BLOCK_MASK) != 0)
+         {
+            this.blockLength = this.mode & COPY_LENGTH_MASK;
+         } 
+         else
+         {
+            this.dataSize = this.mode & 0x0F;
+            int val = (int) (bs.readBits(8) & 0xFF);
+            this.blockLength = val;
+
+            if (this.dataSize > 1)
+            {
+               val = (int) (bs.readBits(8) & 0xFF);
+               this.blockLength = (this.blockLength << 8) | val;
+            }
+
+            if (this.dataSize > 2)
+            {
+               val = (int) (bs.readBits(8) & 0xFF);
+               this.blockLength = (this.blockLength << 8) | val;
+            }
+            
+            val = (int) (bs.readBits(8) & 0xFF);
+            this.primaryIndex = val;
+
+            if (this.dataSize > 1)
+            {
+               val = (int) (bs.readBits(8) & 0xFF);
+               this.primaryIndex = (this.primaryIndex << 8) | val;
+            }
+
+            if (this.dataSize > 2)
+            {
+               val = (int) (bs.readBits(8) & 0xFF);
+               this.primaryIndex = (this.primaryIndex << 8) | val;
+            }
+         }
+      }
    }
 
 }
