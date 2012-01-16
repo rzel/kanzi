@@ -22,31 +22,49 @@ import kanzi.BitStreamException;
 public class HuffmanEncoder extends AbstractEncoder
 {
     private final BitStream bitstream;
-    private final boolean canonical;
+    private final int[] buffer;
+    private boolean canonical;
     private HuffmanTree tree;
-    private int[] buffer;
 
 
     public HuffmanEncoder(BitStream bitstream, boolean canonical) throws BitStreamException
     {
+       this(bitstream, canonical, null);
+    }
+    
+    
+    public HuffmanEncoder(BitStream bitstream, boolean canonical, int[] frequencies) throws BitStreamException
+    {
         if (bitstream == null)
-            throw new NullPointerException("Invalid null bitstream parameter");
+           throw new NullPointerException("Invalid null bitstream parameter");
+
+        if ((frequencies != null) && (frequencies.length > 256))
+           throw new IllegalArgumentException("Invalid frequency array length: "+frequencies.length);
 
         this.bitstream = bitstream;
         this.buffer = new int[256];
         this.canonical = canonical;
+        
+        if (frequencies != null)
+        {
+           System.arraycopy(frequencies, 0, this.buffer, 0, frequencies.length);
+        }
+        else
+        {
+           // Default frequencies
+           for (int i=0; i<256; i++)
+              this.buffer[i] = 1;
+        }
 
-        // Write encoder type and max length (32 bits max)
-        final int bit = (this.canonical == true) ? 1 : 0;
-        this.bitstream.writeBit(bit);
+        this.tree = new HuffmanTree(this.buffer, this.canonical);
     }
 
-
+    
     public boolean updateFrequencies(int[] frequencies) throws BitStreamException
-    {
+    {              
         if (frequencies == null)
            return false;
-        
+
         this.tree = new HuffmanTree(frequencies, this.canonical);
 
         if (this.canonical == false)
@@ -109,9 +127,6 @@ public class HuffmanEncoder extends AbstractEncoder
     @Override
     public boolean encodeByte(byte val)
     {
-        if (this.tree == null)
-           return false;
-        
         final long bits = this.tree.getCode(val & 0xFF);
         final int size = this.tree.getSize(val & 0xFF);
         return (this.bitstream.writeBits(bits, size) == size);
