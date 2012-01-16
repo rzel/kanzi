@@ -129,11 +129,13 @@ import java.io.OutputStream;
       {
          if (this.position > 0)
          {
-            final int len = this.position;
-            this.os.write(this.buffer, 0, len);
+            // The buffer contains an incomplete byte at 'position'
+            this.os.write(this.buffer, 0, this.position);
             this.buffer[0] = (this.bitIndex != 7) ? this.buffer[this.position] : 0;
-
-            for (int i=1; i<len; i++) // do not reset buffer[0]
+            final int end = (this.position < this.buffer.length) ? this.position 
+                    : this.buffer.length-1;
+            
+            for (int i=1; i<=end; i++) // do not reset buffer[0]
                this.buffer[i] = 0;
 
             this.position = 0;
