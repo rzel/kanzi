@@ -117,10 +117,7 @@ public class TestBlockCoder
             IndexedByteArray iba = new IndexedByteArray(buffer, 0);
 
             // Encode
-            EntropyEncoder entropyCoder = new RangeEncoder(dbs);
-//            ByteArrayInputStream bais = new ByteArrayInputStream(buffer1);
-//            InputStream is = new BufferedInputStream(bais);
-
+            EntropyEncoder entropyCoder;
             File input;
             input = new File(fileName);
             FileInputStream fis = new FileInputStream(input);
@@ -135,6 +132,7 @@ public class TestBlockCoder
             // in the block for headr data)
             while ((len = fis.read(iba.array, 0, blockSize)) != -1)
             {
+               entropyCoder = new RangeEncoder(dbs);
                read += len;
                long before = System.nanoTime();
                iba.index = 0;
@@ -152,17 +150,17 @@ public class TestBlockCoder
               if (debug)
                  System.out.println(step+": "+written);
 
+               entropyCoder.dispose();
                step++;
             }
 
             // End block of size 0
             // The 'real' value is BlockCodec.COPY_BLOCK_MASK | (0 & BlockCodec.COPY_LENGTH_MASK)
-            entropyCoder.encodeByte((byte) 0x80);
+            //entropyCoder.encodeByte((byte) 0x80);
+            dbs.writeBits(0x80, 8);
 
             System.out.println();
-            System.out.println("Buffer size:      "+buffer.length);
             System.out.println("File size:        "+read);
-            entropyCoder.dispose();
             dbs.close();
             System.out.println();
             System.out.println("Encoding took "+(delta/1000000)+" ms");
@@ -174,12 +172,9 @@ public class TestBlockCoder
             // Decode
             // !!! The decoder must know the block size of the encoder !!!
             fis = new FileInputStream(output);
-            //BitStream ibs = new DefaultBitStream(is, iba.array.length);
-            //DebugBitStream dbs2 = new DebugBitStream(ibs, System.out);
-            //dbs2.showByte(true);
             BitStream dbs2 = new DefaultBitStream(fis, iba.array.length);
 
-            EntropyDecoder entropyDecoder = new RangeDecoder(dbs2);
+            EntropyDecoder entropyDecoder;
             delta = 0L;
             int decoded;
             int sum = 0;
@@ -188,7 +183,8 @@ public class TestBlockCoder
 
             // Decode next block
             do
-            {               
+            {        
+               entropyDecoder = new RangeDecoder(dbs2);
                iba.index = 0; 
                long before = System.nanoTime();
                decoded = blockCodec.decode(iba, entropyDecoder);
