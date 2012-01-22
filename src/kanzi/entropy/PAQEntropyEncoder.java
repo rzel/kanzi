@@ -16,7 +16,7 @@ limitations under the License.
 package kanzi.entropy;
 
 
-import kanzi.BitStream;
+import kanzi.OutputBitStream;
 
 //// This is an algorithm for entropy compression of the Burrows-Wheeler
 //// transform of a text. It was originally written by Matt Mahoney as
@@ -111,10 +111,10 @@ public class PAQEntropyEncoder extends AbstractEncoder
    private final PAQPredictor predictor;
    private long low;
    private long high;
-   private final BitStream bitstream;
+   private final OutputBitStream bitstream;
 
 
-   public PAQEntropyEncoder(BitStream bitstream)
+   public PAQEntropyEncoder(OutputBitStream bitstream)
    {
       if (bitstream == null)
          throw new NullPointerException("Invalid null bistream parameter");
@@ -163,7 +163,7 @@ public class PAQEntropyEncoder extends AbstractEncoder
 
    
    @Override
-   public BitStream getBitStream()
+   public OutputBitStream getBitStream()
    {
       return this.bitstream;
    }

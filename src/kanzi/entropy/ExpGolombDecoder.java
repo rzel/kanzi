@@ -15,17 +15,17 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.BitStream;
+import kanzi.InputBitStream;
 
 
 // Exponential Golomb Coder
 public final class ExpGolombDecoder extends AbstractDecoder
 {
     private final boolean signed;
-    private final BitStream bitstream;
+    private final InputBitStream bitstream;
 
     
-    public ExpGolombDecoder(BitStream bitstream, boolean signed)
+    public ExpGolombDecoder(InputBitStream bitstream, boolean signed)
     {
         if (bitstream == null)
            throw new NullPointerException("Invalid null bitstream parameter");
@@ -79,7 +79,7 @@ public final class ExpGolombDecoder extends AbstractDecoder
 
 
     @Override
-    public BitStream getBitStream()
+    public InputBitStream getBitStream()
     {
        return this.bitstream;
     }

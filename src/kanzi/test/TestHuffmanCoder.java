@@ -15,14 +15,17 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.BitStream;
 import kanzi.BitStreamException;
-import kanzi.bitstream.DebugBitStream;
-import kanzi.bitstream.DefaultBitStream;
+import kanzi.bitstream.DebugInputBitStream;
 import kanzi.entropy.HuffmanDecoder;
 import kanzi.entropy.HuffmanEncoder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import kanzi.InputBitStream;
+import kanzi.OutputBitStream;
+import kanzi.bitstream.DebugOutputBitStream;
+import kanzi.bitstream.DefaultInputBitStream;
+import kanzi.bitstream.DefaultOutputBitStream;
 
 
 public class TestHuffmanCoder
@@ -61,8 +64,8 @@ public class TestHuffmanCoder
 
                 System.out.println("\nEncoded:");
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                BitStream bs = new DefaultBitStream(os, 16384);
-                DebugBitStream dbgbs = new DebugBitStream(bs, System.out);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
+                DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out);
                 dbgbs.showByte(true);
                 dbgbs.setMark(true);
                 int[] freq = new int[256];
@@ -70,7 +73,7 @@ public class TestHuffmanCoder
                 for (int i=0; i<values.length; i++)
                     freq[values[i] & 255]++;
 
-                HuffmanEncoder rc = new HuffmanEncoder(dbgbs, true);
+                HuffmanEncoder rc = new HuffmanEncoder(dbgbs);
                 rc.updateFrequencies(freq);
 
                 for (int i=0; i<values.length; i++)
@@ -83,11 +86,11 @@ public class TestHuffmanCoder
                 dbgbs.close();
                 System.out.println();
                 byte[] buf = os.toByteArray();
-                bs = new DefaultBitStream(new ByteArrayInputStream(buf), 16384);
-                dbgbs = new DebugBitStream(bs, System.out);
-                dbgbs.setMark(true);
-                HuffmanDecoder rd = new HuffmanDecoder(dbgbs);
-                rd.readFrequencies();                
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 16384);
+                DebugInputBitStream dbgbs2 = new DebugInputBitStream(bs2, System.out);
+                dbgbs2.setMark(true);
+                HuffmanDecoder rd = new HuffmanDecoder(dbgbs2);
+                rd.readLengths();
                 System.out.println("\nDecoded:");
                 int len = values.length; // buf.length >> 3;
                 boolean ok = true;
@@ -148,8 +151,8 @@ public class TestHuffmanCoder
                  
                 // Encode
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                BitStream bs = new DefaultBitStream(os, 16384);
-                HuffmanEncoder rc = new HuffmanEncoder(bs, ((jj&1)==0));
+                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
+                HuffmanEncoder rc = new HuffmanEncoder(bs);
                 long before = System.nanoTime();
                 rc.encode(values1, 0, values1.length);
                 rc.dispose();
@@ -157,8 +160,8 @@ public class TestHuffmanCoder
                 
                 // Decode
                 byte[] buf = os.toByteArray();
-                bs = new DefaultBitStream(new ByteArrayInputStream(buf), 1000);
-                HuffmanDecoder rd = new HuffmanDecoder(bs);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1000);
+                HuffmanDecoder rd = new HuffmanDecoder(bs2);
                 rd.decode(values2, 0, values2.length);
                 long after = System.nanoTime();
                 delta += (after - before);  

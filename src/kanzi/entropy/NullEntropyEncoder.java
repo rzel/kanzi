@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.BitStream;
+import kanzi.OutputBitStream;
 
 
 // Null entropy encoder and decoder
@@ -23,10 +23,10 @@ import kanzi.BitStream;
 // Helpful to debug
 public final class NullEntropyEncoder extends AbstractEncoder
 {
-    private final BitStream bitstream;
+    private final OutputBitStream bitstream;
 
 
-    public NullEntropyEncoder(BitStream bitstream)
+    public NullEntropyEncoder(OutputBitStream bitstream)
     {
        if (bitstream == null)
           throw new NullPointerException("Invalid null bitstream parameter");
@@ -49,7 +49,7 @@ public final class NullEntropyEncoder extends AbstractEncoder
 
 
     @Override
-    public BitStream getBitStream()
+    public OutputBitStream getBitStream()
     {
        return this.bitstream;
     }

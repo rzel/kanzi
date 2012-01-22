@@ -16,7 +16,7 @@ limitations under the License.
 package kanzi.entropy;
 
 import kanzi.EntropyEncoder;
-import kanzi.BitStream;
+import kanzi.OutputBitStream;
 import kanzi.BitStreamException;
 
 
@@ -27,7 +27,7 @@ public abstract class AbstractEncoder implements EntropyEncoder
 
     
     @Override
-    public abstract BitStream getBitStream();
+    public abstract OutputBitStream getBitStream();
 
     // Default implementation: fallback to encodeByte
     // Some implementations should be able to use an optimized algorithm

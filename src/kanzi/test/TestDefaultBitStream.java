@@ -15,7 +15,6 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.bitstream.DefaultBitStream;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -26,7 +25,11 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Random;
-import kanzi.bitstream.DebugBitStream;
+import kanzi.InputBitStream;
+import kanzi.OutputBitStream;
+import kanzi.bitstream.DebugOutputBitStream;
+import kanzi.bitstream.DefaultInputBitStream;
+import kanzi.bitstream.DefaultOutputBitStream;
 
 
 public class TestDefaultBitStream
@@ -59,8 +62,8 @@ public class TestDefaultBitStream
         {
             ByteArrayOutputStream baos = new ByteArrayOutputStream(4*values.length);
             OutputStream os = new BufferedOutputStream(baos);
-            DefaultBitStream obs = new DefaultBitStream(os, 16384);
-            DebugBitStream dbs = new DebugBitStream(obs, System.out);
+            OutputBitStream obs = new DefaultOutputBitStream(os, 16384);
+            DebugOutputBitStream dbs = new DebugOutputBitStream(obs, System.out);
             dbs.showByte(true);
             
             for (int i=0; i<values.length; i++)
@@ -76,7 +79,7 @@ public class TestDefaultBitStream
             
             ByteArrayInputStream bais = new ByteArrayInputStream(output);
             InputStream is = new BufferedInputStream(bais);
-            DefaultBitStream ibs = new DefaultBitStream(is, 16384);
+            InputBitStream ibs = new DefaultInputBitStream(is, 16384);
             System.out.println("Read: ");
             boolean ok = true;
             
@@ -118,7 +121,7 @@ public class TestDefaultBitStream
          {
             ByteArrayOutputStream baos = new ByteArrayOutputStream(values.length);
             OutputStream os = new BufferedOutputStream(baos);
-            DefaultBitStream obs = new DefaultBitStream(os, 16384);
+            OutputBitStream obs = new DefaultOutputBitStream(os, 16384);
 
             for (int i=0; i<values.length; i++)
             {
@@ -133,7 +136,7 @@ public class TestDefaultBitStream
 
             ByteArrayInputStream bais = new ByteArrayInputStream(output);
             InputStream is = new BufferedInputStream(bais);
-            DefaultBitStream ibs = new DefaultBitStream(is, 16384);
+            InputBitStream ibs = new DefaultInputBitStream(is, 16384);
             System.out.println("\nRead: ");
             boolean ok = true;
 
@@ -165,7 +168,7 @@ public class TestDefaultBitStream
         {
             FileOutputStream faos = new FileOutputStream(new File(fileName));
             OutputStream os = new BufferedOutputStream(faos);
-            DefaultBitStream obs = new DefaultBitStream(os, 16384);
+            OutputBitStream obs = new DefaultOutputBitStream(os, 16384);
             int nn = 100000 * values.length;
             long before, after;
             System.out.println("\nWriting ...");
@@ -187,7 +190,7 @@ public class TestDefaultBitStream
 
             FileInputStream fais = new FileInputStream(new File(fileName));
             InputStream is = new BufferedInputStream(fais);
-            DefaultBitStream ibs = new DefaultBitStream(is, 16384);
+            InputBitStream ibs = new DefaultInputBitStream(is, 16384);
             System.out.println("\nReading ...");
             before = System.nanoTime();
 

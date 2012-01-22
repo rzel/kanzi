@@ -15,78 +15,52 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.BitStream;
 import kanzi.BitStreamException;
+import kanzi.InputBitStream;
 
 
 
 public class HuffmanDecoder extends AbstractDecoder
 {
-    private final BitStream bitstream;
+    private final InputBitStream bitstream;
     private final int[] buffer;
-    private boolean canonical;
     private HuffmanTree tree;
 
 
-    public HuffmanDecoder(BitStream bitstream) throws BitStreamException
-    {
-       this(bitstream, true);
-    }
-    
- 
-    public HuffmanDecoder(BitStream bitstream, boolean canonical) throws BitStreamException
+    public HuffmanDecoder(InputBitStream bitstream) throws BitStreamException
     {
         if (bitstream == null)
             throw new NullPointerException("Invalid null bitstream parameter");
       
         this.bitstream = bitstream;
         this.buffer = new int[256];
-        this.canonical = canonical;
-        int maxSize = 8;
 
-        // Default frequencies
+        // Default lengths
         for (int i=0; i<256; i++)
-           this.buffer[i] = 1;
+           this.buffer[i] = 8;
          
-        this.tree = (this.canonical == true) ? new HuffmanTree(this.buffer, maxSize) : 
-                new HuffmanTree(this.buffer, false);
+        this.tree = new HuffmanTree(this.buffer, 8);
     }
        
     
-    public boolean readFrequencies() throws BitStreamException
+    public boolean readLengths() throws BitStreamException
     {
         final int[] buf = this.buffer;
+        int maxSize = 0;
+        buf[0] = (int) this.bitstream.readBits(5);
+        ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
 
-        if (this.canonical == false)
+        // Read lengths
+        for (int i=1; i<buf.length; i++)
         {
-            final int dataSize = (int) this.bitstream.readBits(5);
-            
-            // Read frequencies
-            for (int i=0; i<buf.length; i++)
-                buf[i] = (int) this.bitstream.readBits(dataSize);
-            
-            // Create Huffman tree        
-            this.tree = new HuffmanTree(buf, false);
+            buf[i] = buf[i-1] + egdec.decodeByte();
+
+            if (maxSize < buf[i])
+               maxSize = buf[i];
         }
-        else
-        {
-           int maxSize = 0;
-           buf[0] = (int) this.bitstream.readBits(5);
-           ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
-           
-           // Read lengths
-           for (int i=1; i<buf.length; i++)
-           {
-               buf[i] = buf[i-1] + egdec.decodeByte();
-               
-               if (maxSize < buf[i])
-                  maxSize = buf[i];
-           }
-           
-           // Create Huffman tree        
-           this.tree = new HuffmanTree(buf, maxSize);
-        }
-        
+
+        // Create Huffman tree
+        this.tree = new HuffmanTree(buf, maxSize);        
         return true;
     }
 
@@ -95,8 +69,30 @@ public class HuffmanDecoder extends AbstractDecoder
     @Override
     public int decode(byte[] array, int blkptr, int len)
     {
-       this.readFrequencies();
-       return super.decode(array, blkptr, len);
+       if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
+         return -1;
+
+       this.readLengths();
+       final int end2 = blkptr + len;
+       final int end1 = end2 - 8;
+       int i = blkptr;
+
+       try
+       {
+          // Decode fast by reading one byte at a time from the bitstream
+          while (i < end1)
+             array[i++] = this.tree.decodeByte(this.bitstream);
+
+          // Regular decoding by reading one bit at a time from the bitstream
+          while (i < end2)
+             array[i++] = this.tree.decodeByte(this.bitstream);
+       }
+       catch (BitStreamException e)
+       {
+          return i - blkptr;
+       }
+
+       return len;
     }
        
     
@@ -104,18 +100,12 @@ public class HuffmanDecoder extends AbstractDecoder
     @Override
     public final byte decodeByte()
     {
-       return this.tree.getSymbol(this.bitstream);
-    }
-    
-
-    @Override
-    public void dispose()
-    {
+       return this.tree.decodeByte(this.bitstream);
     }
 
 
     @Override
-    public BitStream getBitStream()
+    public InputBitStream getBitStream()
     {
        return this.bitstream;
     }

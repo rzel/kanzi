@@ -15,48 +15,30 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.BitStream;
+import kanzi.OutputBitStream;
 import kanzi.BitStreamException;
 
 
 public class HuffmanEncoder extends AbstractEncoder
 {
-    private final BitStream bitstream;
+    private final OutputBitStream bitstream;
     private final int[] buffer;
-    private boolean canonical;
     private HuffmanTree tree;
 
 
-    public HuffmanEncoder(BitStream bitstream, boolean canonical) throws BitStreamException
-    {
-       this(bitstream, canonical, null);
-    }
-    
-    
-    public HuffmanEncoder(BitStream bitstream, boolean canonical, int[] frequencies) throws BitStreamException
+    public HuffmanEncoder(OutputBitStream bitstream) throws BitStreamException
     {
         if (bitstream == null)
            throw new NullPointerException("Invalid null bitstream parameter");
 
-        if ((frequencies != null) && (frequencies.length > 256))
-           throw new IllegalArgumentException("Invalid frequency array length: "+frequencies.length);
-
         this.bitstream = bitstream;
         this.buffer = new int[256];
-        this.canonical = canonical;
         
-        if (frequencies != null)
-        {
-           System.arraycopy(frequencies, 0, this.buffer, 0, frequencies.length);
-        }
-        else
-        {
-           // Default frequencies
-           for (int i=0; i<256; i++)
-              this.buffer[i] = 1;
-        }
+        // Default frequencies
+        for (int i=0; i<256; i++)
+          this.buffer[i] = 1;
 
-        this.tree = new HuffmanTree(this.buffer, this.canonical);
+        this.tree = new HuffmanTree(this.buffer);
     }
 
     
@@ -65,40 +47,19 @@ public class HuffmanEncoder extends AbstractEncoder
         if (frequencies == null)
            return false;
 
-        this.tree = new HuffmanTree(frequencies, this.canonical);
-
-        if (this.canonical == false)
-        {
-            int maxFreq = 0;
-
-            for (int i=0; i<frequencies.length; i++)
-            {
-                if (maxFreq < frequencies[i])
-                    maxFreq = frequencies[i];
-            }
-
-            final int maxSize = 32 - Integer.numberOfLeadingZeros(maxFreq);
-            this.bitstream.writeBits(maxSize, 5);
-
-            // Transmit frequencies
-            for (int i=0; i<frequencies.length; i++)
-                this.bitstream.writeBits(frequencies[i], maxSize);
-        }
-        else
-        {
-            int prevSize = this.tree.getSize(0);
-            this.bitstream.writeBits(prevSize, 5);
-            ExpGolombEncoder egenc = new ExpGolombEncoder(this.bitstream, true);
-
-            // Transmit code lengths only, frequencies and code do not matter
-            // Unary encode the length difference
-            for (int i=1; i<frequencies.length; i++)
-            {
-                final int nextSize = this.tree.getSize(i);
-                egenc.encodeByte((byte) (nextSize - prevSize));
-                prevSize = nextSize;
-            }
-        }
+         this.tree = new HuffmanTree(frequencies);
+         int prevSize = this.tree.getSize(0);
+         this.bitstream.writeBits(prevSize, 5);
+         ExpGolombEncoder egenc = new ExpGolombEncoder(this.bitstream, true);
+       
+         // Transmit code lengths only, frequencies and code do not matter
+         // Unary encode the length difference
+         for (int i=1; i<frequencies.length; i++)
+         {
+             final int nextSize = this.tree.getSize(i);
+             egenc.encodeByte((byte) (nextSize - prevSize));
+             prevSize = nextSize;
+         }
         
         return true;
     }
@@ -127,9 +88,7 @@ public class HuffmanEncoder extends AbstractEncoder
     @Override
     public boolean encodeByte(byte val)
     {
-        final long bits = this.tree.getCode(val & 0xFF);
-        final int size = this.tree.getSize(val & 0xFF);
-        return (this.bitstream.writeBits(bits, size) == size);
+       return this.tree.encodeByte(this.bitstream, val);
     }
 
 
@@ -141,7 +100,7 @@ public class HuffmanEncoder extends AbstractEncoder
 
 
     @Override
-    public BitStream getBitStream()
+    public OutputBitStream getBitStream()
     {
        return this.bitstream;
     }

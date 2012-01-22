@@ -15,11 +15,12 @@ limitations under the License.
 
 package kanzi.function;
 
-import kanzi.BitStream;
 import kanzi.ByteFunction;
 import kanzi.EntropyDecoder;
 import kanzi.EntropyEncoder;
 import kanzi.IndexedByteArray;
+import kanzi.InputBitStream;
+import kanzi.OutputBitStream;
 import kanzi.transform.BWT;
 import kanzi.transform.MTFT;
 
@@ -367,7 +368,7 @@ public class BlockCodec implements ByteFunction
       // Extract header info and write it to the bitstream directly
       // (some entropy decoders need block data statistics before decoding a byte)
       BWTBlockHeader header = new BWTBlockHeader(data.array, data.index);
-      final BitStream bs = ee.getBitStream();
+      final OutputBitStream bs = ee.getBitStream();
       bs.writeBits(header.mode, 8);
       bs.writeBits(header.blockLength, 8*header.dataSize);
       bs.writeBits(header.primaryIndex, 8*header.dataSize);
@@ -469,7 +470,7 @@ public class BlockCodec implements ByteFunction
       }
 
       
-      public BWTBlockHeader(BitStream bs)
+      public BWTBlockHeader(InputBitStream bs)
       {
          this.mode = (byte) (bs.readBits(8) & 0xFF);
          this.blockLength = 0;

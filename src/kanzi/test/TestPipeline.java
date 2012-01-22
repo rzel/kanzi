@@ -28,13 +28,15 @@ import java.io.FileOutputStream;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import kanzi.BitStream;
 import kanzi.ColorModelType;
 import kanzi.IndexedByteArray;
 import kanzi.IndexedIntArray;
-import kanzi.bitstream.DefaultBitStream;
 import kanzi.EntropyDecoder;
 import kanzi.EntropyEncoder;
+import kanzi.InputBitStream;
+import kanzi.OutputBitStream;
+import kanzi.bitstream.DefaultInputBitStream;
+import kanzi.bitstream.DefaultOutputBitStream;
 import kanzi.entropy.RangeDecoder;
 import kanzi.entropy.RangeEncoder;
 import kanzi.function.wavelet.WaveletBandFilter;
@@ -192,7 +194,7 @@ public class TestPipeline
     {
         File output = new File(fileName.substring(0, fileName.length()-3).concat("bin"));
         FileOutputStream fos = new FileOutputStream(output);
-        BitStream dbs = new DefaultBitStream(fos, 16384);
+        OutputBitStream dbs = new DefaultOutputBitStream(fos, 16384);
 
         DWT_CDF_9_7 ydwt = new DWT_CDF_9_7(w, h);
         DWT_CDF_9_7 uvdwt = new DWT_CDF_9_7(w/2, h/2);
@@ -293,7 +295,7 @@ public class TestPipeline
     {
         File input = new File(fileName.substring(0, fileName.length()-3).concat("bin"));
         FileInputStream is = new FileInputStream(input);
-        BitStream dbs = new DefaultBitStream(is, 16384);
+        InputBitStream dbs = new DefaultInputBitStream(is, 16384);
         DWT_CDF_9_7 ydwt = new DWT_CDF_9_7(w, h);
         DWT_CDF_9_7 uvdwt = new DWT_CDF_9_7(w/2, h/2);
         EntropyDecoder entropyDecoder = new RangeDecoder(dbs);

@@ -16,19 +16,18 @@ limitations under the License.
 package kanzi;
 
 
-public interface EntropyDecoder
+public interface InputBitStream
 {
-    // Decode the next chunk of data from the bitstream and return as a byte
-    public byte decodeByte();
-    
-    // Decode the next chunk of data from the bitstream and return in the 
-    // provided buffer.
-    public int decode(byte[] buffer, int blkptr, int len);
-    
-    // Must be called before getting rid of the entropy coder
-    public void dispose();
+    // Returns 1 or 0
+    public int readBit() throws BitStreamException;
 
-    // Return the underlying bistream
-    public InputBitStream getBitStream();
+    public long readBits(int length) throws BitStreamException;
+
+    public void close() throws BitStreamException;
+
+    // Number of bits read
+    public long read();
+
+    // Return false when the bitstream is closed or the End-Of-Stream has been reached
+    public boolean hasMoreToRead();
 }
-

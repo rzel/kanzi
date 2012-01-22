@@ -15,14 +15,18 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.bitstream.DebugBitStream;
-import kanzi.bitstream.DefaultBitStream;
+import kanzi.bitstream.DebugInputBitStream;
 import kanzi.entropy.ExpGolombDecoder;
 import kanzi.entropy.ExpGolombEncoder;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.Random;
+import kanzi.InputBitStream;
+import kanzi.OutputBitStream;
+import kanzi.bitstream.DebugOutputBitStream;
+import kanzi.bitstream.DefaultInputBitStream;
+import kanzi.bitstream.DefaultOutputBitStream;
 
 
 public class TestExpGolombCoder
@@ -53,8 +57,8 @@ public class TestExpGolombCoder
 
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
                 //OutputStream bos = new BufferedOutputStream(os);
-                DefaultBitStream bs = new DefaultBitStream(os, 16384);
-                DebugBitStream dbgbs = new DebugBitStream(bs, System.out, -1);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
+                DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out, -1);
                 //dbgbs.setMark(true);
                 ExpGolombEncoder gc = new ExpGolombEncoder(dbgbs, true);
                 
@@ -75,10 +79,10 @@ public class TestExpGolombCoder
                 bs.close();
                 byte[] array = os.toByteArray();
                 BufferedInputStream is = new BufferedInputStream(new ByteArrayInputStream(array));
-                bs = new DefaultBitStream(is, 16384);
-                dbgbs = new DebugBitStream(bs, System.out, -1);
-                dbgbs.setMark(true);
-                ExpGolombDecoder gd = new ExpGolombDecoder(dbgbs, true);
+                InputBitStream bs2 = new DefaultInputBitStream(is, 16384);
+                DebugInputBitStream dbgbs2 = new DebugInputBitStream(bs2, System.out, -1);
+                dbgbs2.setMark(true);
+                ExpGolombDecoder gd = new ExpGolombDecoder(dbgbs2, true);
                 byte[] values2 = new byte[values.length];
                 System.out.println("\nDecoded:");
                 
@@ -130,7 +134,7 @@ public class TestExpGolombCoder
             
             for (int ii=0; ii<50000; ii++)
             {
-                DefaultBitStream bs = new DefaultBitStream(os, 16384);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 ExpGolombEncoder gc = new ExpGolombEncoder(bs, true);
                 before = System.nanoTime();
                 

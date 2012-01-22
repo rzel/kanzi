@@ -18,9 +18,10 @@ package kanzi.bitstream;
 import kanzi.BitStreamException;
 import java.io.IOException;
 import java.io.OutputStream;
+import kanzi.OutputBitStream;
 
 
-/*package*/ final class OutputBitStream
+public final class DefaultOutputBitStream implements OutputBitStream
 {
    private final OutputStream os;
    private final byte[] buffer;
@@ -30,7 +31,7 @@ import java.io.OutputStream;
    private long written;
 
 
-   OutputBitStream(OutputStream os, int bufferSize)
+   public DefaultOutputBitStream(OutputStream os, int bufferSize)
    {
       this.os = os;
       this.buffer = new byte[bufferSize];
@@ -39,6 +40,7 @@ import java.io.OutputStream;
 
 
    // Processes the least significant bit of the input integer
+   @Override
    public synchronized boolean writeBit(int bit)
    {
       try
@@ -63,8 +65,15 @@ import java.io.OutputStream;
 
 
    // 'length' must be max 64
+   @Override
    public synchronized int writeBits(long value, int length)
    {
+      if (length > 64)
+        throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
+
+      if (length == 0)
+          return 0;
+
       try
       {
          int remaining = length;
@@ -120,6 +129,7 @@ import java.io.OutputStream;
    }
 
 
+   @Override
    public synchronized void flush() throws BitStreamException
    {
       if (this.isClosed() == true)
@@ -150,7 +160,8 @@ import java.io.OutputStream;
    }
 
 
-   public synchronized void close() throws IOException
+   @Override
+   public synchronized void close()
    {
       if (this.isClosed() == true)
          return;
@@ -177,15 +188,24 @@ import java.io.OutputStream;
       }
 
       this.flush();
-      this.os.close();
       this.closed = true;
 
       // Force an exception on any write attempt
       this.position = this.buffer.length;
       this.bitIndex = 7;
+
+      try
+      {
+        this.os.close();
+      }
+      catch (IOException e)
+      {
+         throw new BitStreamException(e, BitStreamException.INPUT_OUTPUT);
+      }
    }
 
 
+   @Override
    public synchronized long written()
    {
       return this.written;

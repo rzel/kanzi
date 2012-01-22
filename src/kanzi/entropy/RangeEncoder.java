@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.BitStream;
+import kanzi.OutputBitStream;
 
 
 // Based on Order 0 range coder by Dmitry Subbotin itself derived from the algorithm
@@ -38,11 +38,11 @@ public final class RangeEncoder extends AbstractEncoder
     private boolean flushed;
     private final int[] baseFreq;
     private final int[] deltaFreq;
-    private final BitStream bitstream;
+    private final OutputBitStream bitstream;
     private boolean written;
 
 
-    public RangeEncoder(BitStream bitstream)
+    public RangeEncoder(OutputBitStream bitstream)
     {
         if (bitstream == null)
             throw new NullPointerException("Invalid null bitstream parameter");
@@ -139,7 +139,7 @@ public final class RangeEncoder extends AbstractEncoder
 
 
     @Override
-    public BitStream getBitStream()
+    public OutputBitStream getBitStream()
     {
        return this.bitstream;
     }

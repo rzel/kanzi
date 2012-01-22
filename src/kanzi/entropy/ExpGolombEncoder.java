@@ -15,16 +15,16 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.BitStream;
+import kanzi.OutputBitStream;
 
 
 public final class ExpGolombEncoder extends AbstractEncoder
 {
     private final boolean signed;
-    private final BitStream bitsream;
+    private final OutputBitStream bitsream;
     
     
-    public ExpGolombEncoder(BitStream bitStream, boolean signed)
+    public ExpGolombEncoder(OutputBitStream bitStream, boolean signed)
     {
         if (bitStream == null)
            throw new NullPointerException("Invalid null bitStream parameter");
@@ -86,7 +86,7 @@ public final class ExpGolombEncoder extends AbstractEncoder
 
 
     @Override
-    public BitStream getBitStream()
+    public OutputBitStream getBitStream()
     {
        return this.bitsream;
     }

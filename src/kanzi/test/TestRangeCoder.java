@@ -15,14 +15,16 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.BitStream;
 import kanzi.BitStreamException;
-import kanzi.bitstream.DebugBitStream;
-import kanzi.bitstream.DefaultBitStream;
 import kanzi.entropy.RangeDecoder;
 import kanzi.entropy.RangeEncoder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import kanzi.InputBitStream;
+import kanzi.OutputBitStream;
+import kanzi.bitstream.DebugOutputBitStream;
+import kanzi.bitstream.DefaultInputBitStream;
+import kanzi.bitstream.DefaultOutputBitStream;
 
 
 public class TestRangeCoder
@@ -62,8 +64,8 @@ public class TestRangeCoder
 
                 System.out.println("\nEncoded:");
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                BitStream bs = new DefaultBitStream(os, 16384);
-                DebugBitStream dbgbs = new DebugBitStream(bs, System.out);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
+                DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out);
                 dbgbs.showByte(true);
                 RangeEncoder rc = new RangeEncoder(dbgbs);
 
@@ -76,8 +78,8 @@ public class TestRangeCoder
                 //dbgbs.flush();
                 rc.dispose();
                 byte[] buf = os.toByteArray();
-                bs = new DefaultBitStream(new ByteArrayInputStream(buf), 64);
-                RangeDecoder rd = new RangeDecoder(bs);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
+                RangeDecoder rd = new RangeDecoder(bs2);
                 System.out.println("\nDecoded:");
                 int len = values.length; // buf.length >> 3;
                 boolean ok = true;
@@ -131,7 +133,7 @@ public class TestRangeCoder
 
                 // Encode
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                BitStream bs = new DefaultBitStream(os, 16384);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 RangeEncoder rc = new RangeEncoder(bs);
                 before = System.nanoTime();
                 rc.encode(values1, 0, values1.length);
@@ -143,8 +145,8 @@ public class TestRangeCoder
 
                 // Decode
                 byte[] buf = os.toByteArray();
-                bs = new DefaultBitStream(new ByteArrayInputStream(buf), 64);
-                RangeDecoder rd = new RangeDecoder(bs);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
+                RangeDecoder rd = new RangeDecoder(bs2);
                 before = System.nanoTime();
                 rd.decode(values2, 0, values2.length);
                 after = System.nanoTime();

@@ -26,7 +26,7 @@ public interface EntropyEncoder
     public boolean encodeByte(byte val);
 
     // Return the underlying bitstream
-    public BitStream getBitStream();
+    public OutputBitStream getBitStream();
 
     // Must be called before getting rid of the entropy coder
     public void dispose();

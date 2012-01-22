@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.BitStream;
+import kanzi.InputBitStream;
 import kanzi.BitStreamException;
 
 
@@ -39,11 +39,11 @@ public final class RangeDecoder extends AbstractDecoder
     private long range;
     private final int[] baseFreq;
     private final int[] deltaFreq;
-    private final BitStream bitstream;
+    private final InputBitStream bitstream;
     private boolean initialized;
 
 
-    public RangeDecoder(BitStream bitstream)
+    public RangeDecoder(InputBitStream bitstream)
     {
         if (bitstream == null)
             throw new NullPointerException("Invalid null bitstream parameter");
@@ -162,7 +162,7 @@ public final class RangeDecoder extends AbstractDecoder
 
 
     @Override
-    public BitStream getBitStream()
+    public InputBitStream getBitStream()
     {
        return this.bitstream;
    }

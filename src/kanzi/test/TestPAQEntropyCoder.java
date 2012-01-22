@@ -15,14 +15,16 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.BitStream;
 import kanzi.BitStreamException;
-import kanzi.bitstream.DebugBitStream;
-import kanzi.bitstream.DefaultBitStream;
 import kanzi.entropy.PAQEntropyDecoder;
 import kanzi.entropy.PAQEntropyEncoder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import kanzi.InputBitStream;
+import kanzi.OutputBitStream;
+import kanzi.bitstream.DebugOutputBitStream;
+import kanzi.bitstream.DefaultInputBitStream;
+import kanzi.bitstream.DefaultOutputBitStream;
 
 
 public class TestPAQEntropyCoder
@@ -62,8 +64,8 @@ public class TestPAQEntropyCoder
 
                 System.out.println("\nEncoded:");
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                BitStream bs = new DefaultBitStream(os, 16384);
-                DebugBitStream dbgbs = new DebugBitStream(bs, System.out);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
+                DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out);
                 dbgbs.showByte(true);
                 PAQEntropyEncoder rc = new PAQEntropyEncoder(dbgbs);
 
@@ -76,8 +78,8 @@ public class TestPAQEntropyCoder
                 //dbgbs.flush();
                 rc.dispose();
                 byte[] buf = os.toByteArray();
-                bs = new DefaultBitStream(new ByteArrayInputStream(buf), 64);
-                PAQEntropyDecoder rd = new PAQEntropyDecoder(bs);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
+                PAQEntropyDecoder rd = new PAQEntropyDecoder(bs2);
                 System.out.println("\nDecoded:");
                 int len = values.length; // buf.length >> 3;
                 boolean ok = true;
@@ -131,7 +133,7 @@ public class TestPAQEntropyCoder
 
                 // Encode
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                BitStream bs = new DefaultBitStream(os, 16384);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 PAQEntropyEncoder rc = new PAQEntropyEncoder(bs);
                 before = System.nanoTime();
                 rc.encode(values1, 0, values1.length);
@@ -143,8 +145,8 @@ public class TestPAQEntropyCoder
 
                 // Decode
                 byte[] buf = os.toByteArray();
-                bs = new DefaultBitStream(new ByteArrayInputStream(buf), 64);
-                PAQEntropyDecoder rd = new PAQEntropyDecoder(bs);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
+                PAQEntropyDecoder rd = new PAQEntropyDecoder(bs2);
                 before = System.nanoTime();
                 rd.decode(values2, 0, values2.length);
                 after = System.nanoTime();

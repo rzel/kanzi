@@ -17,9 +17,10 @@ package kanzi.bitstream;
 import kanzi.BitStreamException;
 import java.io.IOException;
 import java.io.InputStream;
+import kanzi.InputBitStream;
 
 
-/*package*/ final class InputBitStream
+public final class DefaultInputBitStream implements InputBitStream
 {
    private final InputStream is;
    private final byte[] buffer;
@@ -30,7 +31,7 @@ import java.io.InputStream;
    private int maxPosition;
 
 
-   InputBitStream(InputStream is, int bufferSize)
+   public DefaultInputBitStream(InputStream is, int bufferSize)
    {
       this.is = is;
       this.buffer = new byte[bufferSize];
@@ -39,19 +40,19 @@ import java.io.InputStream;
    }
 
 
-   // Returns 1 or 0
-    /*package*/ synchronized int readBit() throws BitStreamException
+   // Return 1 or 0
+   @Override
+   public synchronized int readBit() throws BitStreamException
    {
-      if ((this.position > this.maxPosition)
-              || ((this.bitIndex == 7) && (this.position == this.maxPosition)))
-         this.readFromInputStream(0, this.buffer.length);
-
       final int bit = (this.buffer[this.position] >> this.bitIndex) & 1;
       this.bitIndex = (this.bitIndex + 7) & 7;
       this.read++;
 
       if (this.bitIndex == 7)
-         this.position++;
+      {
+         if (++this.position > this.maxPosition)
+            this.readFromInputStream(0, this.buffer.length);
+      }
 
       return bit;
    }
@@ -73,7 +74,7 @@ import java.io.InputStream;
                     BitStreamException.END_OF_STREAM);
          }
 
-         this.maxPosition = offset + size;
+         this.maxPosition = offset + size - 1;
          return size;
       }
       catch (IOException e)
@@ -83,9 +84,12 @@ import java.io.InputStream;
    }
 
 
-   // Limited to 64 bits at a time even if 'length' is greater than 64
-    /*package*/ synchronized long readBits(int length) throws BitStreamException
+   @Override
+   public synchronized long readBits(int length) throws BitStreamException
    {
+      if ((length == 0) || (length > 64))
+          throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
+
       int remaining = length;
       long res = 0;
 
@@ -104,17 +108,19 @@ import java.io.InputStream;
             this.bitIndex = idx;
 
             if (idx == 7)
-               this.position++;
+            {
+               if (++this.position > this.maxPosition)
+                  this.readFromInputStream(0, this.buffer.length);
+            }
          }
 
          // Need to read more bits ?
          if (this.bitIndex == 7)
          {
-            final int inBufferBytes = (this.maxPosition >= this.position) ? 
+            final int inBufferBytes = (this.maxPosition > this.position) ? 
                     this.maxPosition - this.position : 0;
-            final int inBufferBits = (inBufferBytes << 3) + (this.bitIndex - 7);
 
-            if (inBufferBits < length)
+            if ((inBufferBytes << 3) < length)
             {
                for (int i=0; i<inBufferBytes; i++)
                   this.buffer[i] = this.buffer[this.position+i];
@@ -152,34 +158,39 @@ import java.io.InputStream;
    }
 
 
-   public void flush()
-   {
-   }
-
-
-   public synchronized void close() throws IOException
+   @Override
+   public synchronized void close()
    {
       if (this.closed == true)
          return;
 
-      // Reset fields to force a readFromInoutStream() (that will throw an exception)
+      // Reset fields to force a readFromInputStream() (that will throw an exception)
       // on readBit() or readBits() 
-      this.flush();
       this.closed = true;
       this.bitIndex = 7;
       this.maxPosition = -1;
       this.position = 0;
-      this.is.close();
+
+      try
+      {
+        this.is.close();
+      }
+      catch (IOException e)
+      {
+         throw new BitStreamException(e, BitStreamException.INPUT_OUTPUT);
+      }
    }
 
 
    // Return number of bits read so far
+   @Override
    public synchronized long read()
    {
       return this.read;
    }
 
 
+   @Override
    public synchronized boolean hasMoreToRead()
    {
       if (this.closed == true)
@@ -195,11 +206,9 @@ import java.io.InputStream;
          {
             return false;
          }
-
-         return ((this.position < this.maxPosition)
-                 || ((this.position == this.maxPosition) && (this.bitIndex != 7)));
       }
 
-      return true;
+      return ((this.position < this.maxPosition)
+              || ((this.position == this.maxPosition) && (this.bitIndex != 7)));
    }
 }
