@@ -19,10 +19,18 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import kanzi.IndexedByteArray;
-import kanzi.BitStream;
-import kanzi.bitstream.DefaultBitStream;
 import kanzi.EntropyDecoder;
 import kanzi.EntropyEncoder;
+import kanzi.InputBitStream;
+import kanzi.OutputBitStream;
+import kanzi.bitstream.DefaultInputBitStream;
+import kanzi.bitstream.DefaultOutputBitStream;
+import kanzi.entropy.HuffmanDecoder;
+import kanzi.entropy.HuffmanEncoder;
+import kanzi.entropy.NullEntropyDecoder;
+import kanzi.entropy.NullEntropyEncoder;
+import kanzi.entropy.PAQEntropyDecoder;
+import kanzi.entropy.PAQEntropyEncoder;
 import kanzi.entropy.RangeDecoder;
 import kanzi.entropy.RangeEncoder;
 import kanzi.function.BlockCodec;
@@ -38,6 +46,7 @@ public class TestBlockCoder
             boolean debug = false;
             String fileName = "c:\\temp\\rt.jar";
             boolean fileProvided = false;
+            char entropyType = 0;
 
             for (String arg : args)
             {
@@ -50,6 +59,7 @@ public class TestBlockCoder
                    System.out.println("                    and the size of the completely decoded block");
                    System.out.println("-file=<filename>  : name of the input file to encode or decode");
                    System.out.println("-block=<size>     : size of the block (max 16 MB)");
+                   System.out.println("-entropy=         : Entropy codec to use [None|Huffman|Range|PAQ]");
                    System.exit(0);
                }
                else if (arg.equals("-debug"))
@@ -59,12 +69,30 @@ public class TestBlockCoder
                }
                else if (arg.startsWith("-file="))
                {
-                  fileName = arg.substring(6);
+                  fileName = arg.substring(6).trim();
                   fileProvided = true;
+               }
+               else if (arg.startsWith("-entropy="))
+               {
+                  String strVal = arg.substring(9).trim().toUpperCase();
+
+                  if ("NONE".equals(strVal))
+                     entropyType = 'N';
+                  else if ("HUFFMAN".equals(strVal))
+                     entropyType = 'H';
+                  else if ("RANGE".equals(strVal))
+                     entropyType = 'R';
+                  else if ("PAQ".equals(strVal))
+                     entropyType = 'P';
+
+                  if (entropyType == 0)
+                     System.err.println("Invalid entropy codec provided: "+arg.substring(9).trim());
+                  else
+                     System.out.println("Using "+strVal+" entropy codec");
                }
                else if (arg.startsWith("-block="))
                {
-                  arg = arg.substring(7);
+                  arg = arg.substring(7).trim();
                   
                   try
                   {
@@ -90,10 +118,15 @@ public class TestBlockCoder
                }
                else
                {
-                   System.out.println("Warning: unknown option: ["+ arg + "]");
+                   System.out.println("Warning: ignoring unknown option ["+ arg + "]");
                }
             }
-            
+
+            if (entropyType == 0)
+            {
+               entropyType = 'H';
+               System.out.println("Using HUFFMAN entropy codec (default)");
+            }
 
             if (fileProvided == false)
                 System.out.println("No input file name provided on command line, using default value");
@@ -111,7 +144,7 @@ public class TestBlockCoder
             //BitStream obs = new DefaultBitStream(fos, 8192);
             //DebugBitStream dbs = new DebugBitStream(obs, System.out);
             //dbs.showByte(true);
-            BitStream dbs = new DefaultBitStream(fos, 16384);
+            OutputBitStream dbs = new DefaultOutputBitStream(fos, 16384);
             byte[] buffer = new byte[blockSize+7];
             BlockCodec blockCodec = new BlockCodec();
             IndexedByteArray iba = new IndexedByteArray(buffer, 0);
@@ -126,13 +159,22 @@ public class TestBlockCoder
             int read = 0;
             int step = 0;
             System.out.println("Encoding ...");
+            dbs.writeBits(entropyType, 8);
 
             // If the compression ratio is greater than one for this block, 
             // the compression will fail (unless up to 7 bytes are reserved
             // in the block for headr data)
             while ((len = fis.read(iba.array, 0, blockSize)) != -1)
             {
-               entropyCoder = new RangeEncoder(dbs);
+               if (entropyType == 'H')
+                  entropyCoder = new HuffmanEncoder(dbs);
+               else if (entropyType == 'R')
+                  entropyCoder = new RangeEncoder(dbs);
+               else if (entropyType == 'P')
+                  entropyCoder = new PAQEntropyEncoder(dbs);
+               else
+                  entropyCoder = new NullEntropyEncoder(dbs);
+
                read += len;
                long before = System.nanoTime();
                iba.index = 0;
@@ -156,7 +198,6 @@ public class TestBlockCoder
 
             // End block of size 0
             // The 'real' value is BlockCodec.COPY_BLOCK_MASK | (0 & BlockCodec.COPY_LENGTH_MASK)
-            //entropyCoder.encodeByte((byte) 0x80);
             dbs.writeBits(0x80, 8);
 
             System.out.println();
@@ -172,7 +213,10 @@ public class TestBlockCoder
             // Decode
             // !!! The decoder must know the block size of the encoder !!!
             fis = new FileInputStream(output);
-            BitStream dbs2 = new DefaultBitStream(fis, iba.array.length);
+            //BitStream ibs = new DefaultBitStream(is, iba.array.length);
+            //DebugBitStream dbs2 = new DebugBitStream(ibs, System.out);
+            //dbs2.showByte(true);
+            InputBitStream dbs2 = new DefaultInputBitStream(fis, iba.array.length);
 
             EntropyDecoder entropyDecoder;
             delta = 0L;
@@ -180,11 +224,20 @@ public class TestBlockCoder
             int sum = 0;
             step = 0;
             System.out.println("Decoding ...");
+            entropyType = (char) dbs2.readBits(8);
 
             // Decode next block
             do
             {        
-               entropyDecoder = new RangeDecoder(dbs2);
+               if (entropyType == 'H')
+                  entropyDecoder = new HuffmanDecoder(dbs2);
+               else if (entropyType == 'R')
+                  entropyDecoder = new RangeDecoder(dbs2);
+               else if (entropyType == 'P')
+                  entropyDecoder = new PAQEntropyDecoder(dbs2);
+               else
+                  entropyDecoder = new NullEntropyDecoder(dbs2);
+
                iba.index = 0; 
                long before = System.nanoTime();
                decoded = blockCodec.decode(iba, entropyDecoder);
