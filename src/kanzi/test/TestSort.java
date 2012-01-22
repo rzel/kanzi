@@ -119,11 +119,6 @@ public class TestSort
                 sum1 += (after - before);
                 before = System.nanoTime();
                 System.arraycopy(copy, 0, array, 0, array.length);
-//                before = System.nanoTime();
-//                insertionSort.sort(array, 0);
-//                after = System.nanoTime();
-//                sum2 += (after - before);
-//                System.arraycopy(copy, 0, array, 0, array.length);
                 before = System.nanoTime();
                 radix4Sort.sort(array, 0);
                 after = System.nanoTime();
@@ -148,6 +143,7 @@ public class TestSort
                 flashSort.sort(array, 0);
                 after = System.nanoTime();
                 sum7 += (after - before);
+                System.arraycopy(copy, 0, array, 0, array.length);
                 before = System.nanoTime();
                 sortTask = new SortTask(array, array.length, 0);
                 pool.invoke(sortTask);
