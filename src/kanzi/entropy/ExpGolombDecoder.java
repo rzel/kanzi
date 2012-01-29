@@ -24,7 +24,7 @@ public final class ExpGolombDecoder extends AbstractDecoder
     private final boolean signed;
     private final InputBitStream bitstream;
 
-    
+
     public ExpGolombDecoder(InputBitStream bitstream, boolean signed)
     {
         if (bitstream == null)
@@ -33,48 +33,41 @@ public final class ExpGolombDecoder extends AbstractDecoder
         this.signed = signed;
         this.bitstream = bitstream;
     }
-    
-    
+
+
     public boolean isSigned()
     {
         return this.signed;
     }
-        
-    
+
+
     @Override
     public byte decodeByte()
     {
-        int log2;
-        long info = 0;
+       int log2;
+       long info = 0;
 
-        // Decode unsigned
-        for (log2=0; log2<8; log2++)
-        {
-            if (this.bitstream.readBit() == 1)
-                break;
-        }
+       // Decode unsigned
+       for (log2=0; log2<8; log2++)
+       {
+          if (this.bitstream.readBit() == 1)
+             break;
+       }
 
-        if (log2 > 0)
-            info = this.bitstream.readBits(log2);
+       if (log2 > 0)
+          info = this.bitstream.readBits(log2);
 
-        byte res = (byte) ((1 << log2) - 1 + info);
+       byte res = (byte) ((1 << log2) - 1 + info);
 
-        // Read signed if necessary
-        if ((res != 0) && (this.signed == true))
-        {
-            // If res != 0, Get the sign (0 for negative values)
-            if (this.bitstream.readBit() == 0)
-                return (byte) -res;
-        }
+       // Read signed if necessary
+       if ((res != 0) && (this.signed == true))
+       {
+           // If res != 0, Get the sign (0 for negative values)
+           if (this.bitstream.readBit() == 1)
+               return (byte) -res;
+       }
 
-        return res;
-    }  
-
-        
-    
-    @Override
-    public void dispose()
-    {
+       return res;
     }
 
 
@@ -83,5 +76,4 @@ public final class ExpGolombDecoder extends AbstractDecoder
     {
        return this.bitstream;
     }
-
 }

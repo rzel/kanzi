@@ -26,63 +26,57 @@ public final class ExpGolombEncoder extends AbstractEncoder
     
     public ExpGolombEncoder(OutputBitStream bitStream, boolean signed)
     {
-        if (bitStream == null)
-           throw new NullPointerException("Invalid null bitStream parameter");
+       if (bitStream == null)
+          throw new NullPointerException("Invalid null bitStream parameter");
 
-        this.signed = signed;
-        this.bitsream = bitStream;
+       this.signed = signed;
+       this.bitsream = bitStream;
     }
     
     
     public boolean isSigned()
     {
-        return this.signed;
+       return this.signed;
     }
        
     
     @Override
     public boolean encodeByte(byte val)
     {
-        if (val == 0)
+       if (val == 0)
           return this.bitsream.writeBit(1);
 
-        //  Take the number 'val' add 1 to it
-        //  Count the bits (log2), subtract one, and write that number of zeros
-        //  preceding the previous bit string to get the encoded value
-        int log2 = 0;
-        int val2 = val;
-        val2 = (val2 + (val2 >> 31)) ^ (val2 >> 31); // abs(val2)
-        val2++;
-        long l = val2;
+       //  Take the number 'val' add 1 to it
+       //  Count the bits (log2), subtract one, and write that number of zeros
+       //  preceding the previous bit string to get the encoded value
+       int log2 = 0;
+       int val2 = val;
+       val2 = (val2 + (val2 >> 31)) ^ (val2 >> 31); // abs(val2)
+       val2++;
+       long emit = val2;
 
-        for ( ; val2>1; val2>>=1)
-            log2++;
+       for ( ; val2>1; val2>>=1)
+          log2++;
 
-        // Add log2 zeros and 1 one (unary coding), then remainder
-        // 0 => 1 => 1
-        // 1 => 10 => 010
-        // 2 => 11 => 011
-        // 3 => 100 => 00100
-        // 4 => 101 => 00101
-        // 5 => 110 => 00110
-        // 6 => 111 => 00111
-        int n = log2 + (log2 + 1);
-        boolean res =  (this.bitsream.writeBits(l, n) == n);
+       // Add log2 zeros and 1 one (unary coding), then remainder
+       // 0 => 1 => 1
+       // 1 => 10 => 010
+       // 2 => 11 => 011
+       // 3 => 100 => 00100
+       // 4 => 101 => 00101
+       // 5 => 110 => 00110
+       // 6 => 111 => 00111
+       int n = log2 + (log2 + 1);
 
-        if ((this.signed == true) && (res == true))
-        {
-            // Write a 0 for negative values
-            return bitsream.writeBit(1 + (val >> 7));
-        }
-        
-        return res;
-    }
-   
-    
-    @Override
-    public void dispose()
-    {
-    }
+       if (this.signed == true)
+       {
+          // Add 0 for positive and 1 for negative sign
+          n++;
+          emit = (emit << 1) | (val >>> 31);
+       }
+
+       return (this.bitsream.writeBits(emit, n) == n);
+    }  
 
 
     @Override
