@@ -15,8 +15,6 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.BitStream;
-import kanzi.bitstream.DefaultBitStream;
 import kanzi.EntropyEncoder;
 import kanzi.entropy.ExpGolombEncoder;
 import kanzi.entropy.HuffmanEncoder;
@@ -24,6 +22,8 @@ import kanzi.entropy.RangeEncoder;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import kanzi.OutputBitStream;
+import kanzi.bitstream.DefaultOutputBitStream;
 
 
 public class TestEntropyCoders
@@ -35,7 +35,7 @@ public class TestEntropyCoders
             EntropyEncoder encoder;
             String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
             FileInputStream fis = new FileInputStream(new File(fileName));
-            BitStream obs;
+            OutputBitStream obs;
             FileOutputStream fos;
             String outputFileName = fileName;
             long before, after;
@@ -64,7 +64,7 @@ public class TestEntropyCoders
                 fis = new FileInputStream(new File(fileName));
                 outputFileName = outputFileName.substring(0, outputFileName.length() - 3).concat("egl");
                 fos = new FileOutputStream(new File(outputFileName));
-                obs = new DefaultBitStream(fos, 1000000);
+                obs = new DefaultOutputBitStream(fos, 1000000);
                 encoder = new ExpGolombEncoder(obs, true);
                 before = System.nanoTime();
 
@@ -105,8 +105,8 @@ public class TestEntropyCoders
                 fis.close();
                 fis = new FileInputStream(new File(fileName));
                 fos = new FileOutputStream(new File(outputFileName));
-                obs = new DefaultBitStream(fos, 16384);
-                encoder = new HuffmanEncoder(obs, true);
+                obs = new DefaultOutputBitStream(fos, 16384);
+                encoder = new HuffmanEncoder(obs);
                 ((HuffmanEncoder) encoder).updateFrequencies(freq);
                 before = System.nanoTime();
 
@@ -135,7 +135,7 @@ public class TestEntropyCoders
                 fis = new FileInputStream(new File(fileName));
                 outputFileName = outputFileName.substring(0, outputFileName.length() - 3).concat("rng");
                 fos = new FileOutputStream(new File(outputFileName));
-                obs = new DefaultBitStream(fos, 16384);
+                obs = new DefaultOutputBitStream(fos, 16384);
                 encoder = new RangeEncoder(obs);
                 before = System.nanoTime();
 
