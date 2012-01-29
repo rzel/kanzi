@@ -44,16 +44,15 @@ public final class DefaultInputBitStream implements InputBitStream
    @Override
    public synchronized int readBit() throws BitStreamException
    {
-      final int bit = (this.buffer[this.position] >> this.bitIndex) & 1;
-      this.bitIndex = (this.bitIndex + 7) & 7;
-      this.read++;
-
       if (this.bitIndex == 7)
       {
          if (++this.position > this.maxPosition)
             this.readFromInputStream(0, this.buffer.length);
       }
 
+      final int bit = (this.buffer[this.position] >> this.bitIndex) & 1;
+      this.bitIndex = (this.bitIndex + 7) & 7;
+      this.read++;
       return bit;
    }
 
@@ -66,7 +65,7 @@ public final class DefaultInputBitStream implements InputBitStream
       try
       {
          this.position = 0;
-         int size = this.is.read(this.buffer, offset, length);
+         final int size = this.is.read(this.buffer, offset, length);
 
          if (size < 0)
          {
@@ -106,33 +105,18 @@ public final class DefaultInputBitStream implements InputBitStream
             idx = (idx + 8 - len) & 7;
             this.read += len;
             this.bitIndex = idx;
-
-            if (idx == 7)
-            {
-               if (++this.position > this.maxPosition)
-                  this.readFromInputStream(0, this.buffer.length);
-            }
          }
 
          // Need to read more bits ?
          if (this.bitIndex == 7)
          {
-            final int inBufferBytes = (this.maxPosition > this.position) ? 
-                    this.maxPosition - this.position : 0;
-
-            if ((inBufferBytes << 3) < length)
-            {
-               for (int i=0; i<inBufferBytes; i++)
-                  this.buffer[i] = this.buffer[this.position+i];
-
-               this.readFromInputStream(inBufferBytes, this.buffer.length-inBufferBytes);
-            }
-            
             // We are byte aligned, fast track
             while (remaining >= 8)
             {
+               if (++this.position > this.maxPosition)
+                  this.readFromInputStream(0, this.buffer.length);
+
                final long value = this.buffer[this.position] & 0xFF;
-               this.position++;
                remaining -= 8;
                this.read += 8;
                res |= (value << remaining);
@@ -141,6 +125,9 @@ public final class DefaultInputBitStream implements InputBitStream
             // Extract last bits from the current location in buffer
             if (remaining > 0)
             {
+               if (++this.position > this.maxPosition)
+                  this.readFromInputStream(0, this.buffer.length);
+
                final int value = this.buffer[this.position] & 0xFF;
                final long bits = (value >> (8 - remaining)) & ((1 << remaining) - 1);
                res |= bits;
@@ -165,7 +152,7 @@ public final class DefaultInputBitStream implements InputBitStream
          return;
 
       // Reset fields to force a readFromInputStream() (that will throw an exception)
-      // on readBit() or readBits() 
+      // on readBit() or readBits()
       this.closed = true;
       this.bitIndex = 7;
       this.maxPosition = -1;
@@ -208,7 +195,6 @@ public final class DefaultInputBitStream implements InputBitStream
          }
       }
 
-      return ((this.position < this.maxPosition)
-              || ((this.position == this.maxPosition) && (this.bitIndex != 7)));
+      return (this.position <= this.maxPosition);
    }
 }
