@@ -23,14 +23,16 @@ import java.util.TreeMap;
 import kanzi.InputBitStream;
 import kanzi.OutputBitStream;
 
-
 // Tree utility class for a canonical implementation of Huffman codec
 /*package*/ class HuffmanTree
 {
+    public static final int DECODING_BATCH_SIZE = 10; // in bits
+
     private final int[] codes;
     private final int[] sizes; // Cache for speed purpose
     private final Node root;
-
+    private final CacheData[] decodingCache;
+    private CacheData current;
 
     
     // Used by encoder
@@ -38,6 +40,8 @@ import kanzi.OutputBitStream;
     {
        this.codes = new int[256];
        this.sizes = new int[256];
+       this.decodingCache = null;
+       this.current = null;
 
        // Create tree from frequencies
        this.root = this.createTreeFromFrequencies(frequencies);
@@ -62,6 +66,56 @@ import kanzi.OutputBitStream;
 
        // Create tree from code sizes
        this.root = this.createTreeFromCodes(maxSize);
+       this.decodingCache = this.createDecodingCache();
+       this.current = new CacheData(this.root); // point to root
+    }
+
+
+    private CacheData[] createDecodingCache()
+    {
+       LinkedList<CacheData> nodes = new LinkedList<CacheData>();
+       final int end = 1 << DECODING_BATCH_SIZE;
+       CacheData previousData = null;
+
+       // Create an array storing a list of Nodes for each input byte value
+       for (int val=0; val<end; val++)
+       {
+          int shift = DECODING_BATCH_SIZE - 1;
+          boolean firstAdded = false;
+
+          while (shift >= 0)
+          {
+             // Start from root
+             Node currentNode = this.root;
+
+             // Process next bit
+             while ((shift >= 0) && ((currentNode.left != null) || (currentNode.right != null)))
+             {
+                currentNode = (((val >> shift) & 1) == 0) ? currentNode.left : currentNode.right;
+                shift--;
+             }
+
+             final CacheData currentData = new CacheData(currentNode);
+
+             // The list is made of linked nodes
+             if (previousData != null)
+                previousData.next = currentData;
+
+             previousData = currentData;
+
+             if (firstAdded == false)
+             {
+                // Add first node of list to array (whether it is a leaf or not)
+                nodes.addLast(currentData);
+                firstAdded = true;
+             }
+          }
+
+          previousData.next = new CacheData(this.root);
+          previousData = previousData.next;
+       }
+
+       return nodes.toArray(new CacheData[nodes.size()]);
     }
 
 
@@ -250,14 +304,41 @@ import kanzi.OutputBitStream;
     /*package*/ byte decodeByte(InputBitStream bitstream)
     {
        // Empty cache
-       Node current = this.root;
+       Node currNode = this.current.value;
+
+       if (currNode != this.root)
+          this.current = this.current.next;
        
-       while ((current.left != null) || (current.right != null))
+       while ((currNode.left != null) || (currNode.right != null))
        {
-          current = (bitstream.readBit() == 0) ? current.left : current.right;
+          currNode = (bitstream.readBit() == 0) ? currNode.left : currNode.right;
        }
 
-       return current.symbol;
+       return currNode.symbol;
+    }
+
+
+    // DECODING_BATCH_SIZE bits must be available in the bitstream
+    /*package*/ byte fastDecodeByte(InputBitStream bitstream)
+    {
+       Node currNode = this.current.value;
+
+       // Use the cache to find a good starting point in the tree
+       if (currNode == this.root)
+       {
+          // Read more bits from the bitstream and fetch starting point from cache
+          final int idx = (int) bitstream.readBits(DECODING_BATCH_SIZE);
+          this.current = this.decodingCache[idx];
+          currNode = this.current.value;
+       }
+
+       while ((currNode.left != null) || (currNode.right != null))
+       {
+          currNode = (bitstream.readBit() == 0) ? currNode.left : currNode.right;
+       }
+
+       this.current = this.current.next;
+       return currNode.symbol;
     }
 
 
@@ -357,7 +438,7 @@ import kanzi.OutputBitStream;
        @Override
        public int hashCode()
        {
-           return this.length + (this.code << 16);
+           return this.length | (this.code << 16);
        }
     }
 
@@ -389,4 +470,15 @@ import kanzi.OutputBitStream;
         }
     }
 
+
+    private static class CacheData
+    {
+       Node value;
+       CacheData next;
+
+       CacheData(Node value)
+       {
+          this.value = value;
+       }
+    }
 }

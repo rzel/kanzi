@@ -56,9 +56,9 @@ public class HuffmanEncoder extends AbstractEncoder
          // Unary encode the length difference
          for (int i=1; i<frequencies.length; i++)
          {
-             final int nextSize = this.tree.getSize(i);
-             egenc.encodeByte((byte) (nextSize - prevSize));
-             prevSize = nextSize;
+            final int nextSize = this.tree.getSize(i);
+            egenc.encodeByte((byte) (nextSize - prevSize));
+            prevSize = nextSize;
          }
         
         return true;

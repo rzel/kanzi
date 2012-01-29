@@ -49,14 +49,14 @@ public class HuffmanDecoder extends AbstractDecoder
         int maxSize = 0;
         buf[0] = (int) this.bitstream.readBits(5);
         ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
-
+       
         // Read lengths
         for (int i=1; i<buf.length; i++)
         {
-            buf[i] = buf[i-1] + egdec.decodeByte();
+           buf[i] = buf[i-1] + egdec.decodeByte();
 
-            if (maxSize < buf[i])
-               maxSize = buf[i];
+           if (maxSize < buf[i])
+              maxSize = buf[i];
         }
 
         // Create Huffman tree
@@ -74,14 +74,14 @@ public class HuffmanDecoder extends AbstractDecoder
 
        this.readLengths();
        final int end2 = blkptr + len;
-       final int end1 = end2 - 8;
+       final int end1 = end2 - HuffmanTree.DECODING_BATCH_SIZE;
        int i = blkptr;
 
        try
-       {
+       {       
           // Decode fast by reading one byte at a time from the bitstream
           while (i < end1)
-             array[i++] = this.tree.decodeByte(this.bitstream);
+             array[i++] = this.tree.fastDecodeByte(this.bitstream);
 
           // Regular decoding by reading one bit at a time from the bitstream
           while (i < end2)
