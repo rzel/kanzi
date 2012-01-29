@@ -20,16 +20,18 @@ import kanzi.IndexedByteArray;
 
 // Simple implementation of a Run Length Codec
 // Length is transmitted as 1 or 2 bytes (minus 1 bit for the mask that indicates
-// whether a second byte is used). The run threshold is 2.
+// whether a second byte is used). The run threshold can be provided.
+// For a run threshold of 2:
 // EG input: 0x10 0x11 0x11 0x17 0x13 0x13 0x13 0x13 0x13 0x13 0x12 (160 times) 0x14
 //   output: 0x10 0x11 0x11 0x17 0x13 0x13 0x13 0x05 0x12 0x12 0x80 0xA0 0x14
 
 public class RLT implements ByteFunction
 {
    private static final int TWO_BYTE_RLE_MASK = 0x80;
-   private static final int MAX_RUN_VALUE = 0x8000;
+   private static final int MAX_RUN_VALUE = 0x7FFF;
 
    private final int size;
+   private final int runThreshold;
 
 
    public RLT()
@@ -40,16 +42,32 @@ public class RLT implements ByteFunction
 
    public RLT(int size)
    {
+      this(size, 3);
+   }
+
+
+   public RLT(int size, int runThreshold)
+   {
       if (size < 0)
          throw new IllegalArgumentException("Invalid size parameter (must be at least 0)");
 
+      if (runThreshold < 2)
+         throw new IllegalArgumentException("Invalid run threshold parameter (must be at least 2)");
+
       this.size = size;
+      this.runThreshold = runThreshold;
    }
 
 
    public int size()
    {
       return this.size;
+   }
+
+
+   public int getRunThreshold()
+   {
+      return this.runThreshold;
    }
 
 
@@ -60,76 +78,77 @@ public class RLT implements ByteFunction
       int dstIdx = destination.index;
       final byte[] src = source.array;
       final byte[] dst = destination.array;
-      final int end = (this.size == 0) ? src.length : srcIdx + this.size;
-      int run = 0;
-
-      if ((srcIdx >= src.length) || (dstIdx >= dst.length))
+      final int srcEnd = (this.size == 0) ? src.length : srcIdx + this.size;
+      final int dstEnd = dst.length;
+      
+      if ((srcIdx >= srcEnd) || (dstIdx >= dstEnd))
          return false;
+
+      boolean res = true;
+      int run = 1;
+      final int threshold = this.runThreshold;
       
       // Initialize with a value different from the first data
       byte prev = (byte) (~src[srcIdx]);
 
-      while ((srcIdx < end) && (dstIdx < dst.length))
+      try
       {
-         byte val = src[srcIdx];
-
-         // Encode up to 0x7FFF repetitions in the 'length' information
-         if ((prev == val) && (run < MAX_RUN_VALUE))
+         while (srcIdx < srcEnd)
          {
-            run++;
-            srcIdx++;
-            continue;
-         }
+            final byte val = src[srcIdx++];
 
-         if (run > 0)
-         {
-            run--;         
-            dst[dstIdx++] = prev;
-
-            if (dstIdx == dst.length)
-               break;
-
-            // Force MSB to indicate a 2 byte encoding of the length
-            if (run > 0x7F)
+            // Encode up to 0x7FFF repetitions in the 'length' information
+            if ((prev == val) && (run < MAX_RUN_VALUE))
             {
-               dst[dstIdx++] = (byte) (((run >> 8) & 0x7F) | TWO_BYTE_RLE_MASK);
+               if (++run < threshold)
+                  dst[dstIdx++] = prev;
 
-               if (dstIdx == dst.length)
-                  break;
+               continue;
             }
 
-            dst[dstIdx++] = (byte) (run & 0xFF);
-            run = 0;
+            if (run >= threshold)
+            {
+               dst[dstIdx++] = prev;
+               run -= threshold;
 
-            if (dstIdx == dst.length)
-               break;
+               // Force MSB to indicate a 2 byte encoding of the length
+               if (run >= TWO_BYTE_RLE_MASK)
+                  dst[dstIdx++] = (byte) ((run >> 8) | TWO_BYTE_RLE_MASK);
+
+               dst[dstIdx++] = (byte) (run & 0xFF);
+               run = 1;
+            }
+
+            dst[dstIdx++] = val;
+
+            if (prev != val)
+            {
+               prev = val;
+               run = 1;
+            }
          }
 
-         srcIdx++;
-         dst[dstIdx++] = val;
-         prev = val;
-      }
-
-      // Fill up the destination array
-      if ((run > 0) && (dstIdx < dst.length))
-      {
-         run--;
-         dst[dstIdx++] = prev;
-
-         // Force MSB to indicate a 2 byte encoding of the length
-         if (run > 0x7F)
+         // Fill up the destination array
+         if (run >= threshold)
          {
-            if (dstIdx < dst.length)
-               dst[dstIdx++] = (byte) (((run >> 8) & 0x7F) | TWO_BYTE_RLE_MASK);
-         }
+            dst[dstIdx++] = prev;
+            run -= threshold;
 
-         if (dstIdx < dst.length)
+            // Force MSB to indicate a 2 byte encoding of the length
+            if (run >= TWO_BYTE_RLE_MASK)
+               dst[dstIdx++] = (byte) ((run >> 8) | TWO_BYTE_RLE_MASK);
+
             dst[dstIdx++] = (byte) (run & 0xFF);
+         }
+      }
+      catch (ArrayIndexOutOfBoundsException e)
+      {
+         res = false;
       }
 
       source.index = srcIdx;
       destination.index = dstIdx;
-      return true;
+      return res;
    }
 
 
@@ -140,67 +159,56 @@ public class RLT implements ByteFunction
       int dstIdx = destination.index;
       final byte[] src = source.array;
       final byte[] dst = destination.array;
-      final int end = (this.size == 0) ? src.length : srcIdx + this.size;
-      int run = 0;
+      final int srcEnd = (this.size == 0) ? src.length : srcIdx + this.size;
+      final int dstEnd = dst.length;
 
-      if ((srcIdx >= src.length) || (dstIdx >= dst.length))
+      if ((srcIdx >= srcEnd) || (dstIdx >= dstEnd))
          return false;
+
+      int run = 1;
+      final int threshold = this.runThreshold;
+      boolean res = true;
 
       // Initialize with a value different from the first data
       byte prev = (byte) (~src[srcIdx]);
 
-      while ((srcIdx < end) && (dstIdx < dst.length))
+      try
       {
-         if (run > 0)
-         {
-            int iter = run < (dst.length - dstIdx) ? run : dst.length - dstIdx;
-            run -= iter;
+         while (srcIdx < srcEnd)
+         { 
+            final byte val = src[srcIdx++];
+            run = (prev == val) ? run + 1 : 1;
 
-            while (--iter >= 0)
-               dst[dstIdx++] = prev;
-
-            continue;
-         }
-
-         final byte val = src[srcIdx++];
-
-         if (prev == val)
-         {
-            if (srcIdx == end)
+            if (run >= threshold)
             {
-               dst[dstIdx++] = val;
-               return false;
+               // Read the length
+               run = src[srcIdx++] & 0xFF;
+
+               // If the length is encoded in 2 bytes, process next byte
+               if ((run & TWO_BYTE_RLE_MASK) != 0)
+               {
+                  run = ((run & (~TWO_BYTE_RLE_MASK)) << 8) | (src[srcIdx++] & 0xFF);
+               }
+
+               // Emit length times the previous byte
+               while (--run >= 0)
+                  dst[dstIdx++] = prev;
             }
 
-            run = src[srcIdx++] & 0xFF;
-
-            // If the length is encoded in 2 bytes, process next byte
-            if ((run & TWO_BYTE_RLE_MASK) != 0)
-            {
-               if (srcIdx == end)
-                  return false;
-
-               run = ((run & 0x7F) << 8) | (src[srcIdx++] & 0xFF);
-            }
+            dst[dstIdx++] = val;
+            prev = val;
          }
 
-         dst[dstIdx++] = val;
-         prev = val;
-      }
-
-      if (run > 0)
-      {
-         int iter = run < (dst.length - dstIdx) ? run : dst.length - dstIdx;
-         run -= iter;
-
-         while (--iter >= 0)
+         while (--run >= 0)
             dst[dstIdx++] = prev;
+      }
+      catch (ArrayIndexOutOfBoundsException e)
+      {
+         res = false;
       }
 
       source.index = srcIdx;
       destination.index = dstIdx;
-
-      // Not enough space in destination array
-      return (run == 0) ? true : false;
+      return res;
    }
 }
