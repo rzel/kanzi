@@ -133,7 +133,7 @@ public class BWT implements ByteTransform
     @Override
     public byte[] forward(byte[] input, int blkptr)
     {
-        int len = (this.size == 0) ? input.length - blkptr : this.size;
+        final int len = (this.size == 0) ? input.length - blkptr : this.size;
 
         if (len < 2)
            return input;
@@ -147,9 +147,9 @@ public class BWT implements ByteTransform
         for (int i=0; i<len; i++)
            this.data[i] = input[blkptr+i] & 0xFF;
 
-        int[] sa = this.buffer1;
+        final int[] sa = this.buffer1;
 
-        int pIdx = computeSuffixArray(new IndexedIntArray(this.data, 0), sa, 0, len, 256, true);
+        final int pIdx = computeSuffixArray(new IndexedIntArray(this.data, 0), sa, 0, len, 256, true);
         input[0] = (byte) this.data[len-1];
 
         for (int i=0; i<pIdx; i++)
@@ -176,20 +176,11 @@ public class BWT implements ByteTransform
         if (this.buffer2.length < len)
            this.buffer2 = new byte[len];
 
-        int[] buckets_ = this.buckets;
-        int[] src = this.data;
+        final int[] buckets_ = this.buckets;
+        final int[] src = this.data;
 
-        for (int i=0; i<256; i+=8)
-        {
-           buckets_[i]   = 0;
-           buckets_[i+1] = 0;
-           buckets_[i+2] = 0;
-           buckets_[i+3] = 0;
-           buckets_[i+4] = 0;
-           buckets_[i+5] = 0;
-           buckets_[i+6] = 0;
-           buckets_[i+7] = 0;
-        }
+        for (int i=0; i<256; i++)
+           buckets_[i] = 0;
 
        // Create histogram
        for (int i=0; i<len; i++)
@@ -203,17 +194,15 @@ public class BWT implements ByteTransform
           sum += val;
        }
 
-       int pidx = this.getPrimaryIndex();
-       byte[] buffer = this.buffer2;
+       final int pIdx = this.getPrimaryIndex();
+       final byte[] buffer = this.buffer2;
 
        for (int i=len-1, val=0; i>=0; i--)
        {
           final byte idx = input[blkptr+val];
           buffer[i] = idx;
           val = src[val] + buckets_[idx & 0xFF];
-          
-          if (val < pidx)
-             val++;
+          val += ((val - pIdx) >>> 31);
        }
 
        System.arraycopy(buffer, 0, input, blkptr, len);
@@ -222,7 +211,7 @@ public class BWT implements ByteTransform
 
 
       // find the start or end of each bucket
-      private void getCounts(IndexedIntArray src, IndexedIntArray dst, int n, int k)
+      private static void getCounts(IndexedIntArray src, IndexedIntArray dst, int n, int k)
       {
         final int[] dstArray = dst.array;
         final int[] srcArray = src.array;
