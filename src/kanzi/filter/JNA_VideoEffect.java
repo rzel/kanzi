@@ -16,13 +16,26 @@ limitations under the License.
 package kanzi.filter;
 
 
-import com.sun.jna.Native;
+import java.lang.reflect.Method;
 import kanzi.VideoEffect;
 
 
 public class JNA_VideoEffect implements VideoEffect
 {
-   static { Native.register("jnaVideoEffect"); }
+   static 
+   { 
+     try
+     {      
+        Class nativeClass = JNA_VideoEffect.class.getClassLoader().loadClass("com.sun.jna.Native");
+        Method nativeInstance = nativeClass.getMethod("register", new Class[] { String.class} );
+        nativeInstance.invoke(null, new Object[] { "jnaVideoEffect" });
+        //Native.register("jnaVideoEffect"); 
+     }
+     catch (Exception e)
+     {  
+        e.printStackTrace();
+     }
+   }
 
    private final int width;
    private final int height;
@@ -55,6 +68,7 @@ public class JNA_VideoEffect implements VideoEffect
     public native int[] native_apply(int width, int height, int stride, int[] src, int[] dst);
 
 
+    @Override
     public int[] apply(int[] src, int[] dst)
     {
         return native_apply(this.width, this.height, this.stride, src, dst);
@@ -77,5 +91,4 @@ public class JNA_VideoEffect implements VideoEffect
         this.offset = offset;
         return true;
     }
-
 }
