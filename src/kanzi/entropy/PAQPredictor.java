@@ -15,6 +15,9 @@ limitations under the License.
 package kanzi.entropy;
 
 
+// This class is a port from the code of the dcs-bwt-compressor project
+// http://code.google.com/p/dcs-bwt-compressor/(itself based on PAQ coders)
+
 public class PAQPredictor
 {
    ///////////////////////// state table ////////////////////////

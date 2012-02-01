@@ -18,6 +18,11 @@ package kanzi.entropy;
 
 import kanzi.InputBitStream;
 
+// This class is a port from the code of the dcs-bwt-compressor project
+// http://code.google.com/p/dcs-bwt-compressor/(itself based on PAQ coders)
+
+
+
 //// This is an algorithm for entropy compression of the Burrows-Wheeler
 //// transform of a text. It was originally written by Matt Mahoney as
 //// bbb.cpp - big block BWT compressor version 1, Aug. 31, 2006.
