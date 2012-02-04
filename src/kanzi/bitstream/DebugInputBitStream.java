@@ -71,7 +71,7 @@ public final class DebugInputBitStream implements InputBitStream
     }
     
     
-    public boolean mark()
+    public synchronized boolean mark()
     {
         return this.mark;
     }
@@ -83,13 +83,13 @@ public final class DebugInputBitStream implements InputBitStream
     }
     
     
-    public boolean showByte()
+    public synchronized boolean showByte()
     {
         return this.hexa;
     }
     
     
-    protected void printByte(byte val)
+    protected synchronized void printByte(byte val)
     {
        if ((val >= 0) && (val < 10))
             this.out.print(" [00" + (val & 0xFF) + "] ");
