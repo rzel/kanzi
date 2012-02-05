@@ -59,9 +59,9 @@ public class DecimateDownSampler implements DownSampler
         if ((width & 7) != 0)
             throw new IllegalArgumentException("The width must be a multiple of 8");
 
-        if ((factor != 2) && (factor != 4))
+        if (factor < 2)
             throw new IllegalArgumentException("This implementation only supports "+
-                    "a scaling factor equal to 2 or 4");
+                    "a scaling factor greater than or equal to 2");
 
         this.height = height;
         this.width = width;
@@ -96,17 +96,16 @@ public class DecimateDownSampler implements DownSampler
                 iOffs += st;
             }
         }
-        else // factor == 4
+        else 
         {
+            final int inc = this.factor;
+            
             for (int j=this.height; j>0; j--)
             {
                 final int end = iOffs + w;
 
-                for (int i=iOffs; i<end; i+=8)
-                {
+                for (int i=iOffs; i<end; i+=inc)
                     output[oOffs++] = input[i];
-                    output[oOffs++] = input[i+4];
-                }
 
                 iOffs += st;
             }
@@ -118,13 +117,13 @@ public class DecimateDownSampler implements DownSampler
     public void subSampleVertical(int[] input, int[] output)
     {
         final int w = this.width;
-        final int st = this.stride;
-        final int st2 = st  + st;
         int iOffs = this.offset;
         int oOffs = 0;
 
         if (this.factor == 2)
         {
+            final int st2 = this.stride << 1;
+            
             for (int j=this.height; j>0; j-=2)
             {
                 System.arraycopy(input, iOffs, output, oOffs, w);
@@ -132,16 +131,16 @@ public class DecimateDownSampler implements DownSampler
                 iOffs += st2;
             }
         }
-        else // factor == 4
+        else 
         {
-            final int st3 = st2 + st;
-            final int st4 = st3 + st;
+            final int inc = this.factor;
+            final int incY = this.stride * this.factor;
 
-            for (int j=this.height; j>0; j-=4)
+            for (int j=this.height; j>0; j-=inc)
             {
                 System.arraycopy(input, iOffs, output, oOffs, w);
                 oOffs += w;
-                iOffs += st4;
+                iOffs += incY;
             }
         }
     }
@@ -152,33 +151,31 @@ public class DecimateDownSampler implements DownSampler
     {
         int line0 = this.offset;
         final int w = this.width;
-        final int st = this.stride;
         int oOffs = 0;
 
         if (this.factor == 2)
         {
+            final int st2 = this.stride << 1;
+            
             for (int j=this.height; j>0; j-=2)
             {
-                final int line1 = line0 + st;
-
                 for (int i=0; i<w; i+=2)
                    output[oOffs++] = input[line0+i];
 
-                line0 = line1 + st;
+                line0 += st2;
             }
         }
-        else // factor == 4
+        else 
         {
-            for (int j=this.height; j>0; j-=4)
+            final int inc = this.factor;
+            final int incY = this.stride * this.factor;
+            
+            for (int j=this.height; j>0; j-=inc)
             {
-                final int line1 = line0 + st;
-                final int line2 = line1 + st;
-                final int line3 = line2 + st;
-
-                for (int i=0; i<w; i+=4)
+                for (int i=0; i<w; i+=inc)
                    output[oOffs++] = input[line0+i];
 
-                line0 = line3 + st;
+                line0 += incY;
             }
         }
     }
@@ -187,6 +184,6 @@ public class DecimateDownSampler implements DownSampler
     @Override
     public boolean supportsScalingFactor(int factor)
     {
-        return ((factor == 2) || (factor == 4)) ? true : false;
+        return (factor >= 2) ? true : false;
     }
 }
