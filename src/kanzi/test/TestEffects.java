@@ -15,16 +15,20 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.VideoEffect;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Transparency;
 import java.awt.image.BufferedImage;
+import java.util.Random;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import kanzi.VideoEffectWithOffset;
+import kanzi.filter.FastBilateralFilter;
+import kanzi.filter.GaussianFilter;
+import kanzi.filter.LightingEffect;
 import kanzi.filter.SobelFilter;
 
 
@@ -45,58 +49,50 @@ public class TestEffects
             BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
             img.getGraphics().drawImage(image, 0, 0, null);
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            BufferedImage img3 = null;
             int[] source = new int[w*h];
             int[] dest = new int[w*h];
             int[] tmp = new int[w*h];
-
+            
+            for (int i=0; i<dest.length; i++)
+               dest[i] = i ;
+            
             // Do NOT use img.getRGB(): it is more than 10 times slower than
             // img.getRaster().getDataElements()
             img.getRaster().getDataElements(0, 0, w, h, source);
+            System.arraycopy(source, 0, dest, 0, w * h);
+            System.arraycopy(source, 0, tmp, 0, w * h);
 
-            VideoEffect effect;
-            //effect = new GlowingEffect(200, h, 100, w, 20, 10);
-            effect = new SobelFilter(w, h);
-            //effect = new BilateralFilter(w, h, 0, w, 3, 8);
-            effect.apply(source, dest);
-            System.arraycopy(dest, 0, tmp, 0, w * h);
+            int x, y, dw, dh;
+            dw = 128;
+            dh = 128;
+            Random rnd = new Random();
+            MovingEffect[] effects = new MovingEffect[4];
+            x = 64   + rnd.nextInt(10);
+            y = 64   + rnd.nextInt(60);
+            effects[0] = new MovingEffect(new SobelFilter(dw, dh, y*w+x, w),
+                    x, y, 1, 1, "Sobel");
+            x = 128 + rnd.nextInt(10);
+            y = 256 + rnd.nextInt(60);
+            effects[1] = new MovingEffect(new GaussianFilter(dw, dh, y*w+x, w, 100, 3),
+                    x, y, 1, -1, "Gaussian");
+            x = 192 + rnd.nextInt(10);
+            y = 128 + rnd.nextInt(60);
+            effects[2] = new MovingEffect(new FastBilateralFilter(dw, dh, y*w+x, w, 30.0f, 0.03f, 4, 0, 3),
+                    x, y, -1, 1, "Bilateral");
+            x = 256 + rnd.nextInt(10);
+            y = 256 + rnd.nextInt(60);
+            boolean bump = true;
+            effects[3] = new MovingEffect(new LightingEffect(dw, dh, y*w+x, w, 64, 64, 64, 20, 120, bump),
+                    x, y, -1, -1, ((bump==false)?"Lighting":"Lighting+Bump"));
 
-            // Calculate image difference
-            boolean imgDiff = false;
-
-            if (imgDiff == true)
+            for (int i=0; i<effects.length; i++)
             {
-               int[] delta = new int[w*h];
-               img3 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-
-               for (int j = 0; j < h; j++)
-               {
-                  for (int i = 0; i < w; i++)
-                  {
-                     int p1 = source[j * w + i];
-                     int p2 = dest[j * w + i];
-                     int r1 = (p1 >> 16) & 0xFF;
-                     int g1 = (p1 >> 8) & 0xFF;
-                     int b1 = p1 & 0xFF;
-                     int r2 = (p2 >> 16) & 0xFF;
-                     int g2 = (p2 >> 8) & 0xFF;
-                     int b2 = p2 & 0xFF;
-                     int r = Math.abs(r1 - r2) & 0xFF;
-                     int g = Math.abs(g1 - g2) & 0xFF;
-                     int b = Math.abs(b1 - b2) & 0xFF;
-                     int avg = (r + g + b) / 3;
-                     avg <<= 5; // magnify small errors
-
-                     if (avg > 255)
-                        avg = 255;
-
-                     delta[j * w + i] = (avg << 16) | (avg << 8) | avg;
-                  }
-               }
-
-               img3.getRaster().setDataElements(0, 0, w, h, delta);
+               effects[i].effect.apply(tmp, dest);
+               int[] t = tmp;
+               tmp = dest;
+               tmp = t;
             }
-
+            
             img2.getRaster().setDataElements(0, 0, w, h, dest);
 
             //icon = new ImageIcon(img);
@@ -110,37 +106,64 @@ public class TestEffects
             frame2.add(new JLabel(newIcon));
             frame2.setVisible(true);
 
-            if (imgDiff == true)
-            {
-               ImageIcon icon3 = new ImageIcon(img3);
-               JFrame frame3 = new JFrame("Delta");
-               frame3.setBounds(200, 100, w, h);
-               frame3.add(new JLabel(icon3));
-               frame3.setVisible(true);
-            }
+            int nn = 0;
+            int nn0 = 0;
+            long delta = 0;
+            String sfps = "";
 
-            // Speed test
+            while (++nn < 10000)
             {
-                System.arraycopy(source, 0, tmp, 0, w * h);
-                System.out.println("Speed test");
-                int iters = 1000;
-                long before = System.nanoTime();
+               long before = System.nanoTime();
+               System.arraycopy(source, 0, dest, 0, w * h);
 
-                for (int ii=0; ii<iters; ii++)
-                {
-                   effect.apply(source, tmp);
-                }
+               for (int i=0; i<effects.length; i++)
+               {
+                  MovingEffect e = effects[i];
+                  e.effect.apply(tmp, dest);
+                  e.x += e.vx;
+                  e.y += e.vy;
+                  e.effect.setOffset(e.y*w+e.x);
 
-                long after = System.nanoTime();
-                System.out.println("Elapsed [ms]: "+ (after-before)/1000000+" ("+iters+" iterations)");
-            }
+                  if (e.x + dw > (w*15/16))
+                     e.vx = - e.vx;
 
-            try
-            {
-                Thread.sleep(45000);
-            }
-            catch (Exception e)
-            {
+                  if (e.x < (w/16))
+                     e.vx = - e.vx;
+
+                  if (e.y + dh > (h*15/16))
+                     e.vy = - e.vy;
+
+                  if (e.y < (h/16))
+                     e.vy = - e.vy;
+
+                  int[] t = tmp;
+                  tmp = dest;
+                  tmp = t;
+               }
+
+               img2.getRaster().setDataElements(0, 0, w, h, dest);
+               long after = System.nanoTime();
+               delta += (after - before);
+
+               if (delta >= 1000000000L)
+               {
+                  float d = (float) delta / 1000000000L;
+                  float fps = (nn - nn0) / d;
+                  sfps = String.valueOf(Math.round(fps*100)/(float)100+" FPS");
+                  delta = 0;
+                  nn0 = nn;
+               }
+
+               for (MovingEffect e : effects)
+               {
+                  img2.getGraphics().drawString(e.name, e.x+4, e.y+12);
+                  img2.getGraphics().drawRect(e.x, e.y, dw, dh);
+               }
+
+               img2.getGraphics().drawString(sfps, 32, 32);
+               frame2.invalidate();
+               frame2.repaint();
+               //Thread.sleep(10);
             }
         }
         catch (Exception e)
@@ -150,4 +173,26 @@ public class TestEffects
 
         System.exit(0);
     }
+    
+    
+    static class MovingEffect
+    {
+       VideoEffectWithOffset effect;
+       int x;
+       int y;
+       int vx;
+       int vy;
+       String name;
+       
+       MovingEffect(VideoEffectWithOffset effect, int x, int y, int vx, int vy, String name)
+       {
+          this.effect = effect;
+          this.x = x;
+          this.y = y;
+          this.vx = vx;
+          this.vy = vy;
+          this.name = name;
+       }
+    }
+            
 }
