@@ -15,11 +15,12 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffect;
+import kanzi.VideoEffectWithOffset;
 
 
 // Based on algorithm from http://www.blackpawn.com/texts/blur/default.html
-public final class BlurFilter implements VideoEffect
+
+public final class BlurFilter implements VideoEffectWithOffset
 {
     private final int width;
     private final int height;
@@ -114,6 +115,7 @@ public final class BlurFilter implements VideoEffect
     }
     
     
+    @Override
     public int getOffset()
     {
         return this.offset;
@@ -121,6 +123,7 @@ public final class BlurFilter implements VideoEffect
     
     
     // Not thread safe
+    @Override
     public boolean setOffset(int offset)
     {
         if (offset < 0)

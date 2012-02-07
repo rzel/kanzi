@@ -15,10 +15,10 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffect;
+import kanzi.VideoEffectWithOffset;
 
 
-public class JNI_VideoEffect implements VideoEffect
+public class JNI_VideoEffect implements VideoEffectWithOffset
 {
     static { System.loadLibrary("jniVideoEffect"); }
 
@@ -53,12 +53,14 @@ public class JNI_VideoEffect implements VideoEffect
     public native int[] native_apply(int width, int height, int stride, int[] src, int[] dst);
 
 
+    @Override
     public int[] apply(int[] src, int[] dst)
     {
         return native_apply(this.width, this.height, this.stride, src, dst);
     }
 
 
+    @Override
     public int getOffset()
     {
         return this.offset;
@@ -66,6 +68,7 @@ public class JNI_VideoEffect implements VideoEffect
 
 
     // Not thread safe
+    @Override
     public boolean setOffset(int offset)
     {
         if (offset < 0)

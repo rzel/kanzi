@@ -15,10 +15,10 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffect;
+import kanzi.VideoEffectWithOffset;
 
 
-public final class SobelFilter implements VideoEffect
+public final class SobelFilter implements VideoEffectWithOffset
 {
     public static final int HORIZONTAL = 1;
     public static final int VERTICAL = 2;
@@ -35,7 +35,7 @@ public final class SobelFilter implements VideoEffect
     private final int stride;
     private final int direction;
     private final int mask;
-    private final int offset;
+    private int offset;
     private final boolean isPacked;
 
 
@@ -99,22 +99,15 @@ public final class SobelFilter implements VideoEffect
     @Override
     public int[] apply(int[] src, int[] dst)
     {
-        int o = this.offset;
+        int offs = this.offset;
         int mask_ = this.mask;
-        int startLine = o;
-        int remaining = this.stride - o - this.width;
+        int startLine = offs;
         final int h = this.height;
         final int w = this.width;
         final boolean isVertical = ((this.direction & VERTICAL) != 0) ? true : false;
         final boolean isHorizontal = ((this.direction & HORIZONTAL) != 0) ? true : false;
         final int maxVal = 0x00FFFFFF & mask_;
         final int shift = (isVertical && isHorizontal) ? 1 : 0;
-
-        for (int i=o-1; i>=0; i--)
-           dst[i] = src[i] & mask_;
-
-        for (int i=o+this.width+remaining-1; i>=o+this.width; i--)
-           dst[i] = src[i] & mask_;
 
         for (int y=2; y<h; y++)
         {
@@ -146,28 +139,6 @@ public final class SobelFilter implements VideoEffect
               val11 = pixel11 & 0xFF;
               val20 = pixel20 & 0xFF;
               val21 = pixel21 & 0xFF;
-           }
-
-           if ((o >= 16) && (mask_ == IMAGE))
-           {
-               System.arraycopy(src, o, dst, line-o, o);
-           }
-           else
-           {
-               for (int i=line-o; i<line; i++)
-                 dst[i] = src[i] & mask_;
-           }
-
-           if ((remaining >= 16) && (mask_ == IMAGE))
-           {
-              System.arraycopy(src, line+w, dst, line+w, remaining);
-           }
-           else
-           {
-             int end = line + w + remaining;
-
-             for (int i=line+w; i<end; i++)
-                dst[i] = src[i] & mask_;
            }
 
            for (int x=2; x<w; x++)
@@ -238,5 +209,24 @@ public final class SobelFilter implements VideoEffect
        }
 
        return dst;
-   }
+    }
+
+
+    @Override
+    public int getOffset()
+    {
+        return this.offset;
+    }
+
+
+    // Not thread safe
+    @Override
+    public boolean setOffset(int offset)
+    {
+        if (offset < 0)
+            return false;
+
+        this.offset = offset;
+        return true;
+    }
 }

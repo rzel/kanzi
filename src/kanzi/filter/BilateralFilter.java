@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffect;
+import kanzi.VideoEffectWithOffset;
 
 
 // Implementation of a bilateral filter using integer gaussian filters.
@@ -29,7 +29,7 @@ import kanzi.VideoEffect;
 // histogram pictures (big memory consumption). The gaussian filter for distance
 // is approximated by a linear combination of (power) images and the convolution
 // is calculated using the histogram pictures.
-public final class BilateralFilter implements VideoEffect
+public final class BilateralFilter implements VideoEffectWithOffset
 { 
     private final int width;
     private final int height;
@@ -192,7 +192,7 @@ public final class BilateralFilter implements VideoEffect
         final int[] intens = this.intensities;
         final int[] k = this.kernel;
 
-        int mult = (r << 1) + 1;
+        final int mult = (r << 1) + 1;
         int offs = 0;
 
         for (int j=0; j<h; j++)
@@ -209,8 +209,8 @@ public final class BilateralFilter implements VideoEffect
                 int b1 =  val1 & 0xFF;
 
                 // For now, exclude first and last columns (within radius of border)
-                int startX = (i >= r) ? i - r : 0;
-                int endX = (i + r < w) ? i + r : w;
+                final int startX = (i >= r) ? i - r : 0;
+                final int endX = (i + r < w) ? i + r : w;
                 int offs2 = startY * this.stride;
                 int offs3 = 0;
 
@@ -266,6 +266,7 @@ public final class BilateralFilter implements VideoEffect
     }
     
     
+    @Override
     public int getOffset()
     {
         return this.offset;
@@ -273,6 +274,7 @@ public final class BilateralFilter implements VideoEffect
     
     
     // Not thread safe
+    @Override
     public boolean setOffset(int offset)
     {
         if (offset < 0)
@@ -281,5 +283,4 @@ public final class BilateralFilter implements VideoEffect
         this.offset = offset;
         return true;
     }
-    
 }

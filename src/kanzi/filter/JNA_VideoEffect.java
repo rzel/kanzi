@@ -17,10 +17,10 @@ package kanzi.filter;
 
 
 import java.lang.reflect.Method;
-import kanzi.VideoEffect;
+import kanzi.VideoEffectWithOffset;
 
 
-public class JNA_VideoEffect implements VideoEffect
+public class JNA_VideoEffect implements VideoEffectWithOffset
 {
    static 
    { 
@@ -75,7 +75,7 @@ public class JNA_VideoEffect implements VideoEffect
     }
 
 
-
+    @Override
     public int getOffset()
     {
         return this.offset;
@@ -83,6 +83,7 @@ public class JNA_VideoEffect implements VideoEffect
 
 
     // Not thread safe
+    @Override
     public boolean setOffset(int offset)
     {
         if (offset < 0)
