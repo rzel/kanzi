@@ -27,32 +27,32 @@ public final class SobelFilter implements VideoEffectWithOffset
     // Can generate RGB/YCC image or array of costs (cost range = [0..255])
     public static final int IMAGE = 0xFFFFFFFF;
     public static final int COST = 0x0000FF;
-    public static final int PACKED_IMAGE = 0;
-    public static final int UNPACKED_IMAGE = 1;
+    public static final int THREE_CHANNELS = 3;
+    public static final int ONE_CHANNEL = 1;
 
     private final int width;
     private final int height;
     private final int stride;
     private final int direction;
     private final int mask;
+    private final int channels;
     private int offset;
-    private final boolean isPacked;
 
 
     public SobelFilter(int width, int height)
     {
-       this(width, height, 0, width, VERTICAL | HORIZONTAL, PACKED_IMAGE, IMAGE);
+       this(width, height, 0, width, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE);
     }
 
 
     public SobelFilter(int width, int height, int offset, int stride)
     {
-       this(width, height, offset, stride, VERTICAL | HORIZONTAL, PACKED_IMAGE, IMAGE);
+       this(width, height, offset, stride, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE);
     }
 
 
     public SobelFilter(int width, int height, int offset, int stride,
-            int direction, int imageType, int filterType)
+            int direction, int nbChannels, int filterType)
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
@@ -66,7 +66,7 @@ public final class SobelFilter implements VideoEffectWithOffset
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
 
-        if (((direction & HORIZONTAL) == 0) && ((direction & VERTICAL) == 0))
+        if ((direction & (HORIZONTAL | VERTICAL)) == 0)
             throw new IllegalArgumentException("Invalid direction parameter (must be VERTICAL or HORIZONTAL or both)");
 
         if ((direction & ~(HORIZONTAL | VERTICAL)) != 0)
@@ -75,8 +75,8 @@ public final class SobelFilter implements VideoEffectWithOffset
         if ((filterType != COST) && (filterType != IMAGE))
             throw new IllegalArgumentException("Invalid filter type parameter (must be IMAGE or COST)");
 
-        if ((imageType != PACKED_IMAGE) && (imageType != UNPACKED_IMAGE))
-            throw new IllegalArgumentException("Invalid image type parameter (must be PACKED_IMAGE or UNPACKED_IMAGE)");
+        if ((nbChannels != THREE_CHANNELS) && (nbChannels != ONE_CHANNEL))
+            throw new IllegalArgumentException("Invalid image type parameter (must be ONE_CHANNEL or THREE_CHANNELS)");
 
         this.height = height;
         this.width = width;
@@ -84,7 +84,7 @@ public final class SobelFilter implements VideoEffectWithOffset
         this.stride = stride;
         this.direction = direction;
         this.mask = filterType;
-        this.isPacked = (imageType == PACKED_IMAGE);
+        this.channels = nbChannels;
     }
 
 
@@ -100,14 +100,15 @@ public final class SobelFilter implements VideoEffectWithOffset
     public int[] apply(int[] src, int[] dst)
     {
         int offs = this.offset;
-        int mask_ = this.mask;
         int startLine = offs;
+        final int mask_ = this.mask;
         final int h = this.height;
         final int w = this.width;
         final boolean isVertical = ((this.direction & VERTICAL) != 0) ? true : false;
         final boolean isHorizontal = ((this.direction & HORIZONTAL) != 0) ? true : false;
         final int maxVal = 0x00FFFFFF & mask_;
         final int shift = (isVertical && isHorizontal) ? 1 : 0;
+        boolean isPacked = (this.channels == 3) ? true : false;
 
         for (int y=2; y<h; y++)
         {
@@ -121,7 +122,7 @@ public final class SobelFilter implements VideoEffectWithOffset
            final int pixel21 = src[endLine+1];
            int val00, val01, val10, val11, val20, val21;
 
-           if (this.isPacked)
+           if (isPacked)
            {
               // Gray levels
               val00 = (((pixel00 >> 16) & 0xFF) + ((pixel00 >> 8) & 0xFF) + (pixel00 & 0xFF)) / 3;
@@ -148,7 +149,7 @@ public final class SobelFilter implements VideoEffectWithOffset
              final int pixel22 = src[endLine+x];
              final int val02, val12, val22;
 
-             if (this.isPacked)
+             if (isPacked)
              {
                 // Gray levels
                 val02 = (((pixel02 >> 16) & 0xFF) + ((pixel02 >> 8) & 0xFF) + (pixel02 & 0xFF)) / 3;
@@ -199,14 +200,12 @@ public final class SobelFilter implements VideoEffectWithOffset
           startLine = line;
        }
 
-       startLine = this.stride * (this.height - 1);
+       final int firstLine = this.offset;
+       final int lastLine = this.offset + this.stride * (this.height - 1);
 
        // Duplicate first and last lines
-       for (int i=this.stride-1; i>=0; i--)
-       {
-          dst[i] = dst[this.stride+i] & mask_;
-          dst[startLine+i] = dst[startLine-this.stride+i] & mask_;
-       }
+       System.arraycopy(dst, firstLine+this.stride, dst, firstLine, w);
+       System.arraycopy(dst, lastLine-this.stride, dst, lastLine, w);
 
        return dst;
     }

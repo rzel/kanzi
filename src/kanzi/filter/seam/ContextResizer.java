@@ -917,7 +917,7 @@ public class ContextResizer implements VideoEffect
     {
         SobelFilter gradientFilter = new SobelFilter(this.width, this.height,
                 this.offset, this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
-                SobelFilter.PACKED_IMAGE, SobelFilter.COST);
+                SobelFilter.THREE_CHANNELS, SobelFilter.COST);
         gradientFilter.apply(src, costs_);
         
         // Add a quadratic contribution to the cost
