@@ -240,6 +240,7 @@ public class Global
     };
 
 
+    private static final int THRESHOLD0 =  1 << 8;
     private static final int THRESHOLD1 =  1 << 16;
     private static final int THRESHOLD2 = (1 << 10) - 3;
     private static final int THRESHOLD3 = (1 << 14) - 28;
@@ -252,6 +253,7 @@ public class Global
 
     // Integer SQRT implementation based on algorithm at
     // http://guru.multimedia.cx/fast-integer-square-root/
+    // Return 1024*sqrt(x) with a precision higher than 0.1%
     public static int sqrt(int x) throws IllegalArgumentException
     {
        if (x < 0)
@@ -260,7 +262,9 @@ public class Global
        if (x <= 1)
           return x << 10;
 
-       x <<= 20; // we want to return 1024 * sqrt(x)
+       final int shift = (x < THRESHOLD5) ? ((x < THRESHOLD0) ? 16 : 10) : 0;
+       x <<= shift; // scale up for better precision
+       
        int val;
 
        if (x < THRESHOLD1)
@@ -323,7 +327,8 @@ public class Global
            }
        }
 
-       return val - ((x - (val*val)) >>> 31);
+       // return 1024 * sqrt(x)
+       return (val - ((x - (val*val)) >>> 31)) << (10 - (shift >> 1));
     }
-
+    
 }
