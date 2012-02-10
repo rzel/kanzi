@@ -15,17 +15,21 @@ limitations under the License.
 
 package kanzi.test;
 
+import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Transparency;
+import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.util.Random;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.VideoEffectWithOffset;
+import kanzi.filter.ContrastFilter;
 import kanzi.filter.FastBilateralFilter;
 import kanzi.filter.GaussianFilter;
 import kanzi.filter.LightingEffect;
@@ -42,7 +46,16 @@ public class TestEffects
             ImageIcon icon = new ImageIcon(fileName);
             Image image = icon.getImage();
             int w = image.getWidth(null);
-            int h = image.getHeight(null);
+            int h = image.getHeight(null);            
+            w &= -7;
+            h &= -7;
+            
+            if ((w < 256) || (h < 256))
+            {
+               System.out.println("The image dimensions must be at least 256");
+               System.exit(1);
+            }
+            
             System.out.println(w+"x"+h);
             GraphicsDevice gs = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
             GraphicsConfiguration gc = gs.getDefaultConfiguration();
@@ -53,6 +66,7 @@ public class TestEffects
             int[] dest = new int[w*h];
             int[] tmp = new int[w*h];
             
+            // Sanity check, prefill the destination image
             for (int i=0; i<dest.length; i++)
                dest[i] = i ;
             
@@ -66,13 +80,13 @@ public class TestEffects
             dw = 128;
             dh = 128;
             Random rnd = new Random();
-            MovingEffect[] effects = new MovingEffect[4];
+            MovingEffect[] effects = new MovingEffect[5];
             x = 64   + rnd.nextInt(10);
             y = 64   + rnd.nextInt(60);
             effects[0] = new MovingEffect(new SobelFilter(dw, dh, y*w+x, w),
                     x, y, 1, 1, "Sobel");
             x = 128 + rnd.nextInt(10);
-            y = 256 + rnd.nextInt(60);
+            y = 192 + rnd.nextInt(60);
             effects[1] = new MovingEffect(new GaussianFilter(dw, dh, y*w+x, w, 100, 3),
                     x, y, 1, -1, "Gaussian");
             x = 192 + rnd.nextInt(10);
@@ -80,31 +94,31 @@ public class TestEffects
             effects[2] = new MovingEffect(new FastBilateralFilter(dw, dh, y*w+x, w, 30.0f, 0.03f, 4, 0, 3),
                     x, y, -1, 1, "Bilateral");
             x = 256 + rnd.nextInt(10);
-            y = 256 + rnd.nextInt(60);
+            y = 192 + rnd.nextInt(60);
             boolean bump = true;
-            effects[3] = new MovingEffect(new LightingEffect(dw, dh, y*w+x, w, 64, 64, 64, 20, 120, bump),
+            effects[3] = new MovingEffect(new LightingEffect(dw, dh, y*w+x, w, 64, 64, 64, 100, bump),
                     x, y, -1, -1, ((bump==false)?"Lighting":"Lighting+Bump"));
+            x = 128 + rnd.nextInt(10);
+            y =  64 + rnd.nextInt(60);
+            effects[4] = new MovingEffect(new ContrastFilter(dw, dh, y*w+x, w, 115),
+                    x, y, 2, -1, "Contrast");
 
-            for (int i=0; i<effects.length; i++)
+            for (MovingEffect e : effects)
             {
-               effects[i].effect.apply(tmp, dest);
+               e.effect.apply(tmp, dest);
                int[] t = tmp;
                tmp = dest;
                tmp = t;
             }
             
             img2.getRaster().setDataElements(0, 0, w, h, dest);
-
-            //icon = new ImageIcon(img);
-            JFrame frame = new JFrame("Original");
-            frame.setBounds(150, 100, w, h);
-            frame.add(new JLabel(icon));
-            frame.setVisible(true);
-            JFrame frame2 = new JFrame("Filter");
+                 
+            JFrame frame2 = new JFrame("Filters");
             frame2.setBounds(700, 150, w, h);
             ImageIcon newIcon = new ImageIcon(img2);
-            frame2.add(new JLabel(newIcon));
+            frame2.add(new JLabel(newIcon));         
             frame2.setVisible(true);
+            frame2.createBufferStrategy(2);
 
             int nn = 0;
             int nn0 = 0;
@@ -116,9 +130,8 @@ public class TestEffects
                long before = System.nanoTime();
                System.arraycopy(source, 0, dest, 0, w * h);
 
-               for (int i=0; i<effects.length; i++)
+               for (MovingEffect e : effects)
                {
-                  MovingEffect e = effects[i];
                   e.effect.apply(tmp, dest);
                   e.x += e.vx;
                   e.y += e.vy;
@@ -136,7 +149,7 @@ public class TestEffects
                   if (e.y < (h/16))
                      e.vy = - e.vy;
 
-                  int[] t = tmp;
+                  int[] t = tmp;               
                   tmp = dest;
                   tmp = t;
                }
@@ -152,17 +165,26 @@ public class TestEffects
                   sfps = String.valueOf(Math.round(fps*100)/(float)100+" FPS");
                   delta = 0;
                   nn0 = nn;
+                  frame2.setTitle("Filters - "+sfps);
                }
+
+               BufferStrategy bufferStrategy = frame2.getBufferStrategy();
+               // Graphics g = img2.getGraphics();
+               Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
+               g.setColor(Color.WHITE);
+               g.drawImage(img2, 0, 0, null);  
 
                for (MovingEffect e : effects)
                {
-                  img2.getGraphics().drawString(e.name, e.x+4, e.y+12);
-                  img2.getGraphics().drawRect(e.x, e.y, dw, dh);
+                  g.drawString(e.name, e.x+4, e.y+12);
+                  g.drawRect(e.x, e.y, dw, dh);
                }
-
-               img2.getGraphics().drawString(sfps, 32, 32);
-               frame2.invalidate();
-               frame2.repaint();
+            
+              //g.drawString(sfps, 32, 50);
+               bufferStrategy.show();
+               g.dispose();
+               //frame2.invalidate();
+               //frame2.repaint();
                //Thread.sleep(10);
             }
         }
