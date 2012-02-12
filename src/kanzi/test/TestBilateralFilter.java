@@ -21,10 +21,10 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Transparency;
 import java.awt.image.BufferedImage;
-import java.util.Arrays;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import kanzi.VideoEffect;
 import kanzi.filter.BilateralFilter;
 import kanzi.filter.FastBilateralFilter;
 
@@ -56,10 +56,10 @@ public class TestBilateralFilter
 
         float sigmaR = 30.0f;
         float sigmaD = 0.03f;
-        FastBilateralFilter fbf = new FastBilateralFilter(w, h, sigmaR, sigmaD);
+        VideoEffect fbf = new FastBilateralFilter(w, h, sigmaR, sigmaD);
         fbf.apply(src, dst1);
         img2.getRaster().setDataElements(0, 0, w, h, dst1);
-        BilateralFilter bf = new BilateralFilter(w, h, 0, w, 3, 8);
+        VideoEffect bf = new BilateralFilter(w, h, 0, w, 3, 8);
         bf.apply(src, dst2);
         img3.getRaster().setDataElements(0, 0, w, h, dst2);
         JFrame frame = new JFrame("Original");
@@ -78,8 +78,8 @@ public class TestBilateralFilter
         frame3.setVisible(true);
 
         {
-           int iters = 100;
-           System.out.println("Fast Biltareal: speed test ("+iters+" iterations)");
+           int iters = 1500;
+           System.out.println("Fast Bilateral: speed test ("+iters+" iterations)");
            long before = System.nanoTime();
 
            for (int ii=0; ii<iters; ii++)
