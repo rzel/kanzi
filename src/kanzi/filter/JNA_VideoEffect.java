@@ -26,8 +26,8 @@ public class JNA_VideoEffect implements VideoEffectWithOffset
    { 
      try
      {      
-        Class nativeClass = JNA_VideoEffect.class.getClassLoader().loadClass("com.sun.jna.Native");
-        Method nativeInstance = nativeClass.getMethod("register", new Class[] { String.class} );
+        Class<?> nativeClass = JNA_VideoEffect.class.getClassLoader().loadClass("com.sun.jna.Native");
+        Method nativeInstance = nativeClass.getMethod("register", String.class);
         nativeInstance.invoke(null, new Object[] { "jnaVideoEffect" });
         //Native.register("jnaVideoEffect"); 
      }
@@ -65,13 +65,13 @@ public class JNA_VideoEffect implements VideoEffectWithOffset
 
 
     // Implement the filter in C/C++/ASM !
-    public native int[] native_apply(int width, int height, int stride, int[] src, int[] dst);
+    public native int[] native_apply(int width, int height, int offset, int stride, int[] src, int[] dst);
 
 
     @Override
     public int[] apply(int[] src, int[] dst)
     {
-        return native_apply(this.width, this.height, this.stride, src, dst);
+        return native_apply(this.width, this.height, this.offset, this.stride, src, dst);
     }
 
 
