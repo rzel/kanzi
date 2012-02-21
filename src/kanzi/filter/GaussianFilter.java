@@ -80,8 +80,8 @@ public class GaussianFilter implements VideoEffectWithOffset
        {
           System.arraycopy(src, this.offset, dst, this.offset, this.width*this.height);
           return dst;
-       }       
-       
+       }
+
        final float sigma = (float) this.sigma16 / 16.0f;
        final float nsigma = (sigma < 0.5f) ? 0.5f : sigma;
        final float alpha = 1.695f / nsigma;
@@ -103,39 +103,47 @@ public class GaussianFilter implements VideoEffectWithOffset
        final int w = this.width;
        final int h = this.height;
        final int st = this.stride;
-       int offs;
+       final int len = src.length;
 
        for (int channel=0; channel<this.channels; channel++)
        {
           final int shift = channel << 3;
-          offs = this.offset;
+          int startLine  = this.offset;
           int idx = 0;
 
           // Extract channel
           for (int y=0; y<h; y++)
           {
-             for (int x=0; x<w; x++)
-                buf1[idx++] = (src[offs+x] >> shift) & 0xFF;
+             final int endLine = startLine + w;
+             final int endX = (startLine >= len) ? startLine : ((endLine < len) ? endLine : len);
 
-             offs += st;
+             for (int x=startLine; x<endX; x++)
+                buf1[idx++] = (src[x] >> shift) & 0xFF;
+
+             startLine += st;
           }
 
           this.gaussianRecursiveX(buf1, buf2, a0, a1, a2, a3, b1, b2, coefp, coefn);
           this.gaussianRecursiveY(buf2, buf1, a0, a1, a2, a3, b1, b2, coefp, coefn);
 
-          offs = this.offset;
+          startLine = this.offset;
           idx = 0;
 
           // Add channel
           for (int y=0; y<h; y++)
           {
-             for (int x=0; x<w; x++)
+             if (startLine >= len)
+                break;
+
+             final int endX = (startLine+w < len) ? startLine+w : len;
+
+             for (int x=startLine; x<endX; x++)
              {
-                dst[offs+x] &= ~(0xFF << shift); //src can be the same buffer as dst
-                dst[offs+x] |= (buf1[idx++] & 0xFF) << shift;
+                dst[x] &= ~(0xFF << shift); //src can be the same buffer as dst
+                dst[x] |= (buf1[idx++] & 0xFF) << shift;
              }
-             
-             offs += st;
+
+             startLine += st;
           }
        }
 
@@ -143,7 +151,7 @@ public class GaussianFilter implements VideoEffectWithOffset
     }
 
 
-    private void gaussianRecursiveX(int[] input, int[] output, float a0, float a1, 
+    private void gaussianRecursiveX(int[] input, int[] output, float a0, float a1,
             float a2, float a3, float b1, float b2, float coefp, float coefn)
     {
        final int w = this.width;
@@ -189,12 +197,12 @@ public class GaussianFilter implements VideoEffectWithOffset
     }
 
 
-    private void gaussianRecursiveY(int[] input, int[] output, float a0, float a1, 
+    private void gaussianRecursiveY(int[] input, int[] output, float a0, float a1,
             float a2, float a3, float b1, float b2, float coefp, float coefn)
     {
        final int w = this.width;
        final int h = this.height;
-       
+
        for (int x=0; x<w; x++)
        {
           // forward pass
