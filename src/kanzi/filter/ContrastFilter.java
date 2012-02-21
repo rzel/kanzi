@@ -69,12 +69,13 @@ public class ContrastFilter implements VideoEffectWithOffset
         // Aliasing
         final int w = this.width;
         final int h = this.height;
+        final int len = src.length;
         final int[] buffer = this.intensities;
         int offs = this.offset;
         
         for (int y=0; y<h; y++)
         {
-           final int endX = offs + w;
+           final int endX = (offs + w < len) ? offs + w : len;
            
            for (int x=offs; x<endX; x++)
            {
@@ -86,6 +87,9 @@ public class ContrastFilter implements VideoEffectWithOffset
            }
            
            offs += this.stride;
+
+           if (offs >= len)
+              break;
         }
         
         return dst;
