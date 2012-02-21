@@ -24,6 +24,8 @@ import java.awt.Image;
 import java.awt.Transparency;
 import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.util.Arrays;
 import java.util.Random;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
@@ -43,19 +45,42 @@ public class TestEffects
         try
         {
             String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
-            ImageIcon icon = new ImageIcon(fileName);
+            File file = new File(fileName);
+            String[] fileNames;
+
+            if (file.isDirectory())
+            {
+               // Assume all files are valid images
+               fileNames = file.list();
+               Arrays.sort(fileNames);
+
+               if (fileNames.length == 0)
+               {
+                  System.err.println("The provided file name is a directory containing no image");
+                  System.exit(1);
+               }
+
+               for (int i=0; i<fileNames.length; i++)
+                  fileNames[i] = fileName + "\\" + fileNames[i];
+            }
+            else
+            {
+               fileNames = new String[] { fileName };
+            }
+
+            ImageIcon icon = new ImageIcon(fileNames[0]);
             Image image = icon.getImage();
             int w = image.getWidth(null);
-            int h = image.getHeight(null);            
+            int h = image.getHeight(null);
             w &= -7;
             h &= -7;
-            
+
             if ((w < 256) || (h < 256))
             {
                System.out.println("The image dimensions must be at least 256");
                System.exit(1);
             }
-            
+
             System.out.println(w+"x"+h);
             GraphicsDevice gs = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
             GraphicsConfiguration gc = gs.getDefaultConfiguration();
@@ -65,11 +90,11 @@ public class TestEffects
             int[] source = new int[w*h];
             int[] dest = new int[w*h];
             int[] tmp = new int[w*h];
-            
+
             // Sanity check, prefill the destination image
             for (int i=0; i<dest.length; i++)
                dest[i] = i ;
-            
+
             // Do NOT use img.getRGB(): it is more than 10 times slower than
             // img.getRaster().getDataElements()
             img.getRaster().getDataElements(0, 0, w, h, source);
@@ -94,14 +119,14 @@ public class TestEffects
             effects[2] = new MovingEffect(new FastBilateralFilter(dw, dh, y*w+x, w, 30.0f, 0.03f, 4, 0, 3),
                     x, y, -1, 1, "Bilateral");
             x = 256 + rnd.nextInt(10);
-            y = 192 + rnd.nextInt(60);
+            y =  64 + rnd.nextInt(60);
             boolean bump = true;
-            effects[3] = new MovingEffect(new LightingEffect(dw, dh, y*w+x, w, 64, 64, 64, 100, bump),
+            effects[3] = new MovingEffect(new LightingEffect(dw, dh, y*w+x, w, dw/2, dh/2, dw/3, 100, bump),
                     x, y, -1, -1, ((bump==false)?"Lighting":"Lighting+Bump"));
             x = 128 + rnd.nextInt(10);
             y =  64 + rnd.nextInt(60);
             effects[4] = new MovingEffect(new ContrastFilter(dw, dh, y*w+x, w, 115),
-                    x, y, 2, -1, "Contrast");
+                    x, y, 2, 1, "Contrast");
 
             for (MovingEffect e : effects)
             {
@@ -110,24 +135,41 @@ public class TestEffects
                tmp = dest;
                tmp = t;
             }
-            
+
             img2.getRaster().setDataElements(0, 0, w, h, dest);
-                 
+
             JFrame frame2 = new JFrame("Filters");
             frame2.setBounds(700, 150, w, h);
+            frame2.setResizable(false);
             ImageIcon newIcon = new ImageIcon(img2);
-            frame2.add(new JLabel(newIcon));         
+            frame2.add(new JLabel(newIcon));
             frame2.setVisible(true);
+
+            // Add delay to make sure that the frame is visible before creating back buffer
+            Thread.sleep(10);
             frame2.createBufferStrategy(2);
 
             int nn = 0;
             int nn0 = 0;
             long delta = 0;
             String sfps = "";
+            int len = fileNames.length;
+            int idx = 0;
 
             while (++nn < 10000)
             {
                long before = System.nanoTime();
+
+               // For list of images: the first loading is slow, but after the
+               // index wraps around, the cached memory kick in and performace jumps
+               image = new ImageIcon(fileNames[idx]).getImage();
+
+               if (len > 1)
+                  idx = (idx + 1) % len;
+
+               img.getGraphics().drawImage(image, 0, 0, null);
+               img.getRaster().getDataElements(0, 0, w, h, source);
+               System.arraycopy(source, 0, tmp, 0, w * h);
                System.arraycopy(source, 0, dest, 0, w * h);
 
                for (MovingEffect e : effects)
@@ -137,19 +179,19 @@ public class TestEffects
                   e.y += e.vy;
                   e.effect.setOffset(e.y*w+e.x);
 
-                  if (e.x + dw > (w*15/16))
+                  if ((e.x + dw > (w*15/16)) && (e.vx > 0))
                      e.vx = - e.vx;
 
-                  if (e.x < (w/16))
+                  if ((e.x < (w/16)) && (e.vx < 0))
                      e.vx = - e.vx;
 
-                  if (e.y + dh > (h*15/16))
+                  if ((e.y + dh > (h*15/16)) && (e.vy > 0))
                      e.vy = - e.vy;
 
-                  if (e.y < (h/16))
+                  if ((e.y < (h/16)) && (e.vy < 0))
                      e.vy = - e.vy;
 
-                  int[] t = tmp;               
+                  int[] t = tmp;
                   tmp = dest;
                   tmp = t;
                }
@@ -162,7 +204,7 @@ public class TestEffects
                {
                   float d = (float) delta / 1000000000L;
                   float fps = (nn - nn0) / d;
-                  sfps = String.valueOf(Math.round(fps*100)/(float)100+" FPS");
+                  sfps = String.valueOf(Math.round(fps*100+.5)/(float)100+" FPS");
                   delta = 0;
                   nn0 = nn;
                   frame2.setTitle("Filters - "+sfps);
@@ -172,14 +214,14 @@ public class TestEffects
                // Graphics g = img2.getGraphics();
                Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
                g.setColor(Color.WHITE);
-               g.drawImage(img2, 0, 0, null);  
+               g.drawImage(img2, 0, 0, null);
 
                for (MovingEffect e : effects)
                {
                   g.drawString(e.name, e.x+4, e.y+12);
                   g.drawRect(e.x, e.y, dw, dh);
                }
-            
+
               //g.drawString(sfps, 32, 50);
                bufferStrategy.show();
                g.dispose();
@@ -195,8 +237,8 @@ public class TestEffects
 
         System.exit(0);
     }
-    
-    
+
+
     static class MovingEffect
     {
        VideoEffectWithOffset effect;
@@ -205,7 +247,7 @@ public class TestEffects
        int vx;
        int vy;
        String name;
-       
+
        MovingEffect(VideoEffectWithOffset effect, int x, int y, int vx, int vy, String name)
        {
           this.effect = effect;
@@ -216,5 +258,5 @@ public class TestEffects
           this.name = name;
        }
     }
-            
+
 }
