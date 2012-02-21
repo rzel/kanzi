@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-
 package kanzi.util.sampling;
 
 
@@ -53,12 +52,6 @@ public class DecimateDownSampler implements DownSampler
         if (stride < width)
             throw new IllegalArgumentException("The stride must be at least as big as the width");
 
-        if ((height & 7) != 0)
-            throw new IllegalArgumentException("The height must be a multiple of 8");
-
-        if ((width & 7) != 0)
-            throw new IllegalArgumentException("The width must be a multiple of 8");
-
         if (factor < 2)
             throw new IllegalArgumentException("This implementation only supports "+
                     "a scaling factor greater than or equal to 2");
@@ -74,41 +67,20 @@ public class DecimateDownSampler implements DownSampler
     @Override
     public void subSampleHorizontal(int[] input, int[] output)
     {
+        final int w = this.width;
+        final int inc = this.factor;
+        final int st = this.stride;
         int iOffs = this.offset;
         int oOffs = 0;
-        final int w = this.width;
-        final int st = this.stride;
 
-        if (this.factor == 2)
+        for (int j=this.height; j>0; j--)
         {
-            for (int j=this.height; j>0; j--)
-            {
-                final int end = iOffs + w;
+           final int end = iOffs + w;
 
-                for (int i=iOffs; i<end; i+=8)
-                {
-                    output[oOffs++] = input[i];
-                    output[oOffs++] = input[i+2];
-                    output[oOffs++] = input[i+4];
-                    output[oOffs++] = input[i+6];
-                }
+           for (int i=iOffs; i<end; i+=inc)
+              output[oOffs++] = input[i];
 
-                iOffs += st;
-            }
-        }
-        else 
-        {
-            final int inc = this.factor;
-            
-            for (int j=this.height; j>0; j--)
-            {
-                final int end = iOffs + w;
-
-                for (int i=iOffs; i<end; i+=inc)
-                    output[oOffs++] = input[i];
-
-                iOffs += st;
-            }
+           iOffs += st;
         }
     }
 
@@ -117,31 +89,15 @@ public class DecimateDownSampler implements DownSampler
     public void subSampleVertical(int[] input, int[] output)
     {
         final int w = this.width;
+        final int inc = this.factor;
+        final int stn = this.stride * inc;
         int iOffs = this.offset;
         int oOffs = 0;
 
-        if (this.factor == 2)
+        for (int j=this.height; j>0; j-=inc)
         {
-            final int st2 = this.stride << 1;
-            
-            for (int j=this.height; j>0; j-=2)
-            {
-                System.arraycopy(input, iOffs, output, oOffs, w);
-                oOffs += w;
-                iOffs += st2;
-            }
-        }
-        else 
-        {
-            final int inc = this.factor;
-            final int incY = this.stride * this.factor;
-
-            for (int j=this.height; j>0; j-=inc)
-            {
-                System.arraycopy(input, iOffs, output, oOffs, w);
-                oOffs += w;
-                iOffs += incY;
-            }
+           System.arraycopy(input, iOffs, output, oOffs, w);
+           iOffs += stn;
         }
     }
 
@@ -149,34 +105,20 @@ public class DecimateDownSampler implements DownSampler
     @Override
     public void subSample(int[] input, int[] output)
     {
-        int line0 = this.offset;
         final int w = this.width;
+        final int inc = this.factor;
+        final int stn = this.stride * inc;
+        int iOffs = this.offset;
         int oOffs = 0;
 
-        if (this.factor == 2)
+        for (int j=this.height; j>0; j-=inc)
         {
-            final int st2 = this.stride << 1;
-            
-            for (int j=this.height; j>0; j-=2)
-            {
-                for (int i=0; i<w; i+=2)
-                   output[oOffs++] = input[line0+i];
+           final int end = iOffs + w;
 
-                line0 += st2;
-            }
-        }
-        else 
-        {
-            final int inc = this.factor;
-            final int incY = this.stride * this.factor;
-            
-            for (int j=this.height; j>0; j-=inc)
-            {
-                for (int i=0; i<w; i+=inc)
-                   output[oOffs++] = input[line0+i];
+           for (int i=iOffs; i<end; i+=inc)
+              output[oOffs++] = input[i];
 
-                line0 += incY;
-            }
+           iOffs += stn;
         }
     }
 
