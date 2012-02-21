@@ -386,7 +386,10 @@ public class BlockCodec implements ByteFunction
 
       if (header.blockLength == 0)
          return 0;
- 
+
+      if ((header.blockLength < 0) || (header.blockLength > MAX_BLOCK_SIZE))
+         return -1;
+
       int savedIdx = data.index;
       data.array[data.index++] = header.mode;
       int shift = (header.dataSize - 1) << 3;
