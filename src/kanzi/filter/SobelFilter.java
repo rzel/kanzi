@@ -104,6 +104,7 @@ public final class SobelFilter implements VideoEffectWithOffset
         final int mask_ = this.mask;
         final int h = this.height;
         final int w = this.width;
+        final int len = src.length;
         final boolean isVertical = ((this.direction & VERTICAL) != 0) ? true : false;
         final boolean isHorizontal = ((this.direction & HORIZONTAL) != 0) ? true : false;
         final int maxVal = 0x00FFFFFF & mask_;
@@ -112,8 +113,8 @@ public final class SobelFilter implements VideoEffectWithOffset
 
         for (int y=2; y<h; y++)
         {
-           int line = startLine + this.stride;
-           int endLine = line + this.stride;
+           final int line = (startLine + this.stride >= len) ? startLine : startLine + this.stride;
+           final int endLine = (line + this.stride >= len) ? line : line + this.stride ;
            final int pixel00 = src[startLine];
            final int pixel10 = src[line];
            final int pixel20 = src[endLine];
@@ -198,6 +199,9 @@ public final class SobelFilter implements VideoEffectWithOffset
           dst[line] = dst[line+1] & mask_;
           dst[line+w-1] = dst[line+w-2] & mask_;
           startLine = line;
+
+          if (startLine >= len)
+             break;
        }
 
        final int firstLine = this.offset;
@@ -205,7 +209,9 @@ public final class SobelFilter implements VideoEffectWithOffset
 
        // Duplicate first and last lines
        System.arraycopy(dst, firstLine+this.stride, dst, firstLine, w);
-       System.arraycopy(dst, lastLine-this.stride, dst, lastLine, w);
+
+       if (lastLine < len)
+          System.arraycopy(dst, lastLine-this.stride, dst, lastLine, w);
 
        return dst;
     }

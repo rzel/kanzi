@@ -26,15 +26,14 @@ public class LightingEffect implements VideoEffectWithOffset
     private final int radius;
     private final int stride;
     private int offset;
-    private int savedOffset;
     private final int[] normalXY;
     private final int[] distanceMap;
     private int lightX;
     private int lightY;
     private int[] heightMap;
     private final boolean bumpMapping;
-       
-   
+
+
     public LightingEffect(int width, int height, int lightX, int lightY, int radius, boolean bumpMapping)
     {
        this(width, height, 0, width, lightX, lightY, radius, 100, bumpMapping);
@@ -47,13 +46,13 @@ public class LightingEffect implements VideoEffectWithOffset
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
-        
+
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-       
+
         if (offset < 0)
             throw new IllegalArgumentException("The offset must be at least 0");
-        
+
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
 
@@ -68,67 +67,71 @@ public class LightingEffect implements VideoEffectWithOffset
         this.bumpMapping = bumpMapping;
         this.stride = stride;
         this.offset = offset;
-        this.savedOffset = offset-1;
         this.distanceMap = new int[radius*radius];
         this.normalXY = (this.bumpMapping == true) ? new int[width*height] : null;
-        
+
         // Initialize the distance table
         final int rd = this.radius;
         final int top = 1 << 10;
         final int maxIntensity = (255*power) / 100;
-      
+
         for (int y=0; y<rd; y++)
         {
             final int y2 = y * y;
             final int startLine = rd * y;
-            
+
             for (int x=0; x<rd; x++)
             {
                 // 1 - alpha * (sqrt((x*x+y*y)/2)/(rd-1))
-                // alpha is used to cutoff before the end of the window (set to 5/4)
-                int d = top - (5 * (Global.sqrt((x*x+y2)/2) / (rd-1)) >> 2);
+                // alpha is used to cutoff before the end of the window (set to 3/2)
+                int d = top - (3 * (Global.sqrt((x*x+y2)/2) / (rd-1)) >> 1);
                 d = (maxIntensity * d) >> 10;
                 d = (d > 0) ? d : 0;
                 d = (d < 255) ? d : 255;
-                this.distanceMap[startLine+x] = d;          
+                this.distanceMap[startLine+x] = d;
             }
         }
     }
-        
-    
+
+
     private void calculateNormalMap(int[] rgb)
     {
-        // Calculation previously completed ?
-        if (this.savedOffset == this.offset)
-           return;
-
         // Initialize the normal table
         final int length = this.width * this.height;
         int idx = 0;
         int startLine = this.offset;
-        
+
         if (this.heightMap == null)
             this.heightMap = new int[length];
 
         final int[] map = this.heightMap;
         final int w = this.width;
         final int[] normals = this.normalXY;
+        final int len = rgb.length;
 
         for (int j=0; j<this.height; j++)
         {
-            for (int i=0; i<w; i++)
+            final int end = startLine + w;
+
+            for (int i=startLine; i<end; i++)
             {
-                // Height of the pixel based on the grey scale
-                final int pixel = rgb[startLine+i];
+                // Height of the pixel based on the gray scale
+                if (i >= len)
+                {
+                   map[idx++] = 0;
+                   continue;
+                }
+
+                final int pixel = rgb[i];
                 final int r = (pixel >> 16) & 0xFF;
                 final int g = (pixel >>  8) & 0xFF;
                 final int b =  pixel & 0xFF;
                 map[idx++] = (r + g + b) / 3;
             }
-            
+
             startLine += this.stride;
         }
-        
+
         // First and last lines
         for (int i=0; i<w; i++)
         {
@@ -139,14 +142,14 @@ public class LightingEffect implements VideoEffectWithOffset
         final int hh = this.height - 1;
         final int ww = this.width - 1;
         int offs = this.width;
-        
+
         for (int y=1; y<hh; y++)
         {
             // First in line (normalX = 0)
             int delta = map[offs+w] - map[offs-w];
             normals[offs] = delta & 0xFFFF;
             offs++;
-            
+
             for (int x=1; x<ww; x++, offs++)
             {
                 // Pack normalX and normalY into one integer (16 bits + 16 bits)
@@ -155,80 +158,91 @@ public class LightingEffect implements VideoEffectWithOffset
                 delta = map[offs+w] - map[offs-w];
                 normals[offs] = tmp | (delta & 0xFFFF);
             }
-            
+
             // Last in line (normalX = 0)
             delta = map[offs+w] - map[offs-w];
             normals[offs] = delta & 0xFFFF;
             offs++;
         }
     }
-    
-    
+
+
     @Override
     public int[] apply(int[] src, int[] dst)
     {
         final int lx = this.lightX;
         final int ly = this.lightY;
-        int lineStart = this.offset + (lx - this.radius) + this.stride * (ly - this.radius);
         final int x0 = (lx >= this.radius) ? lx - this.radius : 0;
         final int x1 = (lx + this.radius) < this.width ? lx + this.radius : this.width;
         final int y0 = (ly >= this.radius) ? ly - this.radius : 0;
         final int y1 = (ly + this.radius) < this.height ? ly + this.radius : this.height;
+        int lineStart = this.offset + x0 + this.stride * y0;
         final int[] normals = this.normalXY;
         final int[] intensities = this.distanceMap;
         final int rd = this.radius;
         final int w = this.width;
         final int h = this.height;
-        
+        final int len = src.length;
+
         if (y0 > 0)
         {
            // First lines are black
-           int offs = this.offset; 
-           
+           int offs = this.offset;
+
            for (int yy=0; yy<y0; yy++)
            {
-              for (int xx=0; xx<w; xx++)
-                 dst[offs+xx] = 0;
+              final int end = offs + w;
+
+              for (int xx=offs; xx<end; xx++)
+                 dst[xx] = 0;
 
               offs += this.stride;
+
+              if (offs >= len)
+                 break;
            }
         }
-        
+
         if (y1 < h)
         {
            // Last lines are black
-           int offs = this.offset + this.stride*h; 
+           int offs = this.offset + (this.stride * h);
 
            for (int yy=h; yy>=y1; yy--)
            {
-              for (int xx=0; xx<w; xx++)
-                 dst[offs+xx] = 0;
-
               offs -= this.stride;
+
+              if (offs >= len)
+                 continue;
+
+              final int end = offs + w;
+
+              for (int xx=offs; xx<end; xx++)
+                 dst[xx] = 0;
            }
         }
-       
+
         // Is there a bump mapping effect ?
         if (this.bumpMapping == true)
         {
             this.calculateNormalMap(src);
-            
+
             for (int y=y0; y<y1; y++)
             {
-                int idx = lineStart-x0;
+                int idx = lineStart - x0;
                 int offs = y * w;
-                
+
                 if (x0 > 0)
                 {
                    // First pixels
                    for (int xx=0; xx<x0; xx++)
                       dst[idx++] = 0;
-                }        
-               
+                }
+
                 for (int x=x0; x<x1; x++)
                 {
                     final int normal = normals[offs+x];
-                    
+
                     // First, extract the normal X coord. (16 upper bits) out of normalXY
                     // Use a short first, then expand to an int (takes care of negative
                     // number expansion)
@@ -236,14 +250,14 @@ public class LightingEffect implements VideoEffectWithOffset
                     int val = tmp - x + lx;
                     int dx = (val > 0) ? val : -val;
                     dx = (dx < rd) ? dx : rd-1;
-                    
+
                     // Extract the normal Y coord. as a short then expand to an int
                     // (takes care of negative number expansion)
                     tmp = (short) (normal & 0xFFFF);
                     val = tmp - y + ly;
                     int dy = (val > 0) ? val : -val;
                     dy = (dy < rd) ? dy : rd-1;
-                    
+
                     final int intensity = intensities[dy*rd+dx];
                     final int pixel = src[idx];
                     int r = (pixel >> 16) & 0xFF;
@@ -251,7 +265,7 @@ public class LightingEffect implements VideoEffectWithOffset
                     int b =  pixel & 0xFF;
                     r = (intensity * r) >> 8;
                     g = (intensity * g) >> 8;
-                    b = (intensity * b) >> 8;                    
+                    b = (intensity * b) >> 8;
                     dst[idx++] = (r << 16) | (g << 8) | b;
                 }
 
@@ -263,25 +277,28 @@ public class LightingEffect implements VideoEffectWithOffset
                 }
 
                 lineStart += this.stride;
+
+                if (lineStart >= len)
+                   break;
             }
         }
         else // No bump mapping: just lighting
-        {            
+        {
             for (int y=y0; y<y1; y++)
             {
-                int idx = lineStart-x0;
-                
+                int idx = lineStart - x0;
+
                 if (x0 > 0)
                 {
                    // First pixels
                    for (int xx=0; xx<x0; xx++)
                       dst[idx++] = 0;
-                }        
+                }
 
                 int dy = (y > ly) ? y - ly : ly - y;
                 dy = (dy < rd) ? dy : rd - 1;
                 final int yy = dy * rd;
-                
+
                 for (int x=x0; x<x1; x++)
                 {
                     int dx = (x > lx) ? x - lx : lx - x;
@@ -293,7 +310,7 @@ public class LightingEffect implements VideoEffectWithOffset
                     int b =  pixel & 0xFF;
                     r = (intensity * r) >> 8;
                     g = (intensity * g) >> 8;
-                    b = (intensity * b) >> 8;                    
+                    b = (intensity * b) >> 8;
                     dst[idx++] = (r << 16) | (g << 8) | b;
                 }
 
@@ -305,13 +322,16 @@ public class LightingEffect implements VideoEffectWithOffset
                 }
 
                 lineStart += this.stride;
+
+                if (lineStart >= len)
+                   break;
             }
         }
-        
+
         return dst;
     }
-    
-    
+
+
     // Not thread safe
     public void moveLight(int x, int y)
     {
@@ -334,7 +354,6 @@ public class LightingEffect implements VideoEffectWithOffset
         if (offset < 0)
             return false;
 
-        this.savedOffset = this.offset;
         this.offset = offset;
         return true;
     }
