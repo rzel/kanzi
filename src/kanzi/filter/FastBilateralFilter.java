@@ -68,6 +68,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 
     // sigmaR = sigma Range (for pixel intensities)
     // sigmaD = sigma Distance (for pixel locations)
+    // range sampling: 4 is enough to guarantee an accurate approximation
     public FastBilateralFilter(int width, int height, int offset, int stride,
             float sigmaR, float sigmaD, int rangeSampling, int downSampling, int channels)
     {
@@ -85,6 +86,9 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 
         if ((downSampling < 0) || (downSampling > 3))
             throw new IllegalArgumentException("The down sampling factor must be in [0..3]");
+
+        if ((rangeSampling < 1) || (downSampling > 5))
+            throw new IllegalArgumentException("The range sampling factor must be in [1..5]");
 
         if ((sigmaR < 1) && (sigmaR > 32))
             throw new IllegalArgumentException("The range sigma must be in [1..32]");
@@ -126,13 +130,18 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
         final int ds = this.downSampling;
         final int scaledH = this.height >> ds;
         final int scaledW = this.width >> ds;
+        final int len = src.length;
         int[] buf2 = src;
 
         if (ds > 0)
         {
            buf2 = this.buffer2;
-           DecimateDownSampler sampler = new DecimateDownSampler(this.width,
-                   this.height, this.stride, this.offset, 1<<ds);
+           final int xx = this.offset % this.stride;
+           final int yy = this.offset / this.stride;
+           final int ww = (this.width + xx < this.stride) ? this.width : this.stride - xx;
+           final int hh = ((this.height + yy) * this.stride < len) ? this.height : this.height - yy;
+           DecimateDownSampler sampler = new DecimateDownSampler(ww, hh,
+                   this.stride, this.offset, 1<<ds);
            sampler.subSample(src, buf2);
         }
         else if ((this.offset != 0) || (this.stride != this.width))
@@ -164,10 +173,12 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
               buf1[i] = val;
            }
 
+           final float fmin = (float) min;
+           final float fmax = (float) max;
            final int maxGrayIdx = this.grayscale.length - 1;
-           this.grayscale[0] = (float) min;
-           this.grayscale[maxGrayIdx] = (float) max;
-           final float delta = (float) (max - min);
+           this.grayscale[0] = fmin;
+           this.grayscale[maxGrayIdx] = fmax;
+           final float delta = fmax - fmin + 0.01f; // make sure it is not 0
 
            // Create scale of gray tones
            for (int i=1; i<maxGrayIdx;i++)
@@ -193,7 +204,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
                for (int x=offs; x<end; x++)
                {
                    final int val = buf1[x] & 0xFF;
-                   final int colorIdx = (int) (Math.abs(gray-val)+0.5f);
+                   final int colorIdx = (int) (Math.abs(gray-val)  +0.5f);
                    final int color = this.colors[colorIdx];
                    jk_[x] = color * val;
                    wk_[x] = color;
@@ -207,6 +218,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
              final int scaledSize = scaledW * scaledH;
              final float maxW = (float) (scaledW - 2);
              final float maxH = (float) (scaledH - 2);
+             final int w = this.width;
 
              for (int n=0; n<scaledSize; n++)
                 jk_[n] /= wk_[n];
@@ -214,35 +226,44 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
              if (grayRangeIdx != 0)
              {
                 offs = this.offset;
+                final float[] jk0 = this.jk[jk_idx0];
+                final float[] jk1 = this.jk[jk_idx1];
 
                 // Calculate the bilateral filtering value by linear interpolation of Jk and Jk+1
                 for (int y=0; y<this.height; y++)
                 {
-                   float ys = Math.min(((float) y)*shift_inv, maxH);
+                   float ys = Math.min(((float) y) * shift_inv, maxH);
 
-                   for (int x=0; x<this.width; x++)
+                   for (int x=0; x<w; x++)
                    {
-                      final float kf = (((float)((src[offs+x] >> shift) &0xFF) - (float) min) * delta_scale);
+                      if (offs + x >= len)
+                         break;
+
+                      final int val = (src[offs+x] >> shift) & 0xFF;
+                      final float kf = (((float) val - fmin) * delta_scale);
                       final int k = (int) kf;
 
                       if (k == (grayRangeIdx-1))
                       {
                           final float alpha = (float) (k+1) - kf;
-                          final float xs = Math.min(((float) x)*shift_inv, maxW);
-                          final int val = (int) interpolateLinearXY2(this.jk[jk_idx0], this.jk[jk_idx1], alpha, xs, ys, scaledW);
+                          final float xs = Math.min(((float) x) * shift_inv, maxW);
+                          final int val2 = (int) interpolateLinearXY2(jk0, jk1, alpha, xs, ys, scaledW);
                           dst[offs+x] &= ~(0xFF << shift); //src can be the same buffer as dst
-                          dst[offs+x] |= ((val & 0xFF) << shift);
+                          dst[offs+x] |= ((val2 & 0xFF) << shift);
                       }
                       else if ((k == grayRangeIdx) && (grayRangeIdx == maxGrayIdx))
                       {
-                          final float xs = Math.min(((float) x)*shift_inv, maxW);
-                          final int val = (int) (interpolateLinearXY(this.jk[jk_idx1], xs , ys, scaledW) + 0.5f);
+                          final float xs = Math.min(((float) x) * shift_inv, maxW);
+                          final int val2 = (int) (interpolateLinearXY(jk1, xs , ys, scaledW) + 0.5f);
                           dst[offs+x] &= ~(0xFF << shift); //src can be the same buffer as dst
-                          dst[offs+x] |= ((val & 0xFF) << shift);
+                          dst[offs+x] |= ((val2 & 0xFF) << shift);
                       }
                    }
 
                    offs += this.stride;
+
+                   if (offs >= len)
+                      break;
                 }
 
                 jk_idx1 = jk_idx0;
@@ -372,7 +393,6 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 	final int x0 = (int) x;
         final int xt = x0 + 1;
         final int y0 = (int) y;
-        final int yt = y0 + 1;
 	final float dx  = x - x0;
         final float dy  = y - y0;
         final float dx1 = 1 - dx;
@@ -382,9 +402,9 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
         final float dt0 = dx1 * dy;
         final float dtt = dx * dy;
         final int offs0 = y0 * w;
-        final int offst = yt * w;
+        final int offst = offs0 + w;
 	return ((d00*image[offs0+x0]) + (d0t*image[offs0+xt]) +
-               (dt0*image[offst+x0]) + (dtt*image[offst+xt]));
+                (dt0*image[offst+x0]) + (dtt*image[offst+xt]));
     }
 
     
@@ -393,7 +413,6 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 	final int x0 = (int) x;
         final int xt = x0 + 1;
         final int y0 = (int) y;
-        final int yt = y0 + 1;
 	final float dx  = x - x0;
         final float dy  = y - y0;
         final float dx1 = 1 - dx;
@@ -403,7 +422,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
         final float dt0 = dx1 * dy;
         final float dtt = dx * dy;
         final int offs0 = y0 * w;
-        final int offst = yt * w;
+        final int offst = offs0 + w;
 	float res1 = ((d00*image1[offs0+x0]) + (d0t*image1[offs0+xt]) +
                (dt0*image1[offst+x0]) + (dtt*image1[offst+xt]));
 	float res2 = ((d00*image2[offs0+x0]) + (d0t*image2[offs0+xt]) +
