@@ -116,7 +116,7 @@ public class TestEffects
                     x, y, 1, -1, "Gaussian");
             x = 192 + rnd.nextInt(10);
             y = 128 + rnd.nextInt(60);
-            effects[2] = new MovingEffect(new FastBilateralFilter(dw, dh, y*w+x, w, 30.0f, 0.03f, 4, 0, 3),
+            effects[2] = new MovingEffect(new FastBilateralFilter(dw, dh, y*w+x, w, 30.0f, 0.03f, 4, 1, 3),
                     x, y, -1, 1, "Bilateral");
             x = 256 + rnd.nextInt(10);
             y =  64 + rnd.nextInt(60);
