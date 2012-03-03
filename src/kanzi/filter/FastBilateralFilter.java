@@ -48,7 +48,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
     private final int channels;
     private int offset;
 
-    
+
     // sigmaR = sigma Range (for pixel intensities)
     // sigmaD = sigma Distance (for pixel locations)
     public FastBilateralFilter(int width, int height, float sigmaR, float sigmaD)
@@ -56,7 +56,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
        this(width, height, 0, width, sigmaR, sigmaD, 4, 3, 3);
     }
 
-    
+
     // sigmaR = sigma Range (for pixel intensities)
     // sigmaD = sigma Distance (for pixel locations)
     public FastBilateralFilter(int width, int height, int offset, int stride,
@@ -204,7 +204,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
                for (int x=offs; x<end; x++)
                {
                    final int val = buf1[x] & 0xFF;
-                   final int colorIdx = (int) (Math.abs(gray-val)  +0.5f);
+                   final int colorIdx = (int) (Math.abs(gray-val) + 0.5f);
                    final int color = this.colors[colorIdx];
                    jk_[x] = color * val;
                    wk_[x] = color;
@@ -229,18 +229,16 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
                 final float[] jk0 = this.jk[jk_idx0];
                 final float[] jk1 = this.jk[jk_idx1];
 
-                // Calculate the bilateral filtering value by linear interpolation of Jk and Jk+1
+                // Calculate the bilateral filtered pixel value by linear interpolation of Jk and Jk+1
                 for (int y=0; y<this.height; y++)
                 {
                    float ys = Math.min(((float) y) * shift_inv, maxH);
+                   final int endX = (offs+w < len) ? w : len-offs;
 
-                   for (int x=0; x<w; x++)
+                   for (int x=0; x<endX; x++)
                    {
-                      if (offs + x >= len)
-                         break;
-
                       final int val = (src[offs+x] >> shift) & 0xFF;
-                      final float kf = (((float) val - fmin) * delta_scale);
+                      final float kf = ((float) (val - min) * delta_scale);
                       final int k = (int) kf;
 
                       if (k == (grayRangeIdx-1))
@@ -251,7 +249,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
                           dst[offs+x] &= ~(0xFF << shift); //src can be the same buffer as dst
                           dst[offs+x] |= ((val2 & 0xFF) << shift);
                       }
-                      else if ((k == grayRangeIdx) && (grayRangeIdx == maxGrayIdx))
+                      else if ((grayRangeIdx == maxGrayIdx) && (k == grayRangeIdx))
                       {
                           final float xs = Math.min(((float) x) * shift_inv, maxW);
                           final int val2 = (int) (interpolateLinearXY(jk1, xs , ys, scaledW) + 0.5f);
@@ -287,7 +285,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
        for (int y=0; y<h; y++)
        {
           // forward pass
-	  float xp = id[offs];
+          float xp = id[offs];
           float yb = coefp * xp;
           float yp = yb;
 
@@ -331,12 +329,12 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
        {
           // forward pass
           int offs = 0;
-	  float xp = id[x];
+          float xp = id[x];
           float yb = coefp * xp;
           float yp = yb;
 
           for (int y=0; y<h; y++)
-	  {
+          {
 	     float xc = id[offs+x];
 	     float yc = a0*xc + a1*xp - b1*yp - b2*yb;
 	     od[offs+x] = yc;
@@ -345,7 +343,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
              yp = yc;
              offs += w;
           }
-          
+
           // reverse pass: ensure response is symmetrical
           offs = (h-1) * w;
           float xn = id[offs+x];
@@ -363,7 +361,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
              ya = yn;
              yn = yc;
              offs -= w;
-	  }
+          }
        }
     }
 
@@ -390,10 +388,10 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 
     private static float interpolateLinearXY(float[] image, float x, float y, int w)
     {
-	final int x0 = (int) x;
+        final int x0 = (int) x;
         final int xt = x0 + 1;
         final int y0 = (int) y;
-	final float dx  = x - x0;
+        final float dx  = x - x0;
         final float dy  = y - y0;
         final float dx1 = 1 - dx;
         final float dy1 = 1 - dy;
@@ -403,17 +401,17 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
         final float dtt = dx * dy;
         final int offs0 = y0 * w;
         final int offst = offs0 + w;
-	return ((d00*image[offs0+x0]) + (d0t*image[offs0+xt]) +
+        return ((d00*image[offs0+x0]) + (d0t*image[offs0+xt]) +
                 (dt0*image[offst+x0]) + (dtt*image[offst+xt]));
     }
 
-    
+
     private static float interpolateLinearXY2(float[] image1, float[] image2, float alpha, float x, float y, int w)
     {
-	final int x0 = (int) x;
+        final int x0 = (int) x;
         final int xt = x0 + 1;
         final int y0 = (int) y;
-	final float dx  = x - x0;
+        final float dx  = x - x0;
         final float dy  = y - y0;
         final float dx1 = 1 - dx;
         final float dy1 = 1 - dy;
@@ -423,9 +421,9 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
         final float dtt = dx * dy;
         final int offs0 = y0 * w;
         final int offst = offs0 + w;
-	float res1 = ((d00*image1[offs0+x0]) + (d0t*image1[offs0+xt]) +
+        float res1 = ((d00*image1[offs0+x0]) + (d0t*image1[offs0+xt]) +
                (dt0*image1[offst+x0]) + (dtt*image1[offst+xt]));
-	float res2 = ((d00*image2[offs0+x0]) + (d0t*image2[offs0+xt]) +
+        float res2 = ((d00*image2[offs0+x0]) + (d0t*image2[offs0+xt]) +
                (dt0*image2[offst+x0]) + (dtt*image2[offst+xt]));
         return alpha * res1 + (1.0f-alpha) * res2;
     }
