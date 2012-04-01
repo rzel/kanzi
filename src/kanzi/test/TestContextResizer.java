@@ -53,7 +53,7 @@ public class TestContextResizer
                    System.out.println("-strength=<percent> : number of geodesics to create (in percent of dimension)");
                    System.out.println("-vertical           : process vertical geodesics");
                    System.out.println("-horizontal         : process horizontal geodesics");
-                   System.out.println("-speedtest          : run am extra speed test");
+                   System.out.println("-speedtest          : run an extra speed test");
                    System.exit(0);
                }
                else if (arg.equals("-debug"))
