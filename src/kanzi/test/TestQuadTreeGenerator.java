@@ -14,9 +14,6 @@ import java.util.TreeSet;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import kanzi.filter.ColorClusterFilter;
-import kanzi.filter.FastBilateralFilter;
-import kanzi.filter.SobelFilter;
 import kanzi.util.QuadTreeGenerator;
 
 
