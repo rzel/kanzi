@@ -18,11 +18,12 @@ package kanzi.app;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import kanzi.BitStreamException;
 import kanzi.EntropyDecoder;
 import kanzi.IndexedByteArray;
 import kanzi.InputBitStream;
@@ -69,38 +70,40 @@ public class BlockDecompressor implements Runnable, Callable<Long>
 
    @Override
    public Long call()
-   {
+   {      
+      String outputName = this.fileName;
+
+      if (this.fileName.endsWith(".knz") == false)
+         System.out.println("Warning: the input file name does not end with the .KNZ extension");
+      else
+         outputName = this.fileName.substring(0, this.fileName.length()-4);
+
+      outputName += ".tmp";
+
+      if (this.debug == true)
+      {
+         System.out.println("Input file name set to '" + this.fileName + "'");
+         System.out.println("Output file name set to '" + outputName + "'");
+         System.out.println("Debug set to "+this.debug);
+      }
+
+      long delta = 0L;
+      int decoded;
+      long sum = 0;
+      int step = 0;
+      System.out.println("Decoding ...");
+
+      OutputStream fos = null;
+      EntropyDecoder entropyDecoder = null;
+      InputBitStream ibs = null;
+
       try
       {
-         String outputName = this.fileName;
-
-         if (this.fileName.endsWith(".knz") == false)
-            System.out.println("Warning: the input file name does not end with the .KNZ extension");
-         else
-            outputName = this.fileName.substring(0, this.fileName.length()-4);
-
-         outputName += ".tmp";
-         File input = new File(this.fileName);
-         InputStream fis = new FileInputStream(input);
-         File output = new File(outputName);
-         OutputStream fos = new FileOutputStream(output);
-
-         if (this.debug == true)
-         {
-            System.out.println("Input file name set to '" + this.fileName + "'");
-            System.out.println("Output file name set to '" + outputName + "'");
-            System.out.println("Debug set to "+this.debug);
-         }
-
-         EntropyDecoder entropyDecoder;
-         long delta = 0L;
-         int decoded;
-         long sum = 0;
-         int step = 0;
-         System.out.println("Decoding ...");
-
          // Read header
-         InputBitStream ibs = new DefaultInputBitStream(fis, 32768);
+         File input = new File(this.fileName);
+         File output = new File(outputName);
+         fos = new FileOutputStream(output);
+         ibs = new DefaultInputBitStream(new FileInputStream(input), 32768);
          final int type = (int) ibs.readBits(24);
 
          // Sanity check
@@ -187,8 +190,6 @@ public class BlockDecompressor implements Runnable, Callable<Long>
          }
          while (decoded != 0);
 
-         fis.close();
-         entropyDecoder.dispose();
          delta /= 1000000; // convert to ms
 
          System.out.println();
@@ -202,6 +203,31 @@ public class BlockDecompressor implements Runnable, Callable<Long>
       {
          e.printStackTrace();
          return -1L;
+      }
+      finally
+      {
+         try
+         {
+           if (fos != null)
+             fos.close();
+         }
+         catch (IOException e)
+         {
+            // ignore
+         }
+         
+         try
+         {
+           if (ibs != null)
+             ibs.close();
+         }
+         catch (BitStreamException e)
+         {
+            // ignore
+         }
+         
+         if (entropyDecoder != null)
+            entropyDecoder.dispose();
       }
    }
 
