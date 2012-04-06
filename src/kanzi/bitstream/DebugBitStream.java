@@ -20,7 +20,7 @@ import kanzi.BitStream;
 import java.io.PrintStream;
 
 
-// Very util little wrapper used to print the bits written to the delegate
+// Very useuful little wrapper used to print the bits written to the delegate
 // bitstream (uses the decorator design pattern)
 public final class DebugBitStream implements BitStream
 {
@@ -71,7 +71,7 @@ public final class DebugBitStream implements BitStream
     }
     
     
-    public boolean mark()
+    public synchronized boolean mark()
     {
         return this.mark;
     }
@@ -83,7 +83,7 @@ public final class DebugBitStream implements BitStream
     }
     
     
-    public boolean showByte()
+    public synchronized boolean showByte()
     {
         return this.hexa;
     }
