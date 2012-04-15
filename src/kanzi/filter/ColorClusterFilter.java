@@ -15,8 +15,8 @@ limitations under the License.
 
 package kanzi.filter;
 
+import java.util.LinkedList;
 import java.util.Random;
-import java.util.TreeSet;
 import kanzi.VideoEffect;
 import kanzi.util.QuadTreeGenerator;
 
@@ -405,15 +405,14 @@ public class ColorClusterFilter implements VideoEffect
    private void chooseCentroids(Cluster[] clusters, int[] buffer, int ww, int hh)
    {
       // Create quad tree decomposition of the image
-      final TreeSet<QuadTreeGenerator.Node> nodes = new TreeSet<QuadTreeGenerator.Node>();
+      final LinkedList<QuadTreeGenerator.Node> nodes = new LinkedList<QuadTreeGenerator.Node>();
       final QuadTreeGenerator qtg = new QuadTreeGenerator(ww & -3, hh & -3, clusters.length, 8);
       qtg.decompose(nodes, buffer);
       int n = clusters.length-1;
 
       while ((n >= 0) && (nodes.size() > 0))
       {
-         QuadTreeGenerator.Node next = nodes.first();
-         nodes.remove(next);
+         final QuadTreeGenerator.Node next = nodes.removeFirst();
          final Cluster c = clusters[n];
          c.centroidX = next.x + (next.w >> 1);
          c.centroidY = next.y + (next.h >> 1);
