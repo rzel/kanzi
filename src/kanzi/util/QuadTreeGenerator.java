@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.util;
 
+import java.util.Collection;
 import java.util.TreeSet;
 
 
@@ -48,15 +49,14 @@ public class QuadTreeGenerator
       if (width < 8)
          throw new IllegalArgumentException("The width must be at least 8");
 
-      if ((height & 7) != 0)
-         throw new IllegalArgumentException("The height must be a multiple of 8");
+      if ((height & 1) != 0)
+         throw new IllegalArgumentException("The height must be a multiple of 2");
 
-      if ((width & 7) != 0)
-         throw new IllegalArgumentException("The width must be a multiple of 8");
+      if ((width & 1) != 0)
+         throw new IllegalArgumentException("The width must be a multiple of 2");
 
       if (nbNodes < 4)
          throw new IllegalArgumentException("The number of nodes must be at least 4");
-
 
       this.width = width;
       this.height = height;
@@ -72,11 +72,13 @@ public class QuadTreeGenerator
    // The centroid of each cluster is initialized at the center of the rectangle
    // pointed to by the nodes in the tree. It should provide a good initial
    // value for the centroids and help converge faster.
-   public TreeSet<Node> decompose(TreeSet<Node> nodes, int[] buffer)
+   public Collection<Node> decompose(Collection<Node> list, int[] buffer)
    {
       TreeSet<Node> processed = new TreeSet<Node>();
-      int w = this.width;
-      int h = this.height;
+      TreeSet<Node> nodes = new TreeSet<Node>();
+      nodes.addAll(list);
+      final int w = this.width;
+      final int h = this.height;
 
       // First level
       Node root1 = new Node(null, 0, 0, w>>1, h>>1);
@@ -97,19 +99,23 @@ public class QuadTreeGenerator
       
       while ((nodes.size() > 0) && (processed.size() + nodes.size() < this.nbNodes))
       {
-         Node parent = nodes.first();
-         nodes.remove(parent);
-         
+         Node parent = nodes.pollFirst();
+
          if ((parent.w <= this.minNodeDim) || (parent.h <= this.minNodeDim))
          {
             processed.add(parent);
             continue;
          }
-         
-         Node node1 = new Node(parent, parent.x, parent.y, parent.w>>1, parent.h>>1);
-         Node node2 = new Node(parent, parent.x+(parent.w>>1), parent.y, parent.w>>1, parent.h>>1);
-         Node node3 = new Node(parent, parent.x, parent.y+(parent.h>>1), parent.w>>1, parent.h>>1);
-         Node node4 = new Node(parent, parent.x+(parent.w>>1), parent.y+(parent.h>>1), parent.w>>1, parent.h>>1);
+
+         // Create 4 children, taking into account odd dimensions
+         final int pw = parent.w + 1;
+         final int ph = parent.h + 1;
+         final int cw = pw >> 1;
+         final int ch = ph >> 1;
+         Node node1 = new Node(parent, parent.x, parent.y, cw, ch);
+         Node node2 = new Node(parent, parent.x+parent.w-cw, parent.y, cw, ch);
+         Node node3 = new Node(parent, parent.x, parent.y+parent.h-ch, cw, ch);
+         Node node4 = new Node(parent, parent.x+parent.w-cw, parent.y+parent.h-ch, cw, ch);
 
          node1.computeVarianceRGB(buffer);
          node2.computeVarianceRGB(buffer);
@@ -124,9 +130,10 @@ public class QuadTreeGenerator
       }
 
       nodes.addAll(processed);
-      return nodes;
+      list.addAll(nodes);
+      return list;
    }
-   
+
    
    public class Node implements Comparable<Node>
    {
@@ -158,7 +165,7 @@ public class QuadTreeGenerator
             return val;
          
          // In case of equal variance values, order is random
-         return o.hashCode() - this.hashCode();
+         return o.hashCode() ^ this.hashCode();
       }
 
       
@@ -167,13 +174,8 @@ public class QuadTreeGenerator
          final int iend = this.x + this.w;
          final int jend = this.y + this.h;
          final int len = this.w * this.h;
-
-         long sq_sumR = 0;
-         long sq_sumB = 0;
-         long sq_sumG =0;
-         long sumR = 0;
-         long sumG = 0;
-         long sumB = 0;
+         long sq_sumR = 0, sq_sumB = 0, sq_sumG =0;
+         long sumR = 0, sumG = 0, sumB = 0;
          final int st = QuadTreeGenerator.this.stride;
          int offs = (this.y * st) + QuadTreeGenerator.this.offset;
 
@@ -196,9 +198,9 @@ public class QuadTreeGenerator
             offs += st;
          }
 
-         final long varR = (sq_sumR - (sumR * sumR / len)) / len;
-         final long varG = (sq_sumG - (sumG * sumG / len)) / len;
-         final long varB = (sq_sumB - (sumB * sumB / len)) / len;
+         final long varR = (sq_sumR - ((sumR * sumR) / len)) / len;
+         final long varG = (sq_sumG - ((sumG * sumG) / len)) / len;
+         final long varB = (sq_sumB - ((sumB * sumB) / len)) / len;
          this.variance = (int) ((varR + varG + varB) / 3);
          return this.variance;
       }
