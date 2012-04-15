@@ -56,10 +56,10 @@ public class TestColorClusterFilter
             // img.getRaster().getDataElements()
             img.getRaster().getDataElements(0, 0, w, h, source);
 
-            ColorClusterFilter effect = new ColorClusterFilter(w, h, 40, 12);
+            ColorClusterFilter effect = new ColorClusterFilter(w, h, 30, 12, null);
             //System.arraycopy(dest, 0, source, 0, w*h);
             effect.apply(source, dest);
-
+            
             if (applySobel == true)
             {
                // Apply Sobel filter
@@ -97,7 +97,7 @@ public class TestColorClusterFilter
             // Smooth the results by adding bilateral filtering
             if (applyBilateral == true)
             {
-               FastBilateralFilter fbl = new FastBilateralFilter(w, h, 40.0f, 0.03f);
+               FastBilateralFilter fbl = new FastBilateralFilter(w, h, 70.0f, 0.03f);
                fbl.apply(dest, dest);            
             }
 
@@ -120,20 +120,23 @@ public class TestColorClusterFilter
                 System.arraycopy(source, 0, tmp, 0, w * h);
                 System.out.println("Speed test");
                 int iters = 1000;
-                long before = System.nanoTime();
+                long before = 0, after = 0, delta = 0;
 
                 for (int ii=0; ii<iters; ii++)
                 {
+                   before = System.nanoTime();
+                   effect = new ColorClusterFilter(w, h, 30, 12);
                    effect.apply(source, tmp);
+                   after = System.nanoTime();
+                   delta += (after - before);
                 }
 
-                long after = System.nanoTime();
-                System.out.println("Elapsed [ms]: "+ (after-before)/1000000+" ("+iters+" iterations)");
+                System.out.println("Elapsed [ms]: "+ delta/1000000+" ("+iters+" iterations)");
             }
 
             try
             {
-                Thread.sleep(45000);
+                Thread.sleep(55000);
             }
             catch (Exception e)
             {
