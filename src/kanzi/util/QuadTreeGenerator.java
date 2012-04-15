@@ -74,29 +74,40 @@ public class QuadTreeGenerator
    // value for the centroids and help converge faster.
    public Collection<Node> decompose(Collection<Node> list, int[] buffer)
    {
-      TreeSet<Node> processed = new TreeSet<Node>();
-      TreeSet<Node> nodes = new TreeSet<Node>();
-      nodes.addAll(list);
-      final int w = this.width;
-      final int h = this.height;
+      final TreeSet<Node> processed = new TreeSet<Node>();
+      final TreeSet<Node> nodes = new TreeSet<Node>();
 
-      // First level
-      Node root1 = new Node(null, 0, 0, w>>1, h>>1);
-      Node root2 = new Node(null, w>>1, 0, w>>1, h>>1);
-      Node root3 = new Node(null, 0, h>>1, w>>1, h>>1);
-      Node root4 = new Node(null, w>>1, h>>1, w>>1, h>>1);
-
-      root1.computeVarianceRGB(buffer);
-      root2.computeVarianceRGB(buffer);
-      root3.computeVarianceRGB(buffer);
-      root4.computeVarianceRGB(buffer);
-
-      // Add to set of nodes sorted by decreasing variance
-      nodes.add(root1);
-      nodes.add(root2);
-      nodes.add(root3);
-      nodes.add(root4);
+      for (Node node : list)
+      {
+         if ((node.w <= this.minNodeDim) || (node.h <= this.minNodeDim))
+            processed.add(node);
+         else
+            nodes.add(node);
+      }
       
+      if (nodes.isEmpty() == true)
+      {
+         final int w = this.width;
+         final int h = this.height;
+         
+         // First level
+         Node root1 = new Node(null, 0, 0, w>>1, h>>1);
+         Node root2 = new Node(null, w>>1, 0, w>>1, h>>1);
+         Node root3 = new Node(null, 0, h>>1, w>>1, h>>1);
+         Node root4 = new Node(null, w>>1, h>>1, w>>1, h>>1);
+
+         root1.computeVarianceRGB(buffer);
+         root2.computeVarianceRGB(buffer);
+         root3.computeVarianceRGB(buffer);
+         root4.computeVarianceRGB(buffer);
+
+         // Add to set of nodes sorted by decreasing variance
+         nodes.add(root1);
+         nodes.add(root2);
+         nodes.add(root3);
+         nodes.add(root4);
+      }
+    
       while ((nodes.size() > 0) && (processed.size() + nodes.size() < this.nbNodes))
       {
          Node parent = nodes.pollFirst();
