@@ -118,9 +118,6 @@ public class TestWHTImage
             System.out.println("Not null coeffs: "+nonZero+"/"+((w*h)+(w*h/2)));
             System.out.println("PNSR: "+new ImageQualityMonitor(w, h).computePSNR(rgb, rgb2)/1024.0);
             System.out.println("SSIM: "+new ImageQualityMonitor(w, h).computeSSIM(rgb, rgb2)/1024.0);
-
-            bs.flush();
-            bs.close();
             
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
             img2.getRaster().setDataElements(0, 0, w, h, rgb2);
