@@ -19,6 +19,7 @@ import kanzi.util.color.YCbCrColorModelConverter;
 import kanzi.util.color.ColorModelConverter;
 import kanzi.Global;
 import kanzi.ColorModelType;
+import kanzi.util.sampling.DecimateDownSampler;
 
 
 // PSNR: peak signal noise ratio
@@ -39,10 +40,15 @@ public final class ImageQualityMonitor
    private final int width;
    private final int height;
    private final int stride;
-   private final int blockSize;
    private final int[] kernel32;
    private final int downSampling;
-
+   private int[] buffer;
+   private int[] y1;
+   private int[] y2;
+   private int[] u1;
+   private int[] u2;
+   private int[] v1;
+   private int[] v2;
 
 
    public ImageQualityMonitor(int width, int height)
@@ -63,8 +69,8 @@ public final class ImageQualityMonitor
    }
 
 
-   // kernel is used exclusively for SSIM, can be null
-   public ImageQualityMonitor(int width, int height, int stride, int downSampling, int[] kernel)
+   // gaussian kernel is used exclusively for SSIM, can be null
+   public ImageQualityMonitor(int width, int height, int stride, int downSampling, int[] ssim_gauss_kernel)
    {
        if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
@@ -78,18 +84,24 @@ public final class ImageQualityMonitor
        if ((downSampling < 0) || (downSampling > 8))
             throw new IllegalArgumentException("The down sampling value must in the [0..8] range");
 
-       if ((kernel != null) && ((kernel.length <= 2) || (kernel.length >= 16)))
+       if ((ssim_gauss_kernel != null) && ((ssim_gauss_kernel.length <= 2) || (ssim_gauss_kernel.length >= 16)))
             throw new IllegalArgumentException("The kernel length is invalid (must be 3,5,7,9,11,13 or 15)");
 
-       if ((kernel != null) && ((kernel.length & 1) == 0))
+       if ((ssim_gauss_kernel != null) && ((ssim_gauss_kernel.length & 1) == 0))
             throw new IllegalArgumentException("The kernel length is invalid (must be 3,5,7,9,11,13 or 15)");
 
        this.width = width;
        this.height = height;
        this.stride = stride;
-       this.kernel32 = (kernel == null) ? DEFAULT_GAUSSIAN_KERNEL : kernel;
-       this.blockSize = this.kernel32.length;
+       this.kernel32 = (ssim_gauss_kernel == null) ? DEFAULT_GAUSSIAN_KERNEL : ssim_gauss_kernel;
        this.downSampling = downSampling;
+       this.buffer = new int[0];
+       this.y1 = new int[0];
+       this.y2 = new int[0];
+       this.u1 = new int[0];
+       this.u2 = new int[0];
+       this.v1 = new int[0];
+       this.v2 = new int[0];
    }
 
 
@@ -127,12 +139,11 @@ public final class ImageQualityMonitor
        if (y + h > this.height)
           h = this.height - y;
 
-       long lsum1 = this.computeDeltaSum(img1_chan1, img2_chan1, x, y, w, h, type);
+       final int iterations1 = ((w - x) >> this.downSampling) * ((h - y) >> this.downSampling);
 
-       if (lsum1 == 0)
-          return Global.INFINITE_VALUE;
-
-       int iterations1 = ((w - x) >> this.downSampling) * ((h - y) >> this.downSampling);
+       // Rescale to avoid overflow
+       final long lsum1 = this.computeDeltaSum(img1_chan1, img2_chan1, x, y, w, h, type);
+       final int isum1 = (int) ((lsum1 + 50) / 100);
 
        if ((type == ColorModelType.YUV420) || (type == ColorModelType.YUV422))
            w >>= 1;
@@ -140,37 +151,30 @@ public final class ImageQualityMonitor
        if (type == ColorModelType.YUV420)
            h >>= 1;
 
-       int iterations2 = ((w - x) >> this.downSampling) * ((h - y) >> this.downSampling);
-       long lsum2 = this.computeDeltaSum(img1_chan2, img2_chan2, x, y, w, h, type);
+       final int iterations2 = ((w - x) >> this.downSampling) * ((h - y) >> this.downSampling);
 
-       if (lsum2 == 0)
+       // Rescale to avoid overflow
+       final long lsum2 = this.computeDeltaSum(img1_chan2, img2_chan2, x, y, w, h, type);
+       final int isum2 = (int) ((lsum2 + 50) / 100);
+       final long lsum3 = this.computeDeltaSum(img1_chan3, img2_chan3, x, y, w, h, type);
+       final int isum3 = (int) ((lsum3 + 50) / 100);
+
+       if (isum1 + isum2 + isum3 == 0)
           return Global.INFINITE_VALUE;
-
-       long lsum3 = this.computeDeltaSum(img1_chan3, img2_chan3, x, y, w, h, type);
-
-       if (lsum3 == 0)
-          return Global.INFINITE_VALUE;
-
-       // Rescale to avoid overflow. 1024*10*log10(100) = 20480
-       int isum1 = (int) ((lsum1 + 50) / 100);
-       int isum2 = (int) ((lsum2 + 50) / 100);
-       int isum3 = (int) ((lsum3 + 50) / 100);
 
        // Formula:  double mse = (double) (sum) / size
        //           double psnr = 10 * Math.log10(255d*255d/mse);
        // or        double psnr = 10 * (Math.log10(65025) + (Math.log10(size) - Math.log10(sum))
        // Calculate PSNR << 10 with 1024 * 10 * (log10(65025L) = 49286
-       int psnr1024_chan1 = 49286 + Global.ten_log10(iterations1) - Global.ten_log10(isum1) - 20480;
-       int psnr1024_chan2 = 49286 + Global.ten_log10(iterations2) - Global.ten_log10(isum2) - 20480;
-       int pnsr1024_chan3 = 49286 + Global.ten_log10(iterations2) - Global.ten_log10(isum3) - 20480;
-       int psnr1024;
+       // 1024*10*log10(100) = 20480
+       final int psnr1024_chan1 = 49286 + Global.ten_log10(iterations1) - Global.ten_log10(isum1) - 20480;
+       final int psnr1024_chan2 = 49286 + Global.ten_log10(iterations2) - Global.ten_log10(isum2) - 20480;
+       final int pnsr1024_chan3 = 49286 + Global.ten_log10(iterations2) - Global.ten_log10(isum3) - 20480;
 
        if (type == ColorModelType.RGB) // RGB => weight 1/3 for R, G & B (?)
-          psnr1024 = (psnr1024_chan1 + psnr1024_chan2 + pnsr1024_chan3) / 3;
+          return (psnr1024_chan1 + psnr1024_chan2 + pnsr1024_chan3) / 3;
        else // YUV => weight 0.8 for Y and 0.1 for U & V
-          psnr1024 = ((102*psnr1024_chan1) + (13*psnr1024_chan2) + (13*pnsr1024_chan3)) >> 7;
-
-       return psnr1024;
+          return ((102*psnr1024_chan1) + (13*psnr1024_chan2) + (13*pnsr1024_chan3)) >> 7;
    }
 
 
@@ -203,19 +207,20 @@ public final class ImageQualityMonitor
       if (y + h > this.height)
          h = this.height - y;
 
-      long lsum = this.computeDeltaSum(data1, data2, x, y, w, h, type);
+      final long lsum = this.computeDeltaSum(data1, data2, x, y, w, h, type);
 
-      if (lsum <= 0)
+      // Rescale to avoid overflow
+      final int isum = (int) ((lsum + 50) / 100);
+
+      if (isum <= 0)
          return Global.INFINITE_VALUE;
-
-       // Rescale to avoid overflow. 1024*10*log10(100) = 20480
-      int isum = (int) ((lsum + 50) / 100);
 
       // Formula:  double mse = (double) (sum) / size
       //           double psnr = 10 * Math.log10(255d*255d/mse);
       // or        double psnr = 10 * (Math.log10(65025) + (Math.log10(size) - Math.log10(sum))
       // Calculate PSNR << 10 with 1024 * 10 * (log10(65025L) = 49286
-      int iterations = ((w - x) >> this.downSampling) * ((h - y) >> this.downSampling);
+      // 1024*10*log10(100) = 20480
+      final int iterations = ((w - x) >> this.downSampling) * ((h - y) >> this.downSampling);
       return 49286 + (Global.ten_log10(iterations) - Global.ten_log10(isum)) - 20480;
    }
 
@@ -254,7 +259,7 @@ public final class ImageQualityMonitor
 
             startOffs += st;
          }
-         
+
          sum = (sum1 + sum2 + sum3) / 3;
       }
       else
@@ -264,8 +269,8 @@ public final class ImageQualityMonitor
            for (int i=0; i<w; i+=inc)
            {
               final int idx = startOffs + i;
-              final int p1 = data1[idx] & 0xFF;
-              final int p2 = data2[idx] & 0xFF;
+              final int p1 = data1[idx];
+              final int p2 = data2[idx];
               sum += ((p1-p2)*(p1-p2));
            }
 
@@ -284,7 +289,7 @@ public final class ImageQualityMonitor
    {
       return this.computeSSIM(img1_chan1, img1_chan2, img1_chan3,
                               img2_chan1, img2_chan2, img2_chan3,
-                              0, 0, this.width, this.height, type);
+                              0, 0, this.width, this.height, type, this.downSampling);
    }
 
 
@@ -294,7 +299,21 @@ public final class ImageQualityMonitor
                           int[] img2_chan1, int[] img2_chan2, int[] img2_chan3,
                           int x, int y, int w, int h, ColorModelType type)
    {
-      int ssim1024_chan1 = this.computeOneChannelSSIM(img1_chan1, img2_chan1, x, y, w, h);
+      return this.computeSSIM(img1_chan1, img1_chan2, img1_chan3,
+                              img2_chan1, img2_chan2, img2_chan3,
+                              x, y, w, h, type, this.downSampling);
+   }
+
+
+   public int computeSSIM(int[] img1_chan1, int[] img1_chan2, int[] img1_chan3,
+                          int[] img2_chan1, int[] img2_chan2, int[] img2_chan3,
+                          int x, int y, int w, int h, ColorModelType type, int ds)
+   {
+      if ((type != ColorModelType.YUV444) && (type != ColorModelType.YUV422) &&
+        (type != ColorModelType.YUV420))
+         return -1;
+
+      final int ssim1024_chan1 = this.computeOneChannelSSIM(img1_chan1, img2_chan1, x, y, w, h, ds);
 
       if ((type == ColorModelType.YUV420) || (type == ColorModelType.YUV422))
          w >>= 1;
@@ -302,8 +321,8 @@ public final class ImageQualityMonitor
       if (type == ColorModelType.YUV420)
          h >>= 1;
 
-      int ssim1024_chan2 = this.computeOneChannelSSIM(img1_chan2, img2_chan2, x, y, w, h);
-      int ssim1024_chan3 = this.computeOneChannelSSIM(img1_chan3, img2_chan3, x, y, w, h);
+      final int ssim1024_chan2 = this.computeOneChannelSSIM(img1_chan2, img2_chan2, x, y, w, h, ds);
+      final int ssim1024_chan3 = this.computeOneChannelSSIM(img1_chan3, img2_chan3, x, y, w, h, ds);
 
       // YUV => weight 0.8 for Y and 0.1 for U & V
       return (int) ((102*ssim1024_chan1) + (13*ssim1024_chan2) + (13*ssim1024_chan3)) >> 7;
@@ -314,40 +333,73 @@ public final class ImageQualityMonitor
    // Return ssim * 1024
    public int computeSSIM(int[] data1, int[] data2)
    {
-      // Turn RGB_PACKED data into Y, U, V data
-      int[] y1 = new int[this.width*this.height];
-      int[] u1 = new int[this.width*this.height];
-      int[] v1 = new int[this.width*this.height];
-      int[] y2 = new int[this.width*this.height];
-      int[] u2 = new int[this.width*this.height];
-      int[] v2 = new int[this.width*this.height];
-      ColorModelConverter cvt = new YCbCrColorModelConverter(this.width, this.height);
-      cvt.convertRGBtoYUV(data1, y1, u1, v1, ColorModelType.YUV444);
-      cvt.convertRGBtoYUV(data2, y2, u2, v2, ColorModelType.YUV444);
-      return this.computeSSIM(y1, u1, v1, y2, u2, v2, ColorModelType.YUV444);
+      return this.computeSSIM(data1, data2, 0, 0, this.width, this.height);
    }
 
 
    public int computeSSIM(int[] data1, int[] data2, int x, int y, int w, int h)
    {
+      if ((w > this.width) || (h > this.height))
+         return -1;
+
+      x >>= this.downSampling;
+      y >>= this.downSampling;
+      w >>= this.downSampling;
+      h >>= this.downSampling;
+
       // Turn RGB_PACKED data into Y, U, V data
-      int[] y1 = new int[w*h];
-      int[] u1 = new int[w*h];
-      int[] v1 = new int[w*h];
-      int[] y2 = new int[w*h];
-      int[] u2 = new int[w*h];
-      int[] v2 = new int[w*h];
-      int offset = (y * this.width) + x;
-      ColorModelConverter cvt = new YCbCrColorModelConverter(w, h, offset, this.width);
-      cvt.convertRGBtoYUV(data1, y1, u1, v1, ColorModelType.YUV444);
-      cvt.convertRGBtoYUV(data2, y2, u2, v2, ColorModelType.YUV444);
-      return this.computeSSIM(y1, u1, v1, y2, u2, v2, x, y, w, h, ColorModelType.YUV444);
+      final int size = w * h;
+
+      if (this.y1.length < size)
+         this.y1 = new int[size];
+
+      if (this.y2.length < size)
+         this.y2 = new int[size];
+
+      if (this.u1.length < size)
+         this.u1 = new int[size];
+
+      if (this.u2.length < size)
+         this.u2 = new int[size];
+
+      if (this.v1.length < size)
+         this.v1 = new int[size];
+
+      if (this.v2.length < size)
+         this.v2 = new int[size];
+
+      final int offset = (y * this.width) + x;
+      ColorModelConverter cvt = new YCbCrColorModelConverter(w, h, offset, this.width >> this.downSampling);
+      ColorModelType colorModel;
+
+      if (this.downSampling > 0)
+      {
+         if (this.buffer.length < size)
+            this.buffer = new int[size];
+
+         // Downsample before color conversion
+         colorModel = ColorModelType.YUV444;
+         DecimateDownSampler ds = new DecimateDownSampler(w<<this.downSampling, h<<this.downSampling, 1<<this.downSampling);
+         ds.subSample(data1, this.buffer);
+         cvt.convertRGBtoYUV(this.buffer, this.y1, this.u1, this.v1, colorModel);
+         ds.subSample(data2, this.buffer);
+         cvt.convertRGBtoYUV(this.buffer, this.y2, this.u2, this.v2, colorModel);
+      }
+      else
+      {
+         colorModel = ColorModelType.YUV420;
+         cvt.convertRGBtoYUV(data1, this.y1, this.u1, this.v1, colorModel);
+         cvt.convertRGBtoYUV(data2, this.y2, this.u2, this.v2, colorModel);
+      }
+
+      return this.computeSSIM(this.y1, this.u1, this.v1, this.y2, this.u2, this.v2,
+              x, y, w, h, colorModel, 0);
    }
 
 
    // Calculate SSIM for the subimages at x,y of width w and height h (one channel)
    // Return ssim * 1024
-   private int computeOneChannelSSIM(int[] data1, int[] data2, int x, int y, int w, int h)
+   private int computeOneChannelSSIM(int[] data1, int[] data2, int x, int y, int w, int h, int ds)
    {
        if (data1 == data2)
           return 1024;
@@ -364,10 +416,10 @@ public final class ImageQualityMonitor
        if (y + h > this.height)
           h = this.height - y;
 
-       Context ctx = new Context(data1, data2, x, y, w, h);
+       final Context ctx = new Context(data1, data2, x, y, w, h, ds, this.kernel32);
+       final int inc = 1 << ds;
        final int endi = x + w;
        final int endj = y + h;
-       final int inc = 1 << this.downSampling;
        int iterations = 0;
 
        for (int j=y; j<endj; j+=inc)
@@ -377,7 +429,8 @@ public final class ImageQualityMonitor
           for (int i=x; i<endi; i+=inc)
           {
              ctx.x = i;
-             this.computeBlockSSIM(ctx);
+ //System.out.println(i+","+j+" "+data1[j*w+i]+" "+data2[j*w+i]+" "+ctx.sumSSIM/256);
+             computeBlockSSIM(ctx);
              iterations++;
           }
        }
@@ -386,33 +439,34 @@ public final class ImageQualityMonitor
    }
 
 
-   private void computeBlockSSIM(Context ctx)
+   private static void computeBlockSSIM(Context ctx)
    {
      final int x0 = ctx.x;
      final int y0 = ctx.y;
-     final int scale = this.downSampling;
-     final int kOffset = this.blockSize >> 1;
-     final int st = this.stride << scale;
+     final int kOffset = ctx.kernel.length >> 1;
+     final int scale = ctx.ds;
+     final int st = ctx.w << scale;
      final int inc = 1 << scale;
      final int xMin = (x0-kOffset < 0) ? 0 : x0 - kOffset;
-     final int xMax = (x0+kOffset > ctx.w-1) ? ctx.w-1 : x0 + kOffset;
+     final int xMax = (x0+kOffset >= ctx.w) ? ctx.w-1 : x0 + kOffset;
      final int yMin = (y0-kOffset < 0) ? 0 : y0 - kOffset;
-     final int yMax = (y0+kOffset > ctx.h-1) ? ctx.h-1 : y0 + kOffset;
-     int offset = yMin * this.stride;
+     final int yMax = (y0+kOffset >= ctx.h) ? ctx.h-1 : y0 + kOffset;
      final int[] data1 = ctx.data1;
      final int[] data2 = ctx.data2;
+     final int[] kernel = ctx.kernel;
+     int offset = yMin * ctx.w;
      long sumWeights = 0, sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, sumYY = 0;
 
      for (int y=yMin; y<=yMax; y+=inc)
      {
-         int weightY = this.kernel32[kOffset+(y-y0)>>scale];
+         final int weightY = kernel[kOffset+((y-y0)>>scale)];
 
          for (int x=xMin; x<=xMax; x+=inc)
          {
-             final int weightXY = weightY * this.kernel32[kOffset+(x-x0)>>scale];
+             final int weightXY = weightY * kernel[kOffset+((x-x0)>>scale)];
              final int idx = offset + ((x - xMin) << scale);
-             final int xVal = data1[idx] & 0xFF;
-             final int yVal = data2[idx] & 0xFF;
+             final int xVal = data1[idx];
+             final int yVal = data2[idx];
              final int wxVal = weightXY * xVal;
              final int wyVal = weightXY * yVal;
              sumX += wxVal;
@@ -450,21 +504,21 @@ public final class ImageQualityMonitor
       // ssim(x,y) = l(x,y) * c(x,y) * s(x,y)
       // ssim(x,y) = (2*muX*muY+A1)*(2*sigmaXY+A2)/((muX*mux+muY*muY+A1) * (sigmaX*sigmaX+sigmaY*sigmaY+A2))
       // C1, C2 and C3 are scaled compared to the reference values A1, A2, A3 and C3 is omitted
-      long num = ((2*muXmuY) + C1) * ((2*sigmaXY) + C2);
-      long den = ((muXmuX + muYmuY) + C1) * ((sigmaXX + sigmaYY) + C2);
-      long ssim1024 = ((num << 7) + (den >> 4)) / (den >> 3);
+      final long num = ((muXmuY + muXmuY) + C1) * ((sigmaXY + sigmaXY) + C2);
+      final long den = ((muXmuX + muYmuY) + C1) * ((sigmaXX + sigmaYY) + C2);
+      final long ssim1024 = ((num << 7) + (den >> 4)) / (den >> 3);
 
       // Fix rounding errors
       if (ssim1024 > 1024)
-          ssim1024 = 1024;
-
-      ctx.sumSSIM += ssim1024;
+         ctx.sumSSIM += 1024;
+      else
+         ctx.sumSSIM += ssim1024;
    }
 
 
    static class Context
    {
-      Context(int[] data1, int[] data2, int x, int y, int w, int h)
+      Context(int[] data1, int[] data2, int x, int y, int w, int h, int ds, int[] kernel)
       {
          this.data1 = data1;
          this.data2 = data2;
@@ -472,12 +526,16 @@ public final class ImageQualityMonitor
          this.y = y;
          this.w = w;
          this.h = h;
+         this.ds = ds;
+         this.kernel = kernel;
       }
 
       final int[] data1;
       final int[] data2;
       final int w;
       final int h;
+      final int ds; // downsampling
+      final int[] kernel;
       int x;
       int y;
       long sumSSIM;
