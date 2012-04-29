@@ -59,6 +59,27 @@ public class TestImageQuality
 
 
         {
+           for (int i=0; i<((w*h+500)/1000); i++)
+              rgb2[Math.abs(rnd.nextInt())/(w*h)] = rnd.nextInt();
+
+           img2.getRaster().setDataElements(0, 0, w, h, rgb2);
+           System.out.println("\nRandom noise (0.1% samples)");
+           monitor = new ImageQualityMonitor(w, h, w);
+           psnr = monitor.computePSNR(rgb1, rgb2);
+           ssim = monitor.computeSSIM(rgb1, rgb2);
+           printResults("PSNR: ", psnr, "SSIM: ", ssim);
+           monitor = new ImageQualityMonitor(w, h, w, 1);
+           psnr = monitor.computePSNR(rgb1, rgb2);
+           ssim = monitor.computeSSIM(rgb1, rgb2);
+           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsampled by 2x2): ", ssim);
+           monitor = new ImageQualityMonitor(w, h, w, 2);
+           psnr = monitor.computePSNR(rgb1, rgb2);
+           ssim = monitor.computeSSIM(rgb1, rgb2);
+           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsampled by 4x4): ", ssim);
+        }
+        
+        
+        {
            for (int i=0; i<((w*h+50)/100); i++)
               rgb2[Math.abs(rnd.nextInt())/(w*h)] = rnd.nextInt();
 
@@ -71,11 +92,11 @@ public class TestImageQuality
            monitor = new ImageQualityMonitor(w, h, w, 1);
            psnr = monitor.computePSNR(rgb1, rgb2);
            ssim = monitor.computeSSIM(rgb1, rgb2);
-           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsmpled by 2x2): ", ssim);
+           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsampled by 2x2): ", ssim);
            monitor = new ImageQualityMonitor(w, h, w, 2);
            psnr = monitor.computePSNR(rgb1, rgb2);
            ssim = monitor.computeSSIM(rgb1, rgb2);
-           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsmpled by 4x4): ", ssim);
+           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsampled by 4x4): ", ssim);
         }
 
 
@@ -92,11 +113,11 @@ public class TestImageQuality
            monitor = new ImageQualityMonitor(w, h, w, 1);
            psnr = monitor.computePSNR(rgb1, rgb2);
            ssim = monitor.computeSSIM(rgb1, rgb2);
-           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsmpled by 2x2): ", ssim);
+           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsampled by 2x2): ", ssim);
            monitor = new ImageQualityMonitor(w, h, w, 2);
            psnr = monitor.computePSNR(rgb1, rgb2);
            ssim = monitor.computeSSIM(rgb1, rgb2);
-           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsmpled by 4x4): ", ssim);
+           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsampled by 4x4): ", ssim);
         }
 
 
@@ -112,11 +133,11 @@ public class TestImageQuality
            monitor = new ImageQualityMonitor(w, h, w, 1);
            psnr = monitor.computePSNR(rgb1, rgb2);
            ssim = monitor.computeSSIM(rgb1, rgb2);
-           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsmpled by 2x2): ", ssim);
+           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsampled by 2x2): ", ssim);
            monitor = new ImageQualityMonitor(w, h, w, 2);
            psnr = monitor.computePSNR(rgb1, rgb2);
            ssim = monitor.computeSSIM(rgb1, rgb2);
-           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsmpled by 4x4): ", ssim);
+           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsampled by 4x4): ", ssim);
        }
 
        {
@@ -130,11 +151,11 @@ public class TestImageQuality
            monitor = new ImageQualityMonitor(w, h, w, 1);
            psnr = monitor.computePSNR(rgb1, rgb2);
            ssim = monitor.computeSSIM(rgb1, rgb2);
-           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsmpled by 2x2): ", ssim);
+           printResults("PSNR (subsampled by 2x2): ", psnr, "SSIM (subsampled by 2x2): ", ssim);
            monitor = new ImageQualityMonitor(w, h, w, 2);
            psnr = monitor.computePSNR(rgb1, rgb2);
            ssim = monitor.computeSSIM(rgb1, rgb2);
-           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsmpled by 4x4): ", ssim);
+           printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsampled by 4x4): ", ssim);
        }
 
 //        javax.swing.JFrame frame = new javax.swing.JFrame("Image1");
