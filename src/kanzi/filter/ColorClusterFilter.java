@@ -74,7 +74,7 @@ public class ColorClusterFilter implements VideoEffect
       if ((width & 3) != 0)
          throw new IllegalArgumentException("The width must be a multiple of 4");
 
-      if ((nbClusters < 2) && (nbClusters > 256))
+      if ((nbClusters < 2) || (nbClusters > 256))
          throw new IllegalArgumentException("The number of clusters must be in [2..256]");
 
       if ((iterations < 2) || (iterations > 256))
