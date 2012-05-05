@@ -38,8 +38,8 @@ public class TestColorClusterFilter
             String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
             ImageIcon icon = new ImageIcon(fileName);
             Image image = icon.getImage();
-            int w = image.getWidth(null) & -7;
-            int h = image.getHeight(null) & -7;
+            int w = image.getWidth(null) & -8;
+            int h = image.getHeight(null) & -8;
             System.out.println(w+"x"+h);
             GraphicsDevice gs = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
             GraphicsConfiguration gc = gs.getDefaultConfiguration();
@@ -59,7 +59,7 @@ public class TestColorClusterFilter
             ColorClusterFilter effect = new ColorClusterFilter(w, h, 30, 12, null);
             //System.arraycopy(dest, 0, source, 0, w*h);
             effect.apply(source, dest);
-            
+
             if (applySobel == true)
             {
                // Apply Sobel filter
@@ -98,7 +98,7 @@ public class TestColorClusterFilter
             if (applyBilateral == true)
             {
                FastBilateralFilter fbl = new FastBilateralFilter(w, h, 70.0f, 0.03f);
-               fbl.apply(dest, dest);            
+               fbl.apply(dest, dest);
             }
 
             img2.getRaster().setDataElements(0, 0, w, h, dest);

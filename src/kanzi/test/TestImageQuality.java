@@ -29,8 +29,8 @@ public class TestImageQuality
         javax.swing.ImageIcon icon1 = new javax.swing.ImageIcon(fileName);
         java.awt.Image image1 = icon1.getImage();
 
-        int w = image1.getWidth(null) & -7;
-        int h = image1.getHeight(null) & -7;
+        int w = image1.getWidth(null) & -8;
+        int h = image1.getHeight(null) & -8;
         java.awt.GraphicsDevice gs = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
         java.awt.GraphicsConfiguration gc = gs.getDefaultConfiguration();
         java.awt.image.BufferedImage img1 = gc.createCompatibleImage(w, h, java.awt.Transparency.OPAQUE);
@@ -77,8 +77,8 @@ public class TestImageQuality
            ssim = monitor.computeSSIM(rgb1, rgb2);
            printResults("PSNR (subsampled by 4x4): ", psnr, "SSIM (subsampled by 4x4): ", ssim);
         }
-        
-        
+
+
         {
            for (int i=0; i<((w*h+50)/100); i++)
               rgb2[Math.abs(rnd.nextInt())/(w*h)] = rnd.nextInt();

@@ -39,7 +39,7 @@ import kanzi.util.QuadTreeGenerator;
  */
 public class TestQuadTreeGenerator
 {
-  
+
     public static void main(String[] args)
     {
         try
@@ -47,8 +47,8 @@ public class TestQuadTreeGenerator
             String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
             ImageIcon icon = new ImageIcon(fileName);
             Image image = icon.getImage();
-            int w = image.getWidth(null) & -7;
-            int h = image.getHeight(null) & -7;
+            int w = image.getWidth(null) & -8;
+            int h = image.getHeight(null) & -8;
             System.out.println(w+"x"+h);
             GraphicsDevice gs = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
             GraphicsConfiguration gc = gs.getDefaultConfiguration();
@@ -69,7 +69,7 @@ public class TestQuadTreeGenerator
             nodes.clear();
             new QuadTreeGenerator(w, h, nbNodes, minNodeDim).decompose(nodes, source);
             img2.getRaster().setDataElements(0, 0, w, h, dest);
-            
+
             for (QuadTreeGenerator.Node node : nodes)
                img2.getGraphics().drawRect(node.x, node.y, node.w, node.h);
 
@@ -94,7 +94,7 @@ public class TestQuadTreeGenerator
                   {
                      if (node == null)
                         continue;
-                     
+
                      if ((e.getX() >= node.x) && (e.getY() >= node.y)
                              && (e.getX() <= node.x+node.w)
                              && (e.getY() <= node.y+node.h))
@@ -114,16 +114,16 @@ public class TestQuadTreeGenerator
                   nbNodes++;
                   new QuadTreeGenerator(w, h, nbNodes, minNodeDim).decompose(nodes, source);
                   img2.getRaster().setDataElements(0, 0, w, h, source);
-            
+
                   for (QuadTreeGenerator.Node node : nodes)
-                    img2.getGraphics().drawRect(node.x, node.y, node.w, node.h); 
+                    img2.getGraphics().drawRect(node.x, node.y, node.w, node.h);
 
                   String title = frame2.getTitle();
                   int idx = title.lastIndexOf("- nodes=");
 
                   if (idx > 0)
                      title = title.substring(0, idx);
-                  
+
                   frame2.setTitle(title+"- nodes="+String.valueOf(nodes.size()));
                   frame2.invalidate();
                   frame2.repaint();
