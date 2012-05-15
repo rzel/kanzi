@@ -36,9 +36,9 @@ import kanzi.entropy.RangeEncoder;
 import kanzi.transform.WHT8;
 import kanzi.util.color.ColorModelConverter;
 import kanzi.util.ImageQualityMonitor;
-import kanzi.util.IntraEncoder;
-import kanzi.util.PostProcessingFilter;
-import kanzi.util.ResidueBlockEncoder;
+import kanzi.prediction.IntraEncoder;
+import kanzi.prediction.PostProcessingFilter;
+import kanzi.prediction.ResidueBlockEncoder;
 import kanzi.util.color.YCbCrColorModelConverter;
 
 

@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kanzi.intra;
+package kanzi.prediction;
 
 import kanzi.OutputBitStream;
 import kanzi.entropy.ExpGolombEncoder;
@@ -220,14 +220,12 @@ public final class ResidueBlockEncoder
        }
        else
        {
-          final int diffNonZeros = nonZeros - thresholdNonZeros;
-          
-          // Write theshold
+          // Write threshold
           if (this.stream.writeBits(thresholdNonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ)
             return false;
           
           // Write difference
-          if (this.stream.writeBits(diffNonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ) 
+          if (this.stream.writeBits(nonZeros-thresholdNonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ) 
             return false;
        }
 
