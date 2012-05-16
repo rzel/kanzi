@@ -151,7 +151,6 @@ public class TestWHTImage
         int nonZero = 0;
         w >>= shift;
         h >>= shift;
-        ResidueBlockEncoder re = new ResidueBlockEncoder(3, bs);
 
         for (int y=0; y<h; y+=8)
         {
@@ -185,11 +184,7 @@ public class TestWHTImage
                   }
 
                   System.out.println();
-              }
-        
-        long ww = bs.written();
-        re.encode(block, 0);
-               System.out.println("+"+(bs.written() - ww));
+              }      
 
               for (int j=0; j<8; j++)
                  System.arraycopy(block, 8*j, output, (y+j)*w+x, 8);
