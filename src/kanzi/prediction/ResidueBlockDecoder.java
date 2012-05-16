@@ -15,12 +15,13 @@ limitations under the License.
 
 package kanzi.prediction;
 
+import kanzi.EntropyDecoder;
 import kanzi.InputBitStream;
 import kanzi.entropy.ExpGolombDecoder;
 
 
-// Encoder/decoder for residue block (post transfom+quantize steps)
-public final class ResidueBlockDecoder
+// Decoder for residue block used after initial entropy coding step
+public final class ResidueBlockDecoder implements EntropyDecoder
 {
     private final InputBitStream stream;
     private final ExpGolombDecoder gDecoder;
@@ -85,8 +86,12 @@ public final class ResidueBlockDecoder
 
 
     // Decode the residue data, output to provided array
-    public boolean decode(int[] data, int blkptr)
+    @Override
+    public int decode(byte[] data, int blkptr, int len)
     {
+       if (len != BLOCK_SIZE)
+          return -1;
+       
        final int end = blkptr + BLOCK_SIZE;
 
        while (blkptr < end)
@@ -112,63 +117,71 @@ public final class ResidueBlockDecoder
               }
 
               blkptr = endi;
-              continue;
+              return BLOCK_SIZE;
           }
 
           if (nonZeros == (1 << LOG_THRESHOLD_NZ) - 1)
               nonZeros += (int) this.stream.readBits(LOG_THRESHOLD_NZ);
 
+          // Decode binary mode (residue contains only -1, 0, 1) or not
+          final boolean binaryMode = (this.stream.readBit() == 1) ? true : false;
+
           // Decode scan order
-          int scan_order = this.stream.readBit();
-          scan_order <<= 1;
-          scan_order |= this.stream.readBit();
+          final int scan_order = (int) this.stream.readBits(2);
+
+          int idx = 0;
           final int[] scanTable = SCAN_TABLES[scan_order];
 
-          // Decode DC coefficient
-          data[blkptr] = (byte) this.stream.readBits(8);
-
-          if (data[blkptr] != 0)
-             nonZeros--;
-
-          int idx = 1; // exclude DC coefficient
-          int counter = 1;
-          int val = this.stream.readBit();
-
-          while (nonZeros > 0)
+          // IfF non binary mode, decode DC coefficient
+          if (binaryMode == false)
           {
-             // If val == 0, reading a run or end of a value
-             // Otherwise, reading a value
-             while ((this.stream.readBit() == val) && (counter < this.rleThreshold))
-                counter++;
+             idx = 1;
+             data[blkptr] = this.gDecoder.decodeByte();
 
-             int nextCounter = 1 - val;
+             if (data[blkptr] != 0)
+                nonZeros--;
+          }
 
-             if (counter == this.rleThreshold)
+          int run = 0;
+
+          if (binaryMode == true)
+          {
+             while (nonZeros > 0)
              {
-                // Decode the exp-golomb encoded remainder
-                counter += this.gDecoder.decodeByte();
-                nextCounter = 0;
-             }
+                while (this.stream.readBit() == 0)
+                   run++;
 
-             if (val == 1)
-             {
-                // If reading a value (not a run), need to get the sign
-                if (this.stream.readBit() == 1)
-                   counter = -counter;
+                while (run-- > 0)
+                   data[blkptr+scanTable[idx++]] = 0;
 
-                // Output a value
-                data[blkptr+scanTable[idx++]] = counter;
+                final int sign = this.stream.readBit();
+                data[blkptr+scanTable[idx++]] = (byte) (1 - (sign << 1));
                 nonZeros--;
              }
-             else
+          }
+          else // regular mode (abs(max) > 1)
+          {
+             while (nonZeros > 0)
              {
-                // Output a run of 0s
-                while (counter-- > 0)
-                   data[blkptr+scanTable[idx++]] = 0;
-             }
+                while ((this.stream.readBit() == 0) && (run < this.rleThreshold))
+                   run++;
 
-             counter = nextCounter;
-             val ^= 1;
+                // Add remainder to get full value of run length
+                if (run == this.rleThreshold)
+                   run += this.gDecoder.decodeByte();
+
+                while (run-- > 0)
+                   data[blkptr+scanTable[idx++]] = 0;
+
+                int val = this.gDecoder.decodeByte();
+                val++;
+
+                if (this.stream.readBit() == 1)
+                   val = -val;
+
+                data[blkptr+scanTable[idx++]] = (byte) val;
+                nonZeros--;
+             }
           }
 
           // Add remaining 0s (not encoded)
@@ -178,6 +191,26 @@ public final class ResidueBlockDecoder
           blkptr += BLOCK_SIZE;
        }
 
-       return true;
+       return BLOCK_SIZE;
+    }
+
+
+    @Override
+    public byte decodeByte()
+    {
+       throw new UnsupportedOperationException("Operation not supported");
+    }
+
+
+    @Override
+    public InputBitStream getBitStream()
+    {
+       return this.stream;
+    }
+
+
+    @Override
+    public void dispose()
+    {
     }
 }
