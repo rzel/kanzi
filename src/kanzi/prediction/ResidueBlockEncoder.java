@@ -15,12 +15,13 @@ limitations under the License.
 
 package kanzi.prediction;
 
+import kanzi.EntropyEncoder;
 import kanzi.OutputBitStream;
 import kanzi.entropy.ExpGolombEncoder;
 
 
-// Encoder/decoder for residue block (post transfom+quantize steps)
-public final class ResidueBlockEncoder
+// Encoder/decoder for residue block 
+public final class ResidueBlockEncoder implements EntropyEncoder
 {
     private final int scoreThreshold;
     private final OutputBitStream stream;
@@ -36,6 +37,7 @@ public final class ResidueBlockEncoder
     private static final byte SCAN_V  = 1;
     private static final byte SCAN_Z  = 2;
     private static final byte SCAN_HV = 3;
+
 
     // 8x8 block scan tables
     public static final int[][] SCAN_TABLES =
@@ -88,15 +90,15 @@ public final class ResidueBlockEncoder
     private static final int[] SCAN_TABLE_HV = SCAN_TABLES[SCAN_HV];
 
 
-    public ResidueBlockEncoder(int threshold, OutputBitStream stream)
+    public ResidueBlockEncoder(int skipThreshold, OutputBitStream stream)
     {
-        this(threshold, stream, MAX_NON_ZEROS);
+        this(skipThreshold, stream, MAX_NON_ZEROS);
     }
 
 
-    protected ResidueBlockEncoder(int threshold, OutputBitStream stream, int maxNonZeros)
+    protected ResidueBlockEncoder(int skipThreshold, OutputBitStream stream, int maxNonZeros)
     {
-        this.scoreThreshold = threshold;
+        this.scoreThreshold = skipThreshold;
         this.stream = stream;
         this.gEncoder = new ExpGolombEncoder(this.stream, false);
         this.rleThreshold = 5;
@@ -106,8 +108,12 @@ public final class ResidueBlockEncoder
 
     // Find scan order that minimizes the size of the output
     // Bit encode the residue data
-    public boolean encode(int[] data, int blkptr)
+    @Override
+    public int encode(byte[] data, int blkptr, int len)
     {
+       if (len != BLOCK_SIZE)
+          return -1;
+
        // Test horizontal scan order
        final int resH = this.getStatistics(data, blkptr, SCAN_TABLE_H);
        final int max = (resH >> 16) & 0xFF;
@@ -116,7 +122,7 @@ public final class ResidueBlockEncoder
        final int skipBlockBits = LOG_THRESHOLD_NZ;
 
        if ((max <= 1) && (scoreH < this.scoreThreshold))
-          return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
+          return this.stream.writeBits(0, skipBlockBits);
 
        // Test vertical scan order
        final int endH = resH & 0xFF;
@@ -124,7 +130,7 @@ public final class ResidueBlockEncoder
        final int scoreV = (resV >> 8) & 0xFF;
 
        if ((max <= 1) && (scoreV < this.scoreThreshold))
-          return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
+          return this.stream.writeBits(0, skipBlockBits);
 
        // Test zigzag scan order
        final int endV = resV & 0xFF;
@@ -132,7 +138,7 @@ public final class ResidueBlockEncoder
        final int scoreZ = (resZ >> 8) & 0xFF;
 
        if ((max <= 1) && (scoreZ < this.scoreThreshold))
-          return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
+          return this.stream.writeBits(0, skipBlockBits);
 
        // Test horizontal+vertical scan order
        final int endZ = resZ & 0xFF;
@@ -140,7 +146,7 @@ public final class ResidueBlockEncoder
        final int scoreHV = (resHV >> 8) & 0xFF;
 
        if ((max <= 1) && (scoreHV < this.scoreThreshold))
-          return (this.stream.writeBits(0, skipBlockBits) == skipBlockBits);
+          return this.stream.writeBits(0, skipBlockBits);
 
        final int endHV = resHV & 0xFF;
        final int min1 = (endH < endV) ? endH : endV;
@@ -155,17 +161,17 @@ public final class ResidueBlockEncoder
        else if (min == endZ)
           scan_order = SCAN_Z;
 
-       return this.encodeDirectional(data, blkptr, nonZeros, scan_order);
+       return this.encodeDirectional(data, blkptr, nonZeros, scan_order, max);
     }
 
 
     // Extract statistics of the coefficients in the residue block
-    private int getStatistics(int[] data, int blkptr, int[] scanTable)
+    private int getStatistics(byte[] data, int blkptr, int[] scanTable)
     {
-       int idx = 1; // exclude DC coefficient
        int end = BLOCK_SIZE - 1;
-       int score = (data[blkptr] == 0) ? 0 : 5; // DC coefficient
        int max = 0;
+       int idx = 1; // exclude DC coefficient
+       int score = (data[blkptr] == 0) ? 0 : 5; // DC coefficient
        int nonZeros = (data[blkptr] == 0) ? 0 : 1; // DC coefficient
 
        // Find last non zero coefficient
@@ -204,104 +210,123 @@ public final class ResidueBlockEncoder
     }
 
 
-    private boolean encodeDirectional(int[] data, int blkptr, int nonZeros, byte scan_order)
+    private int encodeDirectional(byte[] data, int blkptr, int nonZeros, byte scan_order, int max)
     {
-       // Encode number of non-zero coefficients: 4 bits (+ 4 bits)
+       // Encode number of non-zero coefficients:
        // If the number of coefficients is [0..14], use 4 bits
        // If the number of coefficients is in [15..30], add 4 bits for the difference
        // EG: N=7  => 0111
        // EG: N=15 => 1111 0000      N=30 => 1111 1111
        final int thresholdNonZeros = (1 << LOG_THRESHOLD_NZ) - 1;
-       
+
        if (nonZeros < thresholdNonZeros)
        {
           if (this.stream.writeBits(nonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ)
-             return false;
+             return -1;
        }
        else
        {
           // Write threshold
           if (this.stream.writeBits(thresholdNonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ)
-            return false;
+            return -1;
           
           // Write difference
           if (this.stream.writeBits(nonZeros-thresholdNonZeros, LOG_THRESHOLD_NZ) != LOG_THRESHOLD_NZ) 
-            return false;
+            return -1;
        }
+
+       // Encode binary mode (residue contains only -1, 0, 1) or not
+       this.stream.writeBit((max <= 1) ? 1 : 0);
 
        // Encode scan order
        if (this.stream.writeBits(scan_order, 2) != 2)
-          return false;
-       
-       // Encode DC coefficient
-       if (this.stream.writeBits(data[blkptr] & 0xFF, 8) != 8)
-          return false;
+          return -1;
 
-       if (data[blkptr] != 0)
-          nonZeros--;
+       int idx = 0;
+
+       // Encode DC coefficient (if not binary mode)
+       if (max > 1)
+       {
+          idx = 1;
+
+          if (this.gEncoder.encodeByte(data[blkptr]) == false)
+             return -1;
+
+          if (data[blkptr] != 0)
+             nonZeros--;
+       }
        
-       int idx = 1; // exclude DC coefficient
        boolean res = true;
        int run = 0;
        final int[] scanTable = SCAN_TABLES[scan_order];
 
-       // Encode a small value as a repetition of '1' followed by '0' and sign.
-       // Encode a small run of 0s as a repetition of '0'.
-       // Encode large values or runs as a mix of repeated bits & exp-golomb encoding
-       // A 'large' value follows value >= rleThreshold
-       // EG: 4 => 111100, -2 => 1101
-       // EG: 0,0,0,0 => 0000
-       // EG: 11 (rleThreshold = 5) => 5+6 or 11111 00111 0
-       // EG: 00000000000 (rleThreshold = 5) => (5+6)*0 or 00000 00111 (no sign)
-       // EG: 1, 0, -3, 2, 0, 0, 0, 0, 0, 0, 0, 1 => 100 0 11101 1100 0 0 0 0 0 011 100
+       // In binary mode: encode 00..0x as a run, then the sign of x (x=1 or x=-1)
+       // Otherwise, encode 00..0x as a run of 0s, then encode abs(x)-1 with
+       // exp-golomb codes, then the sign of x
        while ((nonZeros > 0) && (res == true))
        {
-         int val = data[blkptr+scanTable[idx]];
-         idx++;
+          int val = data[blkptr+scanTable[idx]];
+          idx++;
 
-         if (val == 0)
-         {
-            run++;
-            continue;
-         }
+          if (val == 0)
+          {
+             run++;
+             continue;
+          }
 
-         if (run > 0)
-         {
-           // If the run is too long, use a mix of bit counting & Exp-Golomb encoding
-           int remainder = run - this.rleThreshold;
+          final int sign = val >>> 31;
 
-           // Encode run as 0s
-           if (remainder >= 0)
-             run = this.rleThreshold;
+          if (max > 1) // regular mode
+          {
+             final int remaining = run - this.rleThreshold;
 
-           while (run-- > 0)
-             res &= this.stream.writeBit(0);
+             // Write run length
+             while (run-- > 0)
+                res &= this.stream.writeBit(0);
 
-           if (remainder >= 0)
-             res &= this.gEncoder.encodeByte((byte) remainder);
-         }
+             if (remaining >= 0)
+                res &= this.gEncoder.encodeByte((byte) remaining);
+             
+             val = (val + (val >> 31)) ^ (val >> 31); //abs
+             val--;
 
-         final int sign = val >>> 31;
-         val = (val + (val >> 31)) ^ (val >> 31); //abs
-         int remainder = val - this.rleThreshold;
+             // Write abs(x-1) (encoded as single bit '1' if x=1)
+             res &= this.gEncoder.encodeByte((byte) val);
+          }
+          else // binary mode
+          {
+             while (run-- > 0)
+                res &= this.stream.writeBit(0);
 
-         if (remainder >= 0)
-           val = this.rleThreshold;
+             res &= this.stream.writeBit(1);
+          }
 
-         // Encode value as 1s
-         while (val-- > 0)
-           res &= this.stream.writeBit(1);
-
-         if (remainder >= 0)
-           res &= this.gEncoder.encodeByte((byte) remainder);
-         else
-           res &= this.stream.writeBit(0); //end of value
-
-         res &= this.stream.writeBit(sign);
-         nonZeros--;
+          // Write sign
+          res &= this.stream.writeBit(sign);
+          nonZeros--;
        }
 
-       return res;
+       return BLOCK_SIZE;
+    }
+
+
+    @Override
+    public boolean encodeByte(byte val)
+    {
+       throw new UnsupportedOperationException("Operation not supported.");
+    }
+
+
+    @Override
+    public OutputBitStream getBitStream()
+    {
+       return this.stream;
+    }
+
+
+    @Override
+    public void dispose()
+    {
     }
 
 }
