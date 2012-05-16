@@ -323,48 +323,54 @@ public class IntraPredictor
       int k = 0;
       int dc_l = 0;
       int dc_r = 0;
-
+      int sum_l = 0;
+      int sum_r = 0;
+       
       if (y > 0)
       {
-         final int above = start - st;
          predictions[Mode.VERTICAL.value].energy = 0;
+         predictions[Mode.DC_L.value].energy = 0;
+         predictions[Mode.DC_R.value].energy = 0;
+         sum_l += blockDim;
+         sum_r += blockDim;
+         final int above = start - st;
+  
+         for (int i=0; i<blockDim; i++)
+            dc_l += (input[above+i] & 0xFF);
+         
+         dc_r = dc_l;
+      }
+      
+      if (x > 0)
+      {
+         predictions[Mode.HORIZONTAL_L.value].energy = 0;
+         predictions[Mode.DC_L.value].energy = 0;
 
-         if (x > 0)
-         {
-            predictions[Mode.DC_L.value].energy = 0;
+         if (y > 0)
             predictions[Mode.AVERAGE_UL.value].energy = 0;
+            
+         for (int j=start; j<endj; j+=st)
+            dc_l += (input[j-1] & 0xFF);
 
-            // dc=ai+bi
-            for (int i=0; i<blockDim; i++)
-               dc_l += (input[above+i] & 0xFF);
-
-            for (int j=start; j<endj; j+=st)
-               dc_l += (input[j-1] & 0xFF);
-
-            dc_l = (dc_l + blockDim) / (blockDim + blockDim);
-         }
-
-         if (x < xMax)
-         {
-            predictions[Mode.DC_R.value].energy = 0;
-            predictions[Mode.AVERAGE_UR.value].energy = 0;
-
-            // dc=ai+ci
-            for (int i=0; i<blockDim; i++)
-               dc_r += (input[above+i] & 0xFF);
-
-            for (int j=start; j<endj; j+=st)
-               dc_r += (input[j+blockDim] & 0xFF);
-
-            dc_r = (dc_r + blockDim) / (blockDim + blockDim);
-         }
+         sum_l += blockDim;
+         dc_l = (dc_l + (sum_l >> 1)) / sum_l;   
       }
 
-      if (x > 0)
-         predictions[Mode.HORIZONTAL_L.value].energy = 0;
-
       if (x < xMax)
+      {
          predictions[Mode.HORIZONTAL_R.value].energy = 0;
+         predictions[Mode.DC_R.value].energy = 0;
+
+         if (y > 0)
+            predictions[Mode.AVERAGE_UR.value].energy = 0;
+            
+         for (int j=start; j<endj; j+=st)
+            dc_r += (input[j+blockDim] & 0xFF);
+
+         sum_r += blockDim;
+         dc_r = (dc_r + (sum_r >> 1)) / sum_r;    
+      }
+
 
       for (int j=start; j<endj; j+=st)
       {
@@ -377,6 +383,38 @@ public class IntraPredictor
             final int x2 = input[i+2] & 0xFF;
             final int x3 = input[i+3] & 0xFF;
 
+            if ((y > 0) || (x > 0))
+            {
+               // DC_L: xi-dc_l
+               final int val0 = x0 - dc_l;
+               final int val1 = x1 - dc_l;
+               final int val2 = x2 - dc_l;
+               final int val3 = x3 - dc_l;
+               final Prediction p = predictions[Mode.DC_L.value];
+               final int[] output = p.residue;
+               output[k]   = val0;
+               output[k+1] = val1;
+               output[k+2] = val2;
+               output[k+3] = val3;
+               p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+            }
+
+            if ((y > 0) || (x < xMax))
+            {
+               // DC_R: xi-dc_r
+               final int val0 = x0 - dc_r;
+               final int val1 = x1 - dc_r;
+               final int val2 = x2 - dc_r;
+               final int val3 = x3 - dc_r;
+               final Prediction p = predictions[Mode.DC_R.value];
+               final int[] output = p.residue;
+               output[k]   = val0;
+               output[k+1] = val1;
+               output[k+2] = val2;
+               output[k+3] = val3;
+               p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+            }
+            
             if (y > 0)
             {
                final int px0 = input[i-st]   & 0xFF;
@@ -403,51 +441,18 @@ public class IntraPredictor
 
                if (x > 0)
                {
-                  {
-                     // DC_L: xi-dc_l
-                     final int val0 = x0 - dc_l;
-                     final int val1 = x1 - dc_l;
-                     final int val2 = x2 - dc_l;
-                     final int val3 = x3 - dc_l;
-                     final Prediction p = predictions[Mode.DC_L.value];
-                     final int[] output = p.residue;
-                     output[k]   = val0;
-                     output[k+1] = val1;
-                     output[k+2] = val2;
-                     output[k+3] = val3;
-                     p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
-                  }
-
-                  {
-                     // AVERAGE_UL: (xi,yi)-avg((xi,yi-1),(xi-1,yi))
-                     final int xa = input[i-1] & 0xFF;
-                     int avg;
-                     avg = (xa + px0) >> 1;
-                     final int val0 = x0 - avg;
-                     avg = (x0 + px1) >> 1;
-                     final int val1 = x1 - avg;
-                     avg = (x1 + px2) >> 1;
-                     final int val2 = x2 - avg;
-                     avg = (x2 + px3) >> 1;
-                     final int val3 = x3 - avg;
-                     final Prediction p = predictions[Mode.AVERAGE_UL.value];
-                     final int[] output = p.residue;
-                     output[k]   = val0;
-                     output[k+1] = val1;
-                     output[k+2] = val2;
-                     output[k+3] = val3;
-                     p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
-                  }
-               }
-
-               if (x < xMax)
-               {
-                  // DC_R: xi-dc_r
-                  final int val0 = x0 - dc_r;
-                  final int val1 = x1 - dc_r;
-                  final int val2 = x2 - dc_r;
-                  final int val3 = x3 - dc_r;
-                  final Prediction p = predictions[Mode.DC_R.value];
+                  // AVERAGE_UL: (xi,yi)-avg((xi,yi-1),(xi-1,yi))
+                  final int xa = input[i-1] & 0xFF;
+                  int avg;
+                  avg = (xa + px0) >> 1;
+                  final int val0 = x0 - avg;
+                  avg = (x0 + px1) >> 1;
+                  final int val1 = x1 - avg;
+                  avg = (x1 + px2) >> 1;
+                  final int val2 = x2 - avg;
+                  avg = (x2 + px3) >> 1;
+                  final int val3 = x3 - avg;
+                  final Prediction p = predictions[Mode.AVERAGE_UL.value];
                   final int[] output = p.residue;
                   output[k]   = val0;
                   output[k+1] = val1;
@@ -721,29 +726,51 @@ public class IntraPredictor
 
          if (mode == Mode.DC_L)
          {
-            int dc_l = 0;
-
             // dc=ai+bi
-            for (int i=0; i<blockDim; i++)
-               dc_l += (input[above+i] & 0xFF);
+            int dc_l = 0;
+            int sum = 0;
 
-            for (int j=start; j<endj; j+=st)
-               dc_l += (input[j-1] & 0xFF);
+            if (y > 0)
+            {
+               for (int i=0; i<blockDim; i++)
+                  dc_l += (input[above+i] & 0xFF);
+               
+               sum += blockDim;
+            }
 
-            dc = (dc_l + blockDim) / (blockDim + blockDim);
+            if (x > 0)
+            {
+              for (int j=start; j<endj; j+=st)
+                 dc_l += (input[j-1] & 0xFF);
+               
+               sum += blockDim;
+            }
+            
+            dc = (dc_l + (sum >> 1)) / sum;
          }
          else
          {
-            int dc_r = 0;
-
             // dc=ai+ci
-            for (int i=0; i<blockDim; i++)
-               dc_r += (input[above+i] & 0xFF);
+            int dc_r = 0;
+            int sum = 0;
 
-            for (int j=start; j<endj; j+=st)
-               dc_r += (input[j+blockDim] & 0xFF);
+            if (y > 0)
+            {
+              for (int i=0; i<blockDim; i++)
+                 dc_r += (input[above+i] & 0xFF);
+              
+              sum += blockDim;
+            }
 
-            dc = (dc_r + blockDim) / (blockDim + blockDim);
+            if (x < this.width - blockDim)
+            {
+              for (int j=start; j<endj; j+=st)
+                 dc_r += (input[j+blockDim] & 0xFF);
+              
+              sum += blockDim;
+            }            
+
+            dc = (dc_r + (sum >> 1)) / sum;
          }
 
          for (int j=start; j<endj; j+=st)
