@@ -78,23 +78,24 @@ public class IntraPredictor
    private final TreeSet<BlockContext> set; // used during spatial search
    private final int sqrErrThreshold; // used to trigger spatial search
    private final int spatialShift;
+   private final boolean isRGB;
 
 
    public IntraPredictor(int width, int height)
    {
-      this(width, height, width);
+      this(width, height, width, true);
    }
 
 
-   public IntraPredictor(int width, int height, int stride)
+   public IntraPredictor(int width, int height, int stride, boolean isRGB)
    {
-      this(width, height, stride, 5);
+      this(width, height, stride, isRGB, 5);
    }
 
 
-   public IntraPredictor(int width, int height, int stride, int errThreshold)
+   public IntraPredictor(int width, int height, int stride, boolean isRGB, int errThreshold)
    {
-     this(width, height, stride, errThreshold, 4);
+     this(width, height, stride, isRGB, errThreshold, 4);
    }
 
 
@@ -105,7 +106,8 @@ public class IntraPredictor
    // residue energy per pixel is 0 at the end of step 1)
    // a value of 256 means that the spatial search never happens.
    // spatialStep is the step used to find a spatial match (1,2,4 or 8)
-   public IntraPredictor(int width, int height, int stride, int errThreshold, int spatialStep)
+   public IntraPredictor(int width, int height, int stride, boolean isRGB, 
+           int errThreshold, int spatialStep)
    {
      if (height < 8)
          throw new IllegalArgumentException("The height must be at least 8");
@@ -147,6 +149,7 @@ public class IntraPredictor
 
      // Control the number of blocks to search during spatial match
      this.spatialShift = shift;
+     this.isRGB = isRGB;
    }
 
 
@@ -274,16 +277,18 @@ public class IntraPredictor
       }
       else
       {
+         final int mask = (this.isRGB == true) ? 0xFF : -1;
+         
          for (int j=iIdx; j<endj; j+=st)
          {
             final int endi = j + blockDim;
 
             for (int i=j; i<endi; i+=4)
             {
-                final int val0 = (input[i]   & 0xFF) - (other[oIdx]   & 0xFF);
-                final int val1 = (input[i+1] & 0xFF) - (other[oIdx+1] & 0xFF);
-                final int val2 = (input[i+2] & 0xFF) - (other[oIdx+2] & 0xFF);
-                final int val3 = (input[i+3] & 0xFF) - (other[oIdx+3] & 0xFF);
+                final int val0 = (input[i]   & mask) - (other[oIdx]   & mask);
+                final int val1 = (input[i+1] & mask) - (other[oIdx+1] & mask);
+                final int val2 = (input[i+2] & mask) - (other[oIdx+2] & mask);
+                final int val3 = (input[i+3] & mask) - (other[oIdx+3] & mask);
                 output[k]   = val0;
                 output[k+1] = val1;
                 output[k+2] = val2;
@@ -320,6 +325,7 @@ public class IntraPredictor
       final int start = y*st + x;
       final int endj = start + (st * blockDim);
       final int xMax = this.width - blockDim;
+      final int mask = (this.isRGB == true) ? 0xFF : -1;
       int k = 0;
       int dc_l = 0;
       int dc_r = 0;
@@ -336,7 +342,7 @@ public class IntraPredictor
          final int above = start - st;
   
          for (int i=0; i<blockDim; i++)
-            dc_l += (input[above+i] & 0xFF);
+            dc_l += (input[above+i] & mask);
          
          dc_r = dc_l;
       }
@@ -350,7 +356,7 @@ public class IntraPredictor
             predictions[Mode.AVERAGE_UL.value].energy = 0;
             
          for (int j=start; j<endj; j+=st)
-            dc_l += (input[j-1] & 0xFF);
+            dc_l += (input[j-1] & mask);
 
          sum_l += blockDim;
          dc_l = (dc_l + (sum_l >> 1)) / sum_l;   
@@ -365,7 +371,7 @@ public class IntraPredictor
             predictions[Mode.AVERAGE_UR.value].energy = 0;
             
          for (int j=start; j<endj; j+=st)
-            dc_r += (input[j+blockDim] & 0xFF);
+            dc_r += (input[j+blockDim] & mask);
 
          sum_r += blockDim;
          dc_r = (dc_r + (sum_r >> 1)) / sum_r;    
@@ -378,10 +384,10 @@ public class IntraPredictor
          
          for (int i=j; i<endi; i+=4)
          {
-            final int x0 = input[i]   & 0xFF;
-            final int x1 = input[i+1] & 0xFF;
-            final int x2 = input[i+2] & 0xFF;
-            final int x3 = input[i+3] & 0xFF;
+            final int x0 = input[i]   & mask;
+            final int x1 = input[i+1] & mask;
+            final int x2 = input[i+2] & mask;
+            final int x3 = input[i+3] & mask;
 
             if ((y > 0) || (x > 0))
             {
@@ -417,19 +423,19 @@ public class IntraPredictor
             
             if (y > 0)
             {
-               final int px0 = input[i-st]   & 0xFF;
-               final int px1 = input[i-st+1] & 0xFF;
-               final int px2 = input[i-st+2] & 0xFF;
-               final int px3 = input[i-st+3] & 0xFF;
+               final int px0 = input[i-st]   & mask;
+               final int px1 = input[i-st+1] & mask;
+               final int px2 = input[i-st+2] & mask;
+               final int px3 = input[i-st+3] & mask;
 
                {
                   // VERTICAL: xi-ai
                   final int above = start - st;
                   final int idx = above + i - j;
-                  final int val0 = x0 - (input[idx]   & 0xFF);
-                  final int val1 = x1 - (input[idx+1] & 0xFF);
-                  final int val2 = x2 - (input[idx+2] & 0xFF);
-                  final int val3 = x3 - (input[idx+3] & 0xFF);
+                  final int val0 = x0 - (input[idx]   & mask);
+                  final int val1 = x1 - (input[idx+1] & mask);
+                  final int val2 = x2 - (input[idx+2] & mask);
+                  final int val3 = x3 - (input[idx+3] & mask);
                   final Prediction p = predictions[Mode.VERTICAL.value];
                   final int[] output = p.residue;
                   output[k]   = val0;
@@ -442,7 +448,7 @@ public class IntraPredictor
                if (x > 0)
                {
                   // AVERAGE_UL: (xi,yi)-avg((xi,yi-1),(xi-1,yi))
-                  final int xa = input[i-1] & 0xFF;
+                  final int xa = input[i-1] & mask;
                   int avg;
                   avg = (xa + px0) >> 1;
                   final int val0 = x0 - avg;
@@ -465,7 +471,7 @@ public class IntraPredictor
             if (x > 0)
             {
                // HORIZONTAL_L: xi-bi
-               final int b = input[i-1] & 0xFF;
+               final int b = input[i-1] & mask;
                final int val0 = x0 - b;
                final int val1 = x1 - b;
                final int val2 = x2 - b;
@@ -482,7 +488,7 @@ public class IntraPredictor
             if (x < xMax)
             {
                // HORIZONTAL_R: xi-ci
-               final int c = input[i+blockDim] & 0xFF;
+               final int c = input[i+blockDim] & mask;
                final int val0 = x0 - c;
                final int val1 = x1 - c;
                final int val2 = x2 - c;
@@ -501,21 +507,21 @@ public class IntraPredictor
          
          if ((y > 0) && (x < xMax))
          {
-            int xc = input[endi] & 0xFF;    
+            int xc = input[endi] & mask;    
             k -= blockDim;
             
             // Scan from right to left
             for (int i=endi-4; i>=j; i-=4)
             {
                // AVERAGE_UR: (xi,yi)-avg((xi,yi-1),(xi+1,yi))
-               final int px0 = input[i-st]   & 0xFF;
-               final int px1 = input[i-st+1] & 0xFF;
-               final int px2 = input[i-st+2] & 0xFF;
-               final int px3 = input[i-st+3] & 0xFF;
-               final int x0 = input[i]   & 0xFF;
-               final int x1 = input[i+1] & 0xFF;
-               final int x2 = input[i+2] & 0xFF;
-               final int x3 = input[i+3] & 0xFF;
+               final int px0 = input[i-st]   & mask;
+               final int px1 = input[i-st+1] & mask;
+               final int px2 = input[i-st+2] & mask;
+               final int px3 = input[i-st+3] & mask;
+               final int x0 = input[i]   & mask;
+               final int x1 = input[i+1] & mask;
+               final int x2 = input[i+2] & mask;
+               final int x3 = input[i+3] & mask;
                int avg;
                avg = (x1 + px0) >> 1;
                final int val0 = x0 - avg;
@@ -573,16 +579,18 @@ public class IntraPredictor
       }
       else
       {
+         final int mask = (this.isRGB == true) ? 0xFF : -1;
+
          for (int j=oIdx; j<endj; j+=st)
          {
             final int endi = j + blockDim;
 
             for (int i=j; i<endi; i+=4)
             {
-                output[i]   = q * residue[k]   + (input[iIdx]   & 0xFF);
-                output[i+1] = q * residue[k+1] + (input[iIdx+1] & 0xFF);
-                output[i+2] = q * residue[k+2] + (input[iIdx+2] & 0xFF);
-                output[i+3] = q * residue[k+3] + (input[iIdx+3] & 0xFF);
+                output[i]   = q * residue[k]   + (input[iIdx]   & mask);
+                output[i+1] = q * residue[k+1] + (input[iIdx+1] & mask);
+                output[i+2] = q * residue[k+2] + (input[iIdx+2] & mask);
+                output[i+3] = q * residue[k+3] + (input[iIdx+3] & mask);
                 iIdx += 4;
                 k += 4;
             }
@@ -607,6 +615,7 @@ public class IntraPredictor
       final int endj = start + (st * blockDim);
       final int[] residue = prediction.residue;
       final int[] input = prediction.frame;
+      final int mask = (this.isRGB == true) ? 0xFF : -1;
       int k = 0;
 
       if (mode == Mode.REFERENCE)
@@ -626,10 +635,10 @@ public class IntraPredictor
                final int r3 = q * residue[k+3];
                // VERTICAL: xi+ai
                final int idx = start - st + i - j;
-               output[i]   = r0 + (input[idx]   & 0xFF);
-               output[i+1] = r1 + (input[idx+1] & 0xFF);
-               output[i+2] = r2 + (input[idx+2] & 0xFF);
-               output[i+3] = r3 + (input[idx+3] & 0xFF);
+               output[i]   = r0 + (input[idx]   & mask);
+               output[i+1] = r1 + (input[idx+1] & mask);
+               output[i+2] = r2 + (input[idx+2] & mask);
+               output[i+3] = r3 + (input[idx+3] & mask);
                k += 4;
             }
          }
@@ -639,15 +648,15 @@ public class IntraPredictor
          for (int j=start; j<endj; j+=st)
          {
             final int endi = j + blockDim;
-            int xa = input[j-1] & 0xFF;
+            int xa = input[j-1] & mask;
 
             for (int i=j; i<endi; i+=4)
             {
                final int above = i - st;
-               final int px0 = input[above]   & 0xFF;
-               final int px1 = input[above+1] & 0xFF;
-               final int px2 = input[above+2] & 0xFF;
-               final int px3 = input[above+3] & 0xFF;
+               final int px0 = input[above]   & mask;
+               final int px1 = input[above+1] & mask;
+               final int px2 = input[above+2] & mask;
+               final int px3 = input[above+3] & mask;
                final int r0 = q * residue[k];
                final int r1 = q * residue[k+1];
                final int r2 = q * residue[k+2];
@@ -671,15 +680,15 @@ public class IntraPredictor
          for (int j=start; j<endj; j+=st)
          {
             final int endi = j + blockDim;
-            int xc = input[endi] & 0xFF;
+            int xc = input[endi] & mask;
 
             for (int i=endi-4; i>=j ; i-=4)
             {
                final int above = i - st;
-               final int px0 = input[above]   & 0xFF;
-               final int px1 = input[above+1] & 0xFF;
-               final int px2 = input[above+2] & 0xFF;
-               final int px3 = input[above+3] & 0xFF;
+               final int px0 = input[above]   & mask;
+               final int px1 = input[above+1] & mask;
+               final int px2 = input[above+2] & mask;
+               final int px3 = input[above+3] & mask;
                final int r0 = q * residue[k];
                final int r1 = q * residue[k+1];
                final int r2 = q * residue[k+2];
@@ -710,7 +719,7 @@ public class IntraPredictor
             {
                // HORIZONTAL_L: xi+bi
                // HORIZONTAL_R: xi+ci
-               final int val = input[i+offs] & 0xFF;
+               final int val = input[i+offs] & mask;
                output[i]   = (q * residue[k])   + val;
                output[i+1] = (q * residue[k+1]) + val;
                output[i+2] = (q * residue[k+2]) + val;
@@ -733,7 +742,7 @@ public class IntraPredictor
             if (y > 0)
             {
                for (int i=0; i<blockDim; i++)
-                  dc_l += (input[above+i] & 0xFF);
+                  dc_l += (input[above+i] & mask);
                
                sum += blockDim;
             }
@@ -741,7 +750,7 @@ public class IntraPredictor
             if (x > 0)
             {
               for (int j=start; j<endj; j+=st)
-                 dc_l += (input[j-1] & 0xFF);
+                 dc_l += (input[j-1] & mask);
                
                sum += blockDim;
             }
@@ -757,7 +766,7 @@ public class IntraPredictor
             if (y > 0)
             {
               for (int i=0; i<blockDim; i++)
-                 dc_r += (input[above+i] & 0xFF);
+                 dc_r += (input[above+i] & mask);
               
               sum += blockDim;
             }
@@ -765,7 +774,7 @@ public class IntraPredictor
             if (x < this.width - blockDim)
             {
               for (int j=start; j<endj; j+=st)
-                 dc_r += (input[j+blockDim] & 0xFF);
+                 dc_r += (input[j+blockDim] & mask);
               
               sum += blockDim;
             }            
@@ -853,16 +862,17 @@ public class IntraPredictor
          final int[] data = ctx.data;
          final int start = (y+ctx.line)*st + x;
          final int end = start + blockDim;
+         final int mask = (this.isRGB == true) ? 0xFF : -1;
          int offs2 = (ctx.y+ctx.line)*st + ctx.x;
          int nrj = ctx.energy;
 
          // Compute line difference
          for (int i=start; i<end; i+=4)
          {
-             final int val0 = (input[i]   & 0xFF) - (data[offs2]   & 0xFF);
-             final int val1 = (input[i+1] & 0xFF) - (data[offs2+1] & 0xFF);
-             final int val2 = (input[i+2] & 0xFF) - (data[offs2+2] & 0xFF);
-             final int val3 = (input[i+3] & 0xFF) - (data[offs2+3] & 0xFF);
+             final int val0 = (input[i]   & mask) - (data[offs2]   & mask);
+             final int val1 = (input[i+1] & mask) - (data[offs2+1] & mask);
+             final int val2 = (input[i+2] & mask) - (data[offs2+2] & mask);
+             final int val3 = (input[i+3] & mask) - (data[offs2+3] & mask);
              nrj += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
              offs2 += 4;
          }
