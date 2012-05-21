@@ -20,7 +20,7 @@ import kanzi.OutputBitStream;
 import kanzi.entropy.ExpGolombEncoder;
 
 
-// Encoder/decoder for residue block 
+// Encoder for residue block used before final entropy coding step
 public final class ResidueBlockEncoder implements EntropyEncoder
 {
     private final int scoreThreshold;
@@ -31,6 +31,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
 
     private static final int MAX_NON_ZEROS = 30;// enough ?
     private static final int LOG_THRESHOLD_NZ = 4;
+    private static final int RLE_THRESHOLD = 9;
     private static final int BLOCK_DIM = 8;
     private static final int BLOCK_SIZE = BLOCK_DIM * BLOCK_DIM;
     private static final byte SCAN_H  = 0;
@@ -90,18 +91,26 @@ public final class ResidueBlockEncoder implements EntropyEncoder
     private static final int[] SCAN_TABLE_HV = SCAN_TABLES[SCAN_HV];
 
 
+
     public ResidueBlockEncoder(int skipThreshold, OutputBitStream stream)
     {
         this(skipThreshold, stream, MAX_NON_ZEROS);
     }
 
 
-    protected ResidueBlockEncoder(int skipThreshold, OutputBitStream stream, int maxNonZeros)
+    public ResidueBlockEncoder(int skipThreshold, OutputBitStream stream, int maxNonZeros)
+    {
+        this(skipThreshold, stream, maxNonZeros, RLE_THRESHOLD);
+    }
+
+
+    protected ResidueBlockEncoder(int skipThreshold, OutputBitStream stream, 
+            int maxNonZeros, int rleThreshold)
     {
         this.scoreThreshold = skipThreshold;
         this.stream = stream;
         this.gEncoder = new ExpGolombEncoder(this.stream, false);
-        this.rleThreshold = 5;
+        this.rleThreshold = rleThreshold;
         this.maxNonZeros = maxNonZeros;
     }
 
@@ -235,37 +244,50 @@ public final class ResidueBlockEncoder implements EntropyEncoder
             return -1;
        }
 
-       // Encode binary mode (residue contains only -1, 0, 1) or not
-       this.stream.writeBit((max <= 1) ? 1 : 0);
+       // Select mode
+       // mode = 0 => abs(x) = 0 or 1
+       // mode = 1 => abs(x) = 0 or 1 or 2
+       // mode = 2 => abs(x) = 0 or 1 or 2 or 3 or 4
+       // mode = 3 => abs(x) is unbounded
+       final int mode = (max <= 1) ? 0 : ((max <= 2) ? 1 : ((max <= 4) ? 2 : 3));
+
+       // Encode mode
+       if (this.stream.writeBits(mode, 2) != 2)
+          return -1;
 
        // Encode scan order
        if (this.stream.writeBits(scan_order, 2) != 2)
           return -1;
 
-       int idx = 0;
+       // Encode DC coefficient
+       int val = data[blkptr];
 
-       // Encode DC coefficient (if not binary mode)
-       if (max > 1)
+       if (val == 0)
        {
-          idx = 1;
-
-          if (this.gEncoder.encodeByte(data[blkptr]) == false)
-             return -1;
-
-          if (data[blkptr] != 0)
-             nonZeros--;
+          this.gEncoder.encodeByte((byte) val);
+       }
+       else
+       {
+          final int sign = val >>> 31;
+          val = (val + (val >> 31)) ^ (val >> 31); //abs
+          this.gEncoder.encodeByte((byte) val);
+          this.stream.writeBit(sign);
+          nonZeros--;
        }
        
        boolean res = true;
        int run = 0;
+       int idx = 1;
        final int[] scanTable = SCAN_TABLES[scan_order];
 
        // In binary mode: encode 00..0x as a run, then the sign of x (x=1 or x=-1)
        // Otherwise, encode 00..0x as a run of 0s, then encode abs(x)-1 with
        // exp-golomb codes, then the sign of x
+       // The run is encoded as length+1 zeros if the run length is less than a
+       // threshold else length+1 zeros followed by remainder (exp golomb encoded).
        while ((nonZeros > 0) && (res == true))
        {
-          int val = data[blkptr+scanTable[idx]];
+          val = data[blkptr+scanTable[idx]];
           idx++;
 
           if (val == 0)
@@ -275,34 +297,37 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           }
 
           final int sign = val >>> 31;
+          final int remaining = run - this.rleThreshold;          
 
-          if (max > 1) // regular mode
+          // Write run length
+          if (remaining >= 0)
           {
-             final int remaining = run - this.rleThreshold;
-
-             // Write run length
+             res &= (this.stream.writeBits(0, this.rleThreshold) == this.rleThreshold);
+             res &= this.gEncoder.encodeByte((byte) remaining);
+          }
+          else
+          {
              while (run-- > 0)
                 res &= this.stream.writeBit(0);
 
-             if (remaining >= 0)
-                res &= this.gEncoder.encodeByte((byte) remaining);
-             
+             // Signal end of run
+             this.stream.writeBit(1);
+          }
+
+          if (mode != 0) // non binary: must encode value
+          {
              val = (val + (val >> 31)) ^ (val >> 31); //abs
              val--;
 
-             // Write abs(x-1) (encoded as single bit '1' if x=1)
-             res &= this.gEncoder.encodeByte((byte) val);
-          }
-          else // binary mode
-          {
-             while (run-- > 0)
-                res &= this.stream.writeBit(0);
-
-             res &= this.stream.writeBit(1);
+             if (mode == 3) // / Exp golomb : encoded as single bit '1' if x=1 (=> val=0)
+                res &= this.gEncoder.encodeByte((byte) val);
+             else // encoded as n bits
+                res &= (this.stream.writeBits(val, mode) == mode);
           }
 
           // Write sign
           res &= this.stream.writeBit(sign);
+          run = 0;
           nonZeros--;
        }
 

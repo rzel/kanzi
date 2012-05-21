@@ -30,6 +30,7 @@ public final class ResidueBlockDecoder implements EntropyDecoder
     private static final int LOG_THRESHOLD_NZ = 4;
     private static final int BLOCK_DIM = 8;
     private static final int BLOCK_SIZE = BLOCK_DIM * BLOCK_DIM;
+    private static final int RLE_THRESHOLD = 9;
 
     // 8x8 block scan tables
     public static final int[][] SCAN_TABLES =
@@ -79,9 +80,15 @@ public final class ResidueBlockDecoder implements EntropyDecoder
 
     public ResidueBlockDecoder(InputBitStream stream)
     {
+        this(stream, RLE_THRESHOLD);
+    }
+
+
+    public ResidueBlockDecoder(InputBitStream stream, int rleThreshold)
+    {
         this.stream = stream;
         this.gDecoder = new ExpGolombDecoder(this.stream, false);
-        this.rleThreshold = 5;
+        this.rleThreshold = rleThreshold;
     }
 
 
@@ -123,65 +130,57 @@ public final class ResidueBlockDecoder implements EntropyDecoder
           if (nonZeros == (1 << LOG_THRESHOLD_NZ) - 1)
               nonZeros += (int) this.stream.readBits(LOG_THRESHOLD_NZ);
 
-          // Decode binary mode (residue contains only -1, 0, 1) or not
-          final boolean binaryMode = (this.stream.readBit() == 1) ? true : false;
+          // Decode mode
+          // mode = 1 => abs(x) = 0 or 1
+          // mode = 2 => abs(x) = 0 or 1 or 2
+          // mode = 2 => abs(x) = 0 or 1 or 2 or 3 or 4
+          // mode = 3 => abs(x) is unbounded
+          final int mode = (int) this.stream.readBits(2);
 
           // Decode scan order
           final int scan_order = (int) this.stream.readBits(2);
 
-          int idx = 0;
+          // Decode DC coefficient
+          int val = this.gDecoder.decodeByte();
+
+          if (val != 0)
+          {
+             if (this.stream.readBit() == 1)
+                val = -val;
+             
+             nonZeros--;
+          }
+
+          data[blkptr] = (byte) val;
+          int idx = 1;
+          int run = 0;
           final int[] scanTable = SCAN_TABLES[scan_order];
 
-          // IfF non binary mode, decode DC coefficient
-          if (binaryMode == false)
+          while (nonZeros > 0)
           {
-             idx = 1;
-             data[blkptr] = this.gDecoder.decodeByte();
+             while ((run < this.rleThreshold) && (this.stream.readBit() == 0))
+                run++;
 
-             if (data[blkptr] != 0)
-                nonZeros--;
-          }
+             // Add remainder to get full value of run length
+             if (run == this.rleThreshold)
+                run += this.gDecoder.decodeByte();
 
-          int run = 0;
+             while (run-- > 0)
+                data[blkptr+scanTable[idx++]] = 0;
 
-          if (binaryMode == true)
-          {
-             while (nonZeros > 0)
-             {
-                while (this.stream.readBit() == 0)
-                   run++;
+             val = 1;
 
-                while (run-- > 0)
-                   data[blkptr+scanTable[idx++]] = 0;
+             if (mode == 3) //decoded as exp-golomb
+                val += this.gDecoder.decodeByte();
+             else if (mode != 0) // decoded as n bits
+                val += this.stream.readBits(mode);
 
-                final int sign = this.stream.readBit();
-                data[blkptr+scanTable[idx++]] = (byte) (1 - (sign << 1));
-                nonZeros--;
-             }
-          }
-          else // regular mode (abs(max) > 1)
-          {
-             while (nonZeros > 0)
-             {
-                while ((this.stream.readBit() == 0) && (run < this.rleThreshold))
-                   run++;
+             if (this.stream.readBit() == 1)
+                val = -val;
 
-                // Add remainder to get full value of run length
-                if (run == this.rleThreshold)
-                   run += this.gDecoder.decodeByte();
-
-                while (run-- > 0)
-                   data[blkptr+scanTable[idx++]] = 0;
-
-                int val = this.gDecoder.decodeByte();
-                val++;
-
-                if (this.stream.readBit() == 1)
-                   val = -val;
-
-                data[blkptr+scanTable[idx++]] = (byte) val;
-                nonZeros--;
-             }
+             data[blkptr+scanTable[idx++]] = (byte) val;
+             run = 0;
+             nonZeros--;
           }
 
           // Add remaining 0s (not encoded)
