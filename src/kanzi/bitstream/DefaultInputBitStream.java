@@ -33,6 +33,12 @@ public final class DefaultInputBitStream implements InputBitStream
 
    public DefaultInputBitStream(InputStream is, int bufferSize)
    {
+      if (is == null)
+         throw new NullPointerException("Invalid null input stream parameter");
+   
+      if (bufferSize < 64)
+         throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 64)");
+
       this.is = is;
       this.buffer = new byte[bufferSize];
       this.bitIndex = 7;

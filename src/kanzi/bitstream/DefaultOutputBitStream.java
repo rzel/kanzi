@@ -33,12 +33,18 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
    public DefaultOutputBitStream(OutputStream os, int bufferSize)
    {
+      if (os == null)
+         throw new NullPointerException("Invalid null output stream parameter");
+   
+      if (bufferSize < 64)
+         throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 64)");
+
       this.os = os;
       this.buffer = new byte[bufferSize];
       this.bitIndex = 7;
    }
 
-
+   
    // Processes the least significant bit of the input integer
    @Override
    public synchronized boolean writeBit(int bit)
