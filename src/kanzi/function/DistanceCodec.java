@@ -69,7 +69,7 @@ import kanzi.IndexedByteArray;
 public class DistanceCodec implements ByteFunction
 {
     private static int DEFAULT_DISTANCE_THRESHOLD = 0x80;
-    
+
     private int size;
     private byte[] data;
     private final int[] buffer;
@@ -86,18 +86,18 @@ public class DistanceCodec implements ByteFunction
     {
        this(size, DEFAULT_DISTANCE_THRESHOLD);
     }
-    
-    
+
+
     public DistanceCodec(int size, int distanceThreshold)
     {
        if (distanceThreshold < 4)
            throw new IllegalArgumentException("The distance threshold cannot be less than 4");
-       
+
        if (distanceThreshold > 0x80)
            throw new IllegalArgumentException("The distance threshold cannot more than 128");
-       
+
        if ((distanceThreshold  & (distanceThreshold - 1)) != 0)
-           throw new IllegalArgumentException("The distance threshold must be a mulitple of 2");
+           throw new IllegalArgumentException("The distance threshold must be a multiple of 2");
 
        this.size = size;
        this.buffer = new int[256];
@@ -122,7 +122,7 @@ public class DistanceCodec implements ByteFunction
     // else
     // alphabet size (byte) + m (<32) alphabet symbols +
     // n (<256) * encoded distance for each symbol
-    // The distance is encoded as 1 byte if less than 'distance threshold' or 
+    // The distance is encoded as 1 byte if less than 'distance threshold' or
     // else several bytes (with a mask to indicate continuation)
     // Return success or failure
     private boolean encodeHeader(IndexedByteArray src, IndexedByteArray dst, byte[] significanceFlags)
@@ -194,7 +194,7 @@ public class DistanceCodec implements ByteFunction
              else // small alphabet, spell each symbol
              {
                 int previous = 0;
-                
+
                 for (int i=0; i<256; i++)
                 {
                    if (positions[i] != eof)
@@ -206,10 +206,10 @@ public class DistanceCodec implements ByteFunction
                 }
              }
           }
-         
+
           final int distThreshold = 1 << this.logDistThreshold;
           final int distMask = distThreshold - 1;
-          
+
           // For each symbol in the alphabet, encode distance
           for (int i=0; i<256; i++)
           {
@@ -372,7 +372,7 @@ public class DistanceCodec implements ByteFunction
              else // small alphabet, list all present symbols
              {
                 int previous = 0;
-                
+
                 for (int i=0; i<alphabetSize; i++)
                 {
                    final int delta = srcArray[src.index++] & 0xFF;
@@ -384,7 +384,7 @@ public class DistanceCodec implements ByteFunction
 
           final int distThreshold = 1 << this.logDistThreshold;
           final int distMask = distThreshold - 1;
-          
+
           // Process alphabet (find first occurence of each symbol)
           for (int i=0; i<256; i++)
           {
