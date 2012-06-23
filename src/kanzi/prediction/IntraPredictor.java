@@ -219,7 +219,7 @@ public class IntraPredictor
       if ((iy > 0) && (minNrj >= blockDim * blockDim * this.sqrErrThreshold))
       {
          // Second step: spatial search of best matching nearby block
-         Prediction newPrediction= new Prediction(input, 0, 0, blockDim);
+         Prediction newPrediction = new Prediction(input, 0, 0, blockDim);
 
          // Do the search and update prediction energy, coordinates and result block
          this.computePartialDiff(input, ix, iy, blockDim, minNrj, newPrediction);
@@ -810,7 +810,8 @@ public class IntraPredictor
            int blockDim, int maxEnergy, Prediction prediction)
    {
       final int st = this.stride;
-      final int step = (blockDim >> this.spatialShift) * (blockDim >> 3);
+      final int adjust = (blockDim >= 8) ? blockDim >> 3 : 1;
+      final int step = (blockDim >> this.spatialShift) * adjust;
 
       // Populate set of block candidates
       // Add blocks to compare against (blocks must already have been encoded/decoded
@@ -839,7 +840,7 @@ public class IntraPredictor
             if ((j + blockDim > y) && (i + blockDim > x) && (i < x + blockDim))
                continue;
 
-            this.set.add(BlockContext.getContext(prediction.frame, i, j, j*st+i));
+            this.set.add(BlockContext.getContext(prediction.frame, i, j));
          }
       }
 
@@ -898,7 +899,6 @@ public class IntraPredictor
 
    private static class BlockContext implements Comparable<BlockContext>
    {
-      int startOffs; // offset of block's top left corner in frame
       int line;      // line to be processed
       int energy;    // energy so far
       int[] data;    // frame data
@@ -919,7 +919,7 @@ public class IntraPredictor
       }
 
 
-      public static BlockContext getContext(int[] data, int x, int y, int startOffs)
+      public static BlockContext getContext(int[] data, int x, int y)
       {
          BlockContext res = CACHE[INDEX];
 
@@ -929,7 +929,6 @@ public class IntraPredictor
          res.energy = 0;
          res.data = data;
          res.line = 0;
-         res.startOffs = startOffs;
          res.x = x;
          res.y = y;
          return res;
@@ -945,6 +944,31 @@ public class IntraPredictor
             return res;
 
          return this.hashCode() - c.hashCode(); // random but not 0 unless same objects
+      }
+
+
+      @Override
+      public boolean equals(Object o)
+      {
+         try
+         {
+            if (o == this)
+               return true;
+
+            if (o == null)
+               return false;
+
+            BlockContext c = (BlockContext) o;
+
+            if (this.energy != c.energy)
+               return false;
+
+            return (this.hashCode() == c.hashCode()) ? true : false;
+         }
+         catch (ClassCastException e)
+         {
+            return false;
+         }
       }
    }
 
