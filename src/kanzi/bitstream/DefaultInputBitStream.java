@@ -45,7 +45,25 @@ public final class DefaultInputBitStream implements InputBitStream
       this.maxPosition = -1;
    }
 
+   
+  public DefaultInputBitStream(InputStream is, byte[] buffer)
+   {
+      if (is == null)
+         throw new NullPointerException("Invalid null input stream parameter");
+      
+      if (buffer == null)
+         throw new NullPointerException("Invalid null buffer parameter");
+   
+      if (buffer.length < 64)
+         throw new IllegalArgumentException("Invalid buffer size (must be at least 64)");
 
+      this.is = is;
+      this.buffer = buffer;
+      this.bitIndex = 7;
+      this.maxPosition = -1;
+   }
+
+  
    // Return 1 or 0
    @Override
    public synchronized int readBit() throws BitStreamException
