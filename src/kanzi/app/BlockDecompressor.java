@@ -118,7 +118,7 @@ public class BlockDecompressor implements Runnable, Callable<Long>
          final int version = (int) ibs.readBits(8);
 
          // Sanity check
-         if ((version < 0) || (version < BITSTREAM_FORMAT_VERSION))
+         if (version < BITSTREAM_FORMAT_VERSION)
          {
             System.err.println("Cannot read this version of the stream: "+version);
             return -1L;
