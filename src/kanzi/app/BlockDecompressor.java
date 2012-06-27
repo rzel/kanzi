@@ -41,6 +41,7 @@ public class BlockDecompressor implements Runnable, Callable<Long>
    private static final int BITSTREAM_FORMAT_VERSION = 0;
 
    private final boolean debug;
+   private final boolean silent;
    private final String fileName;
    private final BlockCodec blockCodec;
 
@@ -50,6 +51,7 @@ public class BlockDecompressor implements Runnable, Callable<Long>
       Map<String, Object> map = new HashMap<String, Object>();
       processCommandLine(args, map);
       this.debug = (Boolean) map.get("debug");
+      this.silent = (Boolean) map.get("silent");
       this.fileName = (String) map.get("fileName");
       this.blockCodec = new BlockCodec();
    }
@@ -74,24 +76,21 @@ public class BlockDecompressor implements Runnable, Callable<Long>
       String outputName = this.fileName;
 
       if (this.fileName.endsWith(".knz") == false)
-         System.out.println("Warning: the input file name does not end with the .KNZ extension");
+         printOut("Warning: the input file name does not end with the .KNZ extension", true);
       else
          outputName = this.fileName.substring(0, this.fileName.length()-4);
 
       outputName += ".tmp";
 
-      if (this.debug == true)
-      {
-         System.out.println("Input file name set to '" + this.fileName + "'");
-         System.out.println("Output file name set to '" + outputName + "'");
-         System.out.println("Debug set to "+this.debug);
-      }
+      printOut("Input file name set to '" + this.fileName + "'", this.debug);
+      printOut("Output file name set to '" + outputName + "'", this.debug);
+      printOut("Debug set to "+this.debug, this.debug);
 
       long delta = 0L;
       int decoded;
       long sum = 0;
       int step = 0;
-      System.out.println("Decoding ...");
+      printOut("Decoding ...", !this.silent);
 
       OutputStream fos = null;
       EntropyDecoder entropyDecoder = null;
@@ -148,8 +147,8 @@ public class BlockDecompressor implements Runnable, Callable<Long>
             else if (entropyType == 'P')
                strEntropy = "PAQ";
 
-            System.out.println("Entropy codec: " + strEntropy);
-            System.out.println("Block size: " + blockSize);
+           printOut("Entropy codec: " + strEntropy, !this.silent);
+           printOut("Block size: " + blockSize, !this.silent);
          }
 
          // Decode next block
@@ -176,12 +175,8 @@ public class BlockDecompressor implements Runnable, Callable<Long>
                System.exit(1);
             }
 
-
-            if (this.debug == true)
-            {
-               // Display block size before and after entropy decoding + block transform
-               System.out.println("Block "+step+": "+((ibs.read()-read)>>3)+"=>"+decoded);
-            }
+            // Display block size before and after entropy decoding + block transform
+            printOut("Block "+step+": "+((ibs.read()-read)>>3)+"=>"+decoded, this.debug);
 
             read = ibs.read();
             fos.write(iba.array, 0, decoded);
@@ -192,11 +187,11 @@ public class BlockDecompressor implements Runnable, Callable<Long>
 
          delta /= 1000000; // convert to ms
 
-         System.out.println();
-         System.out.println("Decoding took "+delta+" ms");
-         System.out.println("Decoded:          "+sum);
-         System.out.println("Troughput (KB/s): "+(((sum * 1000L) >> 10) / delta));
-         System.out.println();
+        printOut("", !this.silent);
+        printOut("Decoding took "+delta+" ms", !this.silent);
+        printOut("Decoded:          "+sum, !this.silent);
+        printOut("Troughput (KB/s): "+(((sum * 1000L) >> 10) / delta), !this.silent);
+        printOut("", !this.silent);
          return ibs.read();
       }
       catch (Exception e)
@@ -235,6 +230,7 @@ public class BlockDecompressor implements Runnable, Callable<Long>
     private static void processCommandLine(String args[], Map<String, Object> map)
     {
         boolean debug = false;
+        boolean silent = false;
         String fileName = null;
         boolean fileProvided = false;
 
@@ -244,15 +240,19 @@ public class BlockDecompressor implements Runnable, Callable<Long>
 
            if (arg.equals("-help"))
            {
-               System.out.println("-help             : display this message");
-               System.out.println("-debug            : display the size of the completely decoded block");
-               System.out.println("-file=<filename>  : name of the input file to encode or decode");
-               System.exit(0);
+              printOut("-help             : display this message", true);
+              printOut("-debug            : display the size of the completely decoded block", true);
+              printOut("-silent           : silent mode: no output", true);
+              printOut("-file=<filename>  : name of the input file to encode or decode", true);
+              System.exit(0);
            }
            else if (arg.equals("-debug"))
            {
-               debug = true;
-               System.out.println("Debug set to true");
+              debug = true;
+           }
+           else if (arg.equals("-silent"))
+           {
+              silent = true;
            }
            else if (arg.startsWith("-file="))
            {
@@ -261,7 +261,7 @@ public class BlockDecompressor implements Runnable, Callable<Long>
            }
            else
            {
-               System.out.println("Warning: ignoring unknown option ["+ arg + "]");
+              printOut("Warning: ignoring unknown option ["+ arg + "]", true);
            }
         }
 
@@ -271,8 +271,21 @@ public class BlockDecompressor implements Runnable, Callable<Long>
            System.exit(1);
         }
 
+        if ((silent == true) && (debug == true))
+        {
+           printOut("Warning: both 'silent' and 'debug' options were selected, ignoring 'debug'", true);
+           debug = false;
+        }
+
         map.put("debug", debug);
+        map.put("silent", silent);
         map.put("fileName", fileName);
         map.put("fileProvided", fileProvided);
     }
-}
+
+
+    private static void printOut(String msg, boolean print)
+    {
+       if ((print == true) && (msg != null))
+          System.out.println(msg);
+    }}

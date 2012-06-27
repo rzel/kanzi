@@ -41,6 +41,8 @@ public class TestBlockCoder
              set.add(args[i]+".knz");
           else if (args[i].equals("-debug"))
              set.add(args[i]);
+          else if (args[i].equals("-silent"))
+             set.add(args[i]);
        }
 
        args = (String[]) set.toArray(new String[set.size()]);

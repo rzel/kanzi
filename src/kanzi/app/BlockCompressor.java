@@ -38,6 +38,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
    private static final int BITSTREAM_FORMAT_VERSION = 0;
 
    private boolean debug;
+   private boolean silent;
    private boolean overwrite;
    private char entropyType;
    private String fileName;
@@ -50,6 +51,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
       Map<String, Object> map = new HashMap<String, Object>();
       processCommandLine(args, map);
       this.debug = (Boolean) map.get("debug");
+      this.silent = (Boolean) map.get("silent");
       this.overwrite = (Boolean) map.get("overwrite");
       this.fileName = (String) map.get("fileName");
       this.blockSize = (Integer) map.get("blockSize");
@@ -84,35 +86,32 @@ public class BlockCompressor implements Runnable, Callable<Long>
          {
             if (output.isDirectory())
             {
-               System.out.println("The output file is a directory");
+               System.err.println("The output file is a directory");
                return -1L;
             }
 
             if (this.overwrite == false)
             {
-               System.out.println("The output file exists and the 'overwrite' command "
+               System.err.println("The output file exists and the 'overwrite' command "
                        + "line option has not been provided");
                return -1L;
             }
          }
 
-         if (this.debug == true)
-         {
-            System.out.println("Input file name set to '" + this.fileName + "'");
-            System.out.println("Output file name set to '" + outputName + "'");
-            System.out.println("Block size set to "+this.blockSize);
-            System.out.println("Debug set to "+this.debug);
-            System.out.println("Ouput file overwrite set to "+this.overwrite);
+         printOut("Input file name set to '" + this.fileName + "'", this.debug);
+         printOut("Output file name set to '" + outputName + "'", this.debug);
+         printOut("Block size set to "+this.blockSize, this.debug);
+         printOut("Debug set to "+this.debug, this.debug);
+         printOut("Ouput file overwrite set to "+this.overwrite, this.debug);
 
-            if (this.entropyType == 'H')
-              System.out.println("Using Huffman entropy codec");
-            else if(this.entropyType == 'R')
-              System.out.println("Using Range entropy codec");
-            else if(this.entropyType == 'P')
-              System.out.println("Using PAQ entropy codec");
-            else
-              System.out.println("Using no entropy codec");
-         }
+         if (this.entropyType == 'H')
+           printOut("Using Huffman entropy codec", this.debug);
+         else if(this.entropyType == 'R')
+           printOut("Using Range entropy codec", this.debug);
+         else if(this.entropyType == 'P')
+           printOut("Using PAQ entropy codec", this.debug);
+         else
+           printOut("Using no entropy codec", this.debug);
 
          FileOutputStream fos = new FileOutputStream(output);
          OutputBitStream obs = new DefaultOutputBitStream(fos, 32768);
@@ -125,7 +124,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
          int len;
          int read = 0;
          int step = 0;
-         System.out.println("Encoding ...");
+         printOut("Encoding ...", !this.silent);
 
          // Write header
          obs.writeBits(BITSTREAM_TYPE, 24);
@@ -165,13 +164,10 @@ public class BlockCompressor implements Runnable, Callable<Long>
                System.exit(1);
             }
 
-            if (this.debug == true)
-            {
-               // Display the block size before and after block transform + entropy coding
-               System.out.println("Block "+step+": "+len+"=>"+
-                      ((obs.written()-written)>>3)+" ("+
-                      ((obs.written()-written)*100/(len<<3))+"%)");
-            }
+            // Display the block size before and after block transform + entropy coding
+            printOut("Block "+step+": "+len+"=>"+
+                   ((obs.written()-written)>>3)+" ("+
+                   ((obs.written()-written)*100/(len<<3))+"%)", this.debug);
 
             written = obs.written();
             entropyCoder.dispose();
@@ -184,13 +180,13 @@ public class BlockCompressor implements Runnable, Callable<Long>
           obs.close();
 
           delta /= 1000000; // convert to ms
-          System.out.println();
-          System.out.println("File size:        "+read);
-          System.out.println("Encoding took "+delta+" ms");
-          System.out.println("Ratio:            "+(obs.written() >> 3) / (float) read);
-          System.out.println("Encoded:          "+(obs.written() >> 3));
-          System.out.println("Troughput (KB/s): "+(((read * 1000L) >> 10) / delta));
-          System.out.println();
+          printOut("", !this.silent);
+          printOut("File size:        "+read, !this.silent);
+          printOut("Encoding took "+delta+" ms", !this.silent);
+          printOut("Ratio:            "+(obs.written() >> 3) / (float) read, !this.silent);
+          printOut("Encoded:          "+(obs.written() >> 3), !this.silent);
+          printOut("Troughput (KB/s): "+(((read * 1000L) >> 10) / delta), !this.silent);
+          printOut("", !this.silent);
           return obs.written();
        }
        catch (Exception e)
@@ -207,6 +203,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
         int blockSize = 100000;
         char entropyType = 0;
         boolean debug = false;
+        boolean silent = false;
         boolean overwrite = false;
         String fileName = null;
 
@@ -216,17 +213,22 @@ public class BlockCompressor implements Runnable, Callable<Long>
 
            if (arg.equals("-help"))
            {
-               System.out.println("-help             : display this message");
-               System.out.println("-debug            : display the size of the encoded block pre-entropy coding");
-               System.out.println("-overwrite        : overwrite the output file if it already exists");
-               System.out.println("-file=<filename>  : name of the input file to encode or decode");
-               System.out.println("-block=<size>     : size of the block (max 16 MB / default 100 KB)");
-               System.out.println("-entropy=         : Entropy codec to use [None|Huffman|Range|PAQ]");
+               printOut("-help             : display this message", true);
+               printOut("-debug            : display the size of the encoded block pre-entropy coding", true);
+               printOut("-silent           : silent mode: no output (except warnings and errors)", true);
+               printOut("-overwrite        : overwrite the output file if it already exists", true);
+               printOut("-file=<filename>  : name of the input file to encode or decode", true);
+               printOut("-block=<size>     : size of the block (max 16 MB / default 100 KB)", true);
+               printOut("-entropy=         : Entropy codec to use [None|Huffman|Range|PAQ]", true);
                System.exit(0);
            }
            else if (arg.equals("-debug"))
            {
                debug = true;
+           }
+           else if (arg.equals("-silent"))
+           {
+               silent = true;
            }
            else if (arg.equals("-overwrite"))
            {
@@ -280,7 +282,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
            }
            else
            {
-               System.out.println("Warning: ignoring unknown option ["+ arg + "]");
+              printOut("Warning: ignoring unknown option ["+ arg + "]", true);
            }
         }
 
@@ -290,10 +292,24 @@ public class BlockCompressor implements Runnable, Callable<Long>
            System.exit(1);
         }
 
+        if ((silent == true) && (debug == true))
+        {
+           printOut("Warning: both 'silent' and 'debug' options were selected, ignoring 'debug'", true);
+           debug = false;
+        }
+
         map.put("blockSize", blockSize);
         map.put("entropyType", entropyType);
         map.put("debug", debug);
+        map.put("silent", silent);
         map.put("overwrite", overwrite);
         map.put("fileName", fileName);
+    }
+
+
+    private static void printOut(String msg, boolean print)
+    {
+       if ((print == true) && (msg != null))
+          System.out.println(msg);
     }
 }
