@@ -104,7 +104,6 @@ public class QuadTreeGenerator
       final TreeSet<Node> processed = new TreeSet<Node>();
       final TreeSet<Node> nodes = new TreeSet<Node>();
       final int st = this.stride;
-      final int offs = this.offset;
 
       for (Node node : list)
       {
@@ -118,26 +117,28 @@ public class QuadTreeGenerator
       {
          final int w = this.width;
          final int h = this.height;
+         final int y0 = this.offset / this.stride;
+         final int x0 = this.offset - y0*this.stride;
          
          // First level
-         Node root1 = Node.getNode(null, 0, 0, w>>1, h>>1);
-         Node root2 = Node.getNode(null, w>>1, 0, w>>1, h>>1);
-         Node root3 = Node.getNode(null, 0, h>>1, w>>1, h>>1);
-         Node root4 = Node.getNode(null, w>>1, h>>1, w>>1, h>>1);
+         Node root1 = Node.getNode(null, x0, y0, w>>1, h>>1);
+         Node root2 = Node.getNode(null, x0+(w>>1), y0, w>>1, h>>1);
+         Node root3 = Node.getNode(null, x0, y0+(h>>1), w>>1, h>>1);
+         Node root4 = Node.getNode(null, x0+(w>>1), y0+(h>>1), w>>1, h>>1);
 
          if (this.isRGB == true)
          {
-            root1.computeVarianceRGB(input, offs, st);
-            root2.computeVarianceRGB(input, offs, st);
-            root3.computeVarianceRGB(input, offs, st);
-            root4.computeVarianceRGB(input, offs, st);
+            root1.computeVarianceRGB(input, st);
+            root2.computeVarianceRGB(input, st);
+            root3.computeVarianceRGB(input, st);
+            root4.computeVarianceRGB(input, st);
          }
          else
          {
-            root1.computeVarianceY(input, offs, st);
-            root2.computeVarianceY(input, offs, st);
-            root3.computeVarianceY(input, offs, st);
-            root4.computeVarianceY(input, offs, st);
+            root1.computeVarianceY(input, st);
+            root2.computeVarianceY(input, st);
+            root3.computeVarianceY(input, st);
+            root4.computeVarianceY(input, st);
          }
 
          // Add to set of nodes sorted by decreasing variance
@@ -175,17 +176,17 @@ public class QuadTreeGenerator
 
          if (this.isRGB == true)
          {
-            node1.computeVarianceRGB(input, offs, st);
-            node2.computeVarianceRGB(input, offs, st);
-            node3.computeVarianceRGB(input, offs, st);
-            node4.computeVarianceRGB(input, offs, st);
+            node1.computeVarianceRGB(input, st);
+            node2.computeVarianceRGB(input, st);
+            node3.computeVarianceRGB(input, st);
+            node4.computeVarianceRGB(input, st);
          }
          else
          {
-            node1.computeVarianceY(input, offs, st);
-            node2.computeVarianceY(input, offs, st);
-            node3.computeVarianceY(input, offs, st);
-            node4.computeVarianceY(input, offs, st);
+            node1.computeVarianceY(input, st);
+            node2.computeVarianceY(input, st);
+            node3.computeVarianceY(input, st);
+            node4.computeVarianceY(input, st);
          }
 
          // Add to set of nodes sorted by decreasing variance
@@ -289,14 +290,14 @@ public class QuadTreeGenerator
       }
       
       
-      int computeVarianceRGB(int[] rgb, int offset, int stride)
+      int computeVarianceRGB(int[] rgb, int stride)
       {
          final int iend = this.x + this.w;
          final int jend = this.y + this.h;
          final int len = this.w * this.h;
          long sq_sumR = 0, sq_sumB = 0, sq_sumG = 0;
          long sumR = 0, sumG = 0, sumB = 0;
-         int offs = (this.y * stride) + offset;
+         int offs = this.y * stride;
 
          for (int j=this.y; j<jend; j++)
          {
@@ -325,14 +326,14 @@ public class QuadTreeGenerator
       }
             
 
-      int computeVarianceY(int[] yBuffer, int offset, int stride)
+      int computeVarianceY(int[] yBuffer, int stride)
       {
          final int iend = this.x + this.w;
          final int jend = this.y + this.h;
          final int len = this.w * this.h;
          long sq_sum = 0;
          long sum = 0;
-         int offs = (this.y * stride) + offset;
+         int offs = this.y * stride;
 
          for (int j=this.y; j<jend; j++)
          {
