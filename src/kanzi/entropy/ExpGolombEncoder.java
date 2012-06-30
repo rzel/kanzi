@@ -21,16 +21,16 @@ import kanzi.OutputBitStream;
 public final class ExpGolombEncoder extends AbstractEncoder
 {
     private final boolean signed;
-    private final OutputBitStream bitsream;
+    private final OutputBitStream bitstream;
     
     
-    public ExpGolombEncoder(OutputBitStream bitStream, boolean signed)
+    public ExpGolombEncoder(OutputBitStream bitstream, boolean signed)
     {
-       if (bitStream == null)
+       if (bitstream == null)
           throw new NullPointerException("Invalid null bitStream parameter");
 
        this.signed = signed;
-       this.bitsream = bitStream;
+       this.bitstream = bitstream;
     }
     
     
@@ -44,7 +44,7 @@ public final class ExpGolombEncoder extends AbstractEncoder
     public boolean encodeByte(byte val)
     {
        if (val == 0)
-          return this.bitsream.writeBit(1);
+          return this.bitstream.writeBit(1);
 
        //  Take the number 'val' add 1 to it
        //  Count the bits (log2), subtract one, and write that number of zeros
@@ -75,13 +75,13 @@ public final class ExpGolombEncoder extends AbstractEncoder
           emit = (emit << 1) | (val >>> 31);
        }
 
-       return (this.bitsream.writeBits(emit, n) == n);
+       return (this.bitstream.writeBits(emit, n) == n);
     }  
 
 
     @Override
     public OutputBitStream getBitStream()
     {
-       return this.bitsream;
+       return this.bitstream;
     }
 }
