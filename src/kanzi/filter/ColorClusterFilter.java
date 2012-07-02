@@ -407,7 +407,7 @@ public class ColorClusterFilter implements VideoEffect
       // Create quad tree decomposition of the image
       final LinkedList<QuadTreeGenerator.Node> nodes = new LinkedList<QuadTreeGenerator.Node>();
       final QuadTreeGenerator qtg = new QuadTreeGenerator(ww & -3, hh & -3, 8);
-      qtg.decomposeNodes(nodes, buffer, clusters.length);
+      qtg.decomposeNodes(nodes, buffer, 0, clusters.length);
       int n = clusters.length-1;
 
       while ((n >= 0) && (nodes.size() > 0))

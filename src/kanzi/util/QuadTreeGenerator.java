@@ -28,19 +28,19 @@ public class QuadTreeGenerator
     private final int minNodeDim;
     private final boolean isRGB;
 
-    
+
     public QuadTreeGenerator(int width, int height)
     {
        this(width, height, 0, width, 8);
     }
 
-   
+
     public QuadTreeGenerator(int width, int height, int minNodeDim)
     {
        this(width, height, 0, width, minNodeDim);
     }
 
-    
+
     public QuadTreeGenerator(int width, int height, int offset, int stride, int minNodeDim)
     {
        this(width, height, offset, stride, minNodeDim, true);
@@ -68,19 +68,19 @@ public class QuadTreeGenerator
       this.offset = offset;
       this.minNodeDim = minNodeDim;
       this.isRGB = isRGB;
-   }   
+   }
 
-    
+
    // Quad-tree decomposition of the input image based on variance of each node
    // The decomposition stops when enough nodes have been computed or the minimum
    // node dimension has been reached.
    // Input nodes are reused and new nodes are added to the input collection (if needed).
-   public Collection<Node> decomposeNodes(Collection<Node> list, int[] input, int nbNodes)
+   public Collection<Node> decomposeNodes(Collection<Node> list, int[] input, int offs, int nbNodes)
    {
       if (nbNodes < 4)
          throw new IllegalArgumentException("The target number of nodes must be at least 4");
 
-      return this.decompose(list, input, nbNodes, -1);
+      return this.decompose(list, input, offs, nbNodes, -1);
    }
 
 
@@ -89,17 +89,17 @@ public class QuadTreeGenerator
    // than or equak to the target variance or the minimum node dimension has been
    // reached.
    // Input nodes are reused and new nodes are added to the input collection (if needed).
-   public Collection<Node> decomposeVariance(Collection<Node> list, int[] input, int variance)
+   public Collection<Node> decomposeVariance(Collection<Node> list, int[] input, int offs, int variance)
    {
       if (variance < 0)
          throw new IllegalArgumentException("The target variance of nodes must be at least 0");
 
-      return this.decompose(list, input, -1, variance);
+      return this.decompose(list, input, offs, -1, variance);
    }
 
 
    protected Collection<Node> decompose(Collection<Node> list, int[] input,
-           int nbNodes, int variance)
+           int offs, int nbNodes, int variance)
    {
       final TreeSet<Node> processed = new TreeSet<Node>();
       final TreeSet<Node> nodes = new TreeSet<Node>();
@@ -117,14 +117,14 @@ public class QuadTreeGenerator
       {
          final int w = this.width;
          final int h = this.height;
-         final int y0 = this.offset / this.stride;
-         final int x0 = this.offset - y0*this.stride;
-         
+         final int y0 = (this.offset + offs) / this.stride;
+         final int x0 = (this.offset + offs) - y0*this.stride;
+
          // First level
-         Node root1 = Node.getNode(null, x0, y0, w>>1, h>>1);
-         Node root2 = Node.getNode(null, x0+(w>>1), y0, w>>1, h>>1);
-         Node root3 = Node.getNode(null, x0, y0+(h>>1), w>>1, h>>1);
-         Node root4 = Node.getNode(null, x0+(w>>1), y0+(h>>1), w>>1, h>>1);
+         Node root1 = getNode(null, x0, y0, w>>1, h>>1);
+         Node root2 = getNode(null, x0+(w>>1), y0, w>>1, h>>1);
+         Node root3 = getNode(null, x0, y0+(h>>1), w>>1, h>>1);
+         Node root4 = getNode(null, x0+(w>>1), y0+(h>>1), w>>1, h>>1);
 
          if (this.isRGB == true)
          {
@@ -147,7 +147,7 @@ public class QuadTreeGenerator
          nodes.add(root3);
          nodes.add(root4);
       }
-    
+
       while ((nodes.size() > 0) && ((nbNodes < 0) || (processed.size() + nodes.size() < nbNodes)))
       {
          Node parent = nodes.pollFirst();
@@ -157,7 +157,7 @@ public class QuadTreeGenerator
             processed.add(parent);
             continue;
          }
-         
+
          if ((variance >= 0) && (parent.variance <= variance))
          {
             processed.add(parent);
@@ -169,10 +169,10 @@ public class QuadTreeGenerator
          final int ph = parent.h + 1;
          final int cw = pw >> 1;
          final int ch = ph >> 1;
-         Node node1 = Node.getNode(parent, parent.x, parent.y, cw, ch);
-         Node node2 = Node.getNode(parent, parent.x+parent.w-cw, parent.y, cw, ch);
-         Node node3 = Node.getNode(parent, parent.x, parent.y+parent.h-ch, cw, ch);
-         Node node4 = Node.getNode(parent, parent.x+parent.w-cw, parent.y+parent.h-ch, cw, ch);
+         Node node1 = getNode(parent, parent.x, parent.y, cw, ch);
+         Node node2 = getNode(parent, parent.x+parent.w-cw, parent.y, cw, ch);
+         Node node3 = getNode(parent, parent.x, parent.y+parent.h-ch, cw, ch);
+         Node node4 = getNode(parent, parent.x+parent.w-cw, parent.y+parent.h-ch, cw, ch);
 
          if (this.isRGB == true)
          {
@@ -201,22 +201,21 @@ public class QuadTreeGenerator
       return list;
    }
 
+
+   public static Node getNode(Node parent, int x, int y, int w, int h)
+   {
+      return new Node(parent, x, y, w, h);
+   }
+
    
    public static class Node implements Comparable<Node>
    {
-      final Node parent;
+      public final Node parent;
       public final int x;
       public final int y;
       public final int w;
       public final int h;
       public int variance;
-
-
-      public static Node getNode(Node parent, int x, int y, int w, int h)
-      {
-         return new Node(parent, x, y, w, h);
-      }
-
 
       private Node(Node parent, int x, int y, int w, int h)
       {
@@ -227,21 +226,21 @@ public class QuadTreeGenerator
          this.h = h;
       }
 
-      
+
       @Override
       public int compareTo(Node o)
       {
          // compare by decreasing variance
-         final int val = o.variance - this.variance; 
-         
+         final int val = o.variance - this.variance;
+
          if (val != 0)
             return val;
-         
+
          // In case of equal variance values, order does not matter
          return o.hashCode() - this.hashCode();
       }
-      
-      
+
+
       @Override
       public boolean equals(Object o)
       {
@@ -249,21 +248,21 @@ public class QuadTreeGenerator
          {
            if (o == this)
               return true;
-           
-           Node n = (Node) o;           
-           
+
+           Node n = (Node) o;
+
            if (this.x != n.x)
               return false;
-           
+
            if (this.y != n.y)
               return false;
-           
+
            if (this.w != n.w)
               return false;
-           
+
            if (this.h != n.h)
               return false;
-           
+
            return true;
          }
          catch (NullPointerException e)
@@ -288,8 +287,8 @@ public class QuadTreeGenerator
          //hash = 79 * hash + this.variance;
          return hash;
       }
-      
-      
+
+
       int computeVarianceRGB(int[] rgb, int stride)
       {
          final int iend = this.x + this.w;
@@ -314,7 +313,7 @@ public class QuadTreeGenerator
                sq_sumG += (g*g);
                sq_sumB += (b*b);
             }
-            
+
             offs += stride;
          }
 
@@ -324,7 +323,7 @@ public class QuadTreeGenerator
          this.variance = (int) ((vR + vG + vB) / (3 * len));
          return this.variance;
       }
-            
+
 
       int computeVarianceY(int[] yBuffer, int stride)
       {
@@ -370,5 +369,5 @@ public class QuadTreeGenerator
          builder.append(']');
          return builder.toString();
       }
-   }   
+   }
 }

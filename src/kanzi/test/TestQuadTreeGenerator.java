@@ -65,7 +65,7 @@ public class TestQuadTreeGenerator
             int nbNodes = 8;
             int minNodeDim = 8;
             nodes.clear();
-            new QuadTreeGenerator(w, h, minNodeDim).decomposeNodes(nodes, source, nbNodes);
+            new QuadTreeGenerator(w, h, minNodeDim).decomposeNodes(nodes, source, 0, nbNodes);
             img2.getRaster().setDataElements(0, 0, w, h, dest);
 
             for (QuadTreeGenerator.Node node : nodes)
@@ -110,7 +110,7 @@ public class TestQuadTreeGenerator
                {
                   nodes.clear();
                   nbNodes++;
-                  new QuadTreeGenerator(w, h, minNodeDim).decomposeNodes(nodes, source, nbNodes);
+                  new QuadTreeGenerator(w, h, minNodeDim).decomposeNodes(nodes, source, 0, nbNodes);
                   img2.getRaster().setDataElements(0, 0, w, h, source);
 
                   for (QuadTreeGenerator.Node node : nodes)
