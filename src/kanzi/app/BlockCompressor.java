@@ -179,6 +179,12 @@ public class BlockCompressor implements Runnable, Callable<Long>
           obs.writeBits(0x80, 8);
           obs.close();
 
+          if (read == 0)
+          {
+             System.out.println("Empty input file ... nothing to do");
+             System.exit(0);
+          }
+
           delta /= 1000000; // convert to ms
           printOut("", !this.silent);
           printOut("File size:        "+read, !this.silent);
@@ -191,6 +197,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
        }
        catch (Exception e)
        {
+          System.err.println("An unexpected condition happened. Exiting ,,,");
           e.printStackTrace();
           return -1L;
        }

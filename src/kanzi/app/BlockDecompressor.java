@@ -184,18 +184,18 @@ public class BlockDecompressor implements Runnable, Callable<Long>
             step++;
          }
          while (decoded != 0);
-
+         
          delta /= 1000000; // convert to ms
-
-        printOut("", !this.silent);
-        printOut("Decoding took "+delta+" ms", !this.silent);
-        printOut("Decoded:          "+sum, !this.silent);
-        printOut("Troughput (KB/s): "+(((sum * 1000L) >> 10) / delta), !this.silent);
-        printOut("", !this.silent);
+         printOut("", !this.silent);
+         printOut("Decoding took "+delta+" ms", !this.silent);
+         printOut("Decoded:          "+sum, !this.silent);
+         printOut("Troughput (KB/s): "+(((sum * 1000L) >> 10) / delta), !this.silent);
+         printOut("", !this.silent);
          return ibs.read();
       }
       catch (Exception e)
       {
+         System.err.println("An unexpected condition happened. Exiting ,,,");
          e.printStackTrace();
          return -1L;
       }
