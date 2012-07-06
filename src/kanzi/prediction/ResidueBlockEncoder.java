@@ -34,7 +34,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
     private final int logThresholdNonZeros;
     private final int blockSize;
 
-    private static final int DEFAULT_SKIP_SCORE = 3;
+    private static final int DEFAULT_SKIP_SCORE = 0;
     private static final int RLE_THRESHOLD = 2;
 
 
@@ -65,8 +65,8 @@ public final class ResidueBlockEncoder implements EntropyEncoder
         if ((blockDim != 4) && (blockDim != 8))
           throw new IllegalArgumentException("Invalid block dimension parameter (must be 4 or 8)");
 
-        if (skipThreshold < 1) // skipThreshold = 0 => skip all blocks
-          throw new IllegalArgumentException("Invalid skipThreshold parameter (must be a least 1)");
+        if (skipThreshold < 0) // skipThreshold = 0 => skip all blocks
+          throw new IllegalArgumentException("Invalid skipThreshold parameter (must be a least 0)");
 
         if ((maxNonZeros < 1) || (maxNonZeros >= blockDim*blockDim))
           throw new IllegalArgumentException("Invalid maxNonZeros parameter (must be in [1.."+(blockDim*blockDim-1)+"])");
@@ -119,7 +119,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           final int score = (res >> 8) & 0xFF;
 
           // Skip block if too little energy
-          if ((maxCoeff <= 1) && (score < this.scoreThreshold))
+          if ((maxCoeff <= 1) && (score <= this.scoreThreshold))
              return this.stream.writeBits(0, this.logThresholdNonZeros);
 
           before = this.testEncoder.getBitStream().written();
@@ -143,7 +143,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           final int score = (res >> 8) & 0xFF;
 
           // Skip block if too little energy
-          if ((maxCoeff <= 1) && (score < this.scoreThreshold))
+          if ((maxCoeff <= 1) && (score <= this.scoreThreshold))
              return this.stream.writeBits(0, this.logThresholdNonZeros);
 
           before = this.testEncoder.getBitStream().written();
@@ -167,7 +167,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           final int score = (res >> 8) & 0xFF;
 
           // Skip block if too little energy
-          if ((maxCoeff <= 1) && (score < this.scoreThreshold))
+          if ((maxCoeff <= 1) && (score <= this.scoreThreshold))
              return this.stream.writeBits(0, this.logThresholdNonZeros);
 
           before = this.testEncoder.getBitStream().written();
@@ -191,7 +191,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           final int score = (res >> 8) & 0xFF;
 
           // Skip block if too little energy
-          if ((maxCoeff <= 1) && (score < this.scoreThreshold))
+          if ((maxCoeff <= 1) && (score <= this.scoreThreshold))
              return this.stream.writeBits(0, this.logThresholdNonZeros);
 
           before = this.testEncoder.getBitStream().written();
@@ -219,7 +219,6 @@ public final class ResidueBlockEncoder implements EntropyEncoder
        int idx = 1; // exclude DC coefficient
        int score = (data[blkptr] == 0) ? 0 : 5; // DC coefficient
        int nonZeros = (data[blkptr] == 0) ? 0 : 1; // DC coefficient
-       int prevCoeffLocation = -1;
 
        // Find last non zero coefficient
        while ((end > 0) && (data[blkptr+scanTable[end]] == 0))
@@ -238,19 +237,8 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           else
           {
              val = (val + (val >> 31)) ^ (val >> 31); //abs
-
-             // If the last coefficient is 1 or -1 and it comes after many 0s,
-             // stop encoding at previous coefficient location.
-             if ((val == 1) && (idx == end) && (prevCoeffLocation >= 0) &&
-                     (idx-prevCoeffLocation >= 5))
-             {
-                end = prevCoeffLocation;
-                break;
-             }
-
              score += val;
              nonZeros++;
-             prevCoeffLocation = idx;
 
              if (val > max)
                 max = val;
