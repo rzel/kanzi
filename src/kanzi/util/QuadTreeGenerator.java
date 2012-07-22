@@ -126,20 +126,10 @@ public class QuadTreeGenerator
          Node root3 = getNode(null, x0, y0+(h>>1), w>>1, h>>1);
          Node root4 = getNode(null, x0+(w>>1), y0+(h>>1), w>>1, h>>1);
 
-         if (this.isRGB == true)
-         {
-            root1.computeVarianceRGB(input, st);
-            root2.computeVarianceRGB(input, st);
-            root3.computeVarianceRGB(input, st);
-            root4.computeVarianceRGB(input, st);
-         }
-         else
-         {
-            root1.computeVarianceY(input, st);
-            root2.computeVarianceY(input, st);
-            root3.computeVarianceY(input, st);
-            root4.computeVarianceY(input, st);
-         }
+         root1.computeVariance(input, st, this.isRGB);
+         root2.computeVariance(input, st, this.isRGB);
+         root3.computeVariance(input, st, this.isRGB);
+         root4.computeVariance(input, st, this.isRGB);
 
          // Add to set of nodes sorted by decreasing variance
          nodes.add(root1);
@@ -174,20 +164,10 @@ public class QuadTreeGenerator
          Node node3 = getNode(parent, parent.x, parent.y+parent.h-ch, cw, ch);
          Node node4 = getNode(parent, parent.x+parent.w-cw, parent.y+parent.h-ch, cw, ch);
 
-         if (this.isRGB == true)
-         {
-            node1.computeVarianceRGB(input, st);
-            node2.computeVarianceRGB(input, st);
-            node3.computeVarianceRGB(input, st);
-            node4.computeVarianceRGB(input, st);
-         }
-         else
-         {
-            node1.computeVarianceY(input, st);
-            node2.computeVarianceY(input, st);
-            node3.computeVarianceY(input, st);
-            node4.computeVarianceY(input, st);
-         }
+         node1.computeVariance(input, st, this.isRGB);
+         node2.computeVariance(input, st, this.isRGB);
+         node3.computeVariance(input, st, this.isRGB);
+         node4.computeVariance(input, st, this.isRGB);
 
          // Add to set of nodes sorted by decreasing variance
          nodes.add(node1);
@@ -289,7 +269,14 @@ public class QuadTreeGenerator
       }
 
 
-      int computeVarianceRGB(int[] rgb, int stride)
+      int computeVariance(int[] buffer, int stride, boolean isRGB)
+      {
+         return (isRGB == true) ? this.computeVarianceRGB(buffer, stride) :
+             this.computeVarianceY(buffer, stride);
+      }
+
+
+      private int computeVarianceRGB(int[] rgb, int stride)
       {
          final int iend = this.x + this.w;
          final int jend = this.y + this.h;
@@ -325,7 +312,7 @@ public class QuadTreeGenerator
       }
 
 
-      int computeVarianceY(int[] yBuffer, int stride)
+      private int computeVarianceY(int[] yBuffer, int stride)
       {
          final int iend = this.x + this.w;
          final int jend = this.y + this.h;
