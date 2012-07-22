@@ -56,7 +56,7 @@ public final class RiceGolombEncoder extends AbstractEncoder
        int val2 = val;
        val2 = (val2 + (val2 >> 31)) ^ (val2 >> 31); // abs(val2)
 
-        // quotient is unary encoded, est is binary encoded
+        // quotient is unary encoded, rest is binary encoded
        int emit = this.base | (val2 & (this.base-1));
        int n = (1 + (val2 >> this.logBase)) + this.logBase;
 
