@@ -43,30 +43,41 @@ public final class ExpGolombEncoder extends AbstractEncoder
     @Override
     public boolean encodeByte(byte val)
     {
-       if (val == 0)
+       if (val == 0) // shortcut when input is 0
           return this.bitstream.writeBit(1);
 
-       //  Take the number 'val' add 1 to it
-       //  Count the bits (log2), subtract one, and write that number of zeros
-       //  preceding the previous bit string to get the encoded value
-       int log2 = 0;
+       //  Take the abs() of 'val' add 1 to it
        int val2 = val;
        val2 = (val2 + (val2 >> 31)) ^ (val2 >> 31); // abs(val2)
        val2++;
-       long emit = val2;
+       long emit;
+       int n;
+       
+       if (val2 <= 3) // shortcut when abs(input) = 1 or 2
+       {
+          emit = val2;
+          n = 3;
+       }
+       else
+       {
+          //  Count the bits (log2), subtract one, and write that number of zeros
+          //  preceding the previous bit string to get the encoded value
+          emit = val2;
+          int log2 = 0;
 
-       for ( ; val2>1; val2>>=1)
-          log2++;
+          for ( ; val2>1; val2>>=1)
+             log2++;
 
-       // Add log2 zeros and 1 one (unary coding), then remainder
-       // 0 => 1 => 1
-       // 1 => 10 => 010
-       // 2 => 11 => 011
-       // 3 => 100 => 00100
-       // 4 => 101 => 00101
-       // 5 => 110 => 00110
-       // 6 => 111 => 00111
-       int n = log2 + (log2 + 1);
+          // Add log2 zeros and 1 one (unary coding), then remainder
+          // 0 => 1 => 1
+          // 1 => 10 => 010
+          // 2 => 11 => 011
+          // 3 => 100 => 00100
+          // 4 => 101 => 00101
+          // 5 => 110 => 00110
+          // 6 => 111 => 00111
+          n = log2 + (log2 + 1);
+       }
 
        if (this.signed == true)
        {
