@@ -68,15 +68,21 @@ public class TestIntraPredictor
         // Wipe out y2
         Arrays.fill(y2, 0);
 
-        testRoundTrip(y1, y2, w, h, 4);
-        testRoundTrip(y1, y2, w, h, 8);
-        testRoundTrip(y1, y2, w, h, 16);
-        testRoundTrip(y1, y2, w, h, 32);
+        int predictionType = IntraPredictor.DIR_LEFT | IntraPredictor.REFERENCE;
+        testRoundTrip(y1, y2, w, h, 4, predictionType);
+        testRoundTrip(y1, y2, w, h, 8, predictionType);
+        testRoundTrip(y1, y2, w, h, 16, predictionType);
+        testRoundTrip(y1, y2, w, h, 32, predictionType);
+        predictionType = IntraPredictor.DIR_RIGHT | IntraPredictor.REFERENCE;
+        testRoundTrip(y1, y2, w, h, 4, predictionType);
+        testRoundTrip(y1, y2, w, h, 8, predictionType);
+        testRoundTrip(y1, y2, w, h, 16, predictionType);
+        testRoundTrip(y1, y2, w, h, 32, predictionType);
 
         cvt.convertYUVtoRGB(y2, u2, v2, rgb2, ColorModelType.YUV420);
         img2.getRaster().setDataElements(0, 0, w, h, rgb2);
 
-        int psnr1024 = new ImageQualityMonitor(w, h).computePSNR(y1, y2);
+        int psnr1024 = new ImageQualityMonitor(w, h).computePSNR(y1, y2, ColorModelType.YUV444);
         System.out.println("PSNR: "+((psnr1024 == 0) ? "Infinite" : ((float) psnr1024/1024.0f)));
 
         ImageIcon icon1 = new ImageIcon(img1);
@@ -100,7 +106,7 @@ public class TestIntraPredictor
    }
 
 
-   private static void testRoundTrip(int[] frame1, int[] frame2, int w, int h, int dim)
+   private static void testRoundTrip(int[] frame1, int[] frame2, int w, int h, int dim, int predictionType)
    {
       IntraPredictor predictor = new IntraPredictor(w, h, 32, w, false, 5, 2);
       IntraPredictor.Prediction[] results = new IntraPredictor.Prediction[16];
@@ -113,8 +119,7 @@ public class TestIntraPredictor
          for (int i=0; i<w; i+=dim)
          {
              System.out.println("Processing "+i+"@"+j+" dim="+dim);
-             predictor.computeResidues(frame1, i, j, null, i, j, results, dim,
-                     IntraPredictor.DIR_LEFT | IntraPredictor.DIR_RIGHT | IntraPredictor.REFERENCE);
+             predictor.computeResidues(frame1, i, j, null, i, j, results, dim, predictionType);
 
              for (int nn=0; nn<results.length; nn++)
              {
@@ -123,7 +128,7 @@ public class TestIntraPredictor
                 if (pred.energy != IntraPredictor.MAX_ERROR)
                 {
                    System.out.println("Prediction "+IntraPredictor.Mode.getMode(nn));
-                   predictor.computeBlock(pred, frame2, i, j, dim, IntraPredictor.Mode.getMode(nn));
+                   predictor.computeBlock(pred, frame2, i, j, IntraPredictor.Mode.getMode(nn), predictionType);
                    long error = computeError(frame1, frame2, i, j, w, dim);
                    System.out.println("Error average: "+(float) (error)/(dim*dim));
 
@@ -165,7 +170,6 @@ public class TestIntraPredictor
             int diff = frame2[j*w+i] - frame1[j*w+i];
             error += (diff*diff);
          }
-         error += 0;
       }
 
       return error;
