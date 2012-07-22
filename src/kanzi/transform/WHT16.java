@@ -18,21 +18,37 @@ package kanzi.transform;
 import kanzi.IntTransform;
 
 
-// Walsh-Hadamard transform of dimension 16
+// Implementation of Walsh-Hadamard transform of dimension 16 using only additions,
+// subtractions and shifts.
 public final class WHT16 implements IntTransform
 {
     private final int[] data;
+    private final int fScale;
+    private final int iScale;
 
 
+    // For perfect reconstruction, forward results are scaled by 16
     public WHT16()
     {
-        this.data = new int[256];
+       this.fScale = 0;
+       this.iScale = 8;
+       this.data = new int[256];
+    }
+
+
+    // For perfect reconstruction, forward results are scaled by 16 unless the
+    // parameter is set to false (in wich case rounding may introduce errors)
+    public WHT16(boolean scale)
+    {
+       this.fScale = (scale == false) ? 4 : 0;
+       this.iScale = (scale == false) ? 4 : 8;
+       this.data = new int[256];
     }
 
 
     public int[] forward(int[] block)
     {
-        return this.compute(block, 0);
+        return this.compute(block, 0, this.fScale);
     }
 
 
@@ -40,37 +56,38 @@ public final class WHT16 implements IntTransform
     @Override
     public int[] forward(int[] block, int blkptr)
     {
-        return this.compute(block, blkptr);
+        return this.compute(block, blkptr, this.fScale);
     }
 
 
     // Not thread safe
-    private int[] compute(int[] block, int blkptr)
+    // Result multiplied by 16 if 'scale' is set to false
+    private int[] compute(int[] block, int blkptr, int shift)
     {
         int dataptr = 0;
-        int end = blkptr + 256;
-        int[] buffer = this.data;
+        final int end = blkptr + 256;
+        final int[] buffer = this.data;
 
         // Pass 1: process rows.
         for (int i=blkptr; i<end; i+=16)
         {
             // Aliasing for speed
-            int x0  = block[i];
-            int x1  = block[i+1];
-            int x2  = block[i+2];
-            int x3  = block[i+3];
-            int x4  = block[i+4];
-            int x5  = block[i+5];
-            int x6  = block[i+6];
-            int x7  = block[i+7];
-            int x8  = block[i+8];
-            int x9  = block[i+9];
-            int x10 = block[i+10];
-            int x11 = block[i+11];
-            int x12 = block[i+12];
-            int x13 = block[i+13];
-            int x14 = block[i+14];
-            int x15 = block[i+15];
+            final int x0  = block[i];
+            final int x1  = block[i+1];
+            final int x2  = block[i+2];
+            final int x3  = block[i+3];
+            final int x4  = block[i+4];
+            final int x5  = block[i+5];
+            final int x6  = block[i+6];
+            final int x7  = block[i+7];
+            final int x8  = block[i+8];
+            final int x9  = block[i+9];
+            final int x10 = block[i+10];
+            final int x11 = block[i+11];
+            final int x12 = block[i+12];
+            final int x13 = block[i+13];
+            final int x14 = block[i+14];
+            final int x15 = block[i+15];
 
             int a0  = x0  + x1;
             int a1  = x2  + x3;
@@ -89,22 +106,22 @@ public final class WHT16 implements IntTransform
             int a14 = x12 - x13;
             int a15 = x14 - x15;
 
-            int b0  = a0  + a1;
-            int b1  = a2  + a3;
-            int b2  = a4  + a5;
-            int b3  = a6  + a7;
-            int b4  = a8  + a9;
-            int b5  = a10 + a11;
-            int b6  = a12 + a13;
-            int b7  = a14 + a15;
-            int b8  = a0  - a1;
-            int b9  = a2  - a3;
-            int b10 = a4  - a5;
-            int b11 = a6  - a7;
-            int b12 = a8  - a9;
-            int b13 = a10 - a11;
-            int b14 = a12 - a13;
-            int b15 = a14 - a15;
+            final int b0  = a0  + a1;
+            final int b1  = a2  + a3;
+            final int b2  = a4  + a5;
+            final int b3  = a6  + a7;
+            final int b4  = a8  + a9;
+            final int b5  = a10 + a11;
+            final int b6  = a12 + a13;
+            final int b7  = a14 + a15;
+            final int b8  = a0  - a1;
+            final int b9  = a2  - a3;
+            final int b10 = a4  - a5;
+            final int b11 = a6  - a7;
+            final int b12 = a8  - a9;
+            final int b13 = a10 - a11;
+            final int b14 = a12 - a13;
+            final int b15 = a14 - a15;
 
             a0  = b0  + b1;
             a1  = b2  + b3;
@@ -144,28 +161,29 @@ public final class WHT16 implements IntTransform
         }
 
         dataptr = 0;
-        end = blkptr + 16;
+        final int end2 = blkptr + 16;
+        final int adjust = (1 << shift) >> 1;
 
-        // Pass 2: process aolumns.
-        for (int i=blkptr; i<end; i++)
+        // Pass 2: process columns.
+        for (int i=blkptr; i<end2; i++)
         {
             // Aliasing for speed
-            int x0  = buffer[dataptr];
-            int x1  = buffer[dataptr+16];
-            int x2  = buffer[dataptr+32];
-            int x3  = buffer[dataptr+48];
-            int x4  = buffer[dataptr+64];
-            int x5  = buffer[dataptr+80];
-            int x6  = buffer[dataptr+96];
-            int x7  = buffer[dataptr+112];
-            int x8  = buffer[dataptr+128];
-            int x9  = buffer[dataptr+144];
-            int x10 = buffer[dataptr+160];
-            int x11 = buffer[dataptr+176];
-            int x12 = buffer[dataptr+192];
-            int x13 = buffer[dataptr+208];
-            int x14 = buffer[dataptr+224];
-            int x15 = buffer[dataptr+240];
+            final int x0  = buffer[dataptr];
+            final int x1  = buffer[dataptr+16];
+            final int x2  = buffer[dataptr+32];
+            final int x3  = buffer[dataptr+48];
+            final int x4  = buffer[dataptr+64];
+            final int x5  = buffer[dataptr+80];
+            final int x6  = buffer[dataptr+96];
+            final int x7  = buffer[dataptr+112];
+            final int x8  = buffer[dataptr+128];
+            final int x9  = buffer[dataptr+144];
+            final int x10 = buffer[dataptr+160];
+            final int x11 = buffer[dataptr+176];
+            final int x12 = buffer[dataptr+192];
+            final int x13 = buffer[dataptr+208];
+            final int x14 = buffer[dataptr+224];
+            final int x15 = buffer[dataptr+240];
 
             int a0  = x0  + x1;
             int a1  = x2  + x3;
@@ -184,22 +202,22 @@ public final class WHT16 implements IntTransform
             int a14 = x12 - x13;
             int a15 = x14 - x15;
 
-            int b0  = a0  + a1;
-            int b1  = a2  + a3;
-            int b2  = a4  + a5;
-            int b3  = a6  + a7;
-            int b4  = a8  + a9;
-            int b5  = a10 + a11;
-            int b6  = a12 + a13;
-            int b7  = a14 + a15;
-            int b8  = a0  - a1;
-            int b9  = a2  - a3;
-            int b10 = a4  - a5;
-            int b11 = a6  - a7;
-            int b12 = a8  - a9;
-            int b13 = a10 - a11;
-            int b14 = a12 - a13;
-            int b15 = a14 - a15;
+            final int b0  = a0  + a1;
+            final int b1  = a2  + a3;
+            final int b2  = a4  + a5;
+            final int b3  = a6  + a7;
+            final int b4  = a8  + a9;
+            final int b5  = a10 + a11;
+            final int b6  = a12 + a13;
+            final int b7  = a14 + a15;
+            final int b8  = a0  - a1;
+            final int b9  = a2  - a3;
+            final int b10 = a4  - a5;
+            final int b11 = a6  - a7;
+            final int b12 = a8  - a9;
+            final int b13 = a10 - a11;
+            final int b14 = a12 - a13;
+            final int b15 = a14 - a15;
 
             a0  = b0  + b1;
             a1  = b2  + b3;
@@ -218,22 +236,22 @@ public final class WHT16 implements IntTransform
             a14 = b12 - b13;
             a15 = b14 - b15;
 
-            block[i]      = (a0  + a1  + 8) >> 4;
-            block[i+16]   = (a2  + a3  + 8) >> 4;
-            block[i+32]   = (a4  + a5  + 8) >> 4;
-            block[i+48]   = (a6  + a7  + 8) >> 4;
-            block[i+64]   = (a8  + a9  + 8) >> 4;
-            block[i+80]   = (a10 + a11 + 8) >> 4;
-            block[i+96]   = (a12 + a13 + 8) >> 4;
-            block[i+112]  = (a14 + a15 + 8) >> 4;
-            block[i+128]  = (a0  - a1  + 8) >> 4;
-            block[i+144]  = (a2  - a3  + 8) >> 4;
-            block[i+160]  = (a4  - a5  + 8) >> 4;
-            block[i+176]  = (a6  - a7  + 8) >> 4;
-            block[i+192]  = (a8  - a9  + 8) >> 4;
-            block[i+208]  = (a10 - a11 + 8) >> 4;
-            block[i+224]  = (a12 - a13 + 8) >> 4;
-            block[i+240]  = (a14 - a15 + 8) >> 4;
+            block[i]      = (a0  + a1  + adjust) >> shift;
+            block[i+16]   = (a2  + a3  + adjust) >> shift;
+            block[i+32]   = (a4  + a5  + adjust) >> shift;
+            block[i+48]   = (a6  + a7  + adjust) >> shift;
+            block[i+64]   = (a8  + a9  + adjust) >> shift;
+            block[i+80]   = (a10 + a11 + adjust) >> shift;
+            block[i+96]   = (a12 + a13 + adjust) >> shift;
+            block[i+112]  = (a14 + a15 + adjust) >> shift;
+            block[i+128]  = (a0  - a1  + adjust) >> shift;
+            block[i+144]  = (a2  - a3  + adjust) >> shift;
+            block[i+160]  = (a4  - a5  + adjust) >> shift;
+            block[i+176]  = (a6  - a7  + adjust) >> shift;
+            block[i+192]  = (a8  - a9  + adjust) >> shift;
+            block[i+208]  = (a10 - a11 + adjust) >> shift;
+            block[i+224]  = (a12 - a13 + adjust) >> shift;
+            block[i+240]  = (a14 - a15 + adjust) >> shift;
 
             dataptr++;
         }
@@ -242,17 +260,17 @@ public final class WHT16 implements IntTransform
     }
 
 
-    // Yep, the transform is symetric
+    // The transform is symmetric (except, potentially, for scaling)
     public int[] inverse(int[] block)
     {
-        return this.compute(block, 0);
+        return this.compute(block, 0, this.iScale);
     }
 
 
     @Override
     public int[] inverse(int[] block, int blkptr)
     {
-        return this.compute(block, blkptr);
+        return this.compute(block, blkptr, this.iScale);
     }
 
 }

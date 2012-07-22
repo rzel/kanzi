@@ -18,21 +18,38 @@ package kanzi.transform;
 import kanzi.IntTransform;
 
 
-// Walsh-Hadamard transform of dimension 8
+// Implementation of Walsh-Hadamard transform of dimension 8 using only additions,
+// subtractions and shifts.
 public final class WHT8 implements IntTransform
 {
     private final int[] data;
+    private final int fScale;
+    private final int iScale;
 
 
+    // For perfect reconstruction, forward results are scaled by 8*sqrt(2)
     public WHT8()
     {
-        this.data = new int[64];
+       this.fScale = 0;
+       this.iScale = 6;
+       this.data = new int[64];
+    }
+
+
+    // For perfect reconstruction, forward results are scaled by 8*sqrt(2) unless 
+    // the parameter is set to false (scaled by sqrt(2), in wich case rounding
+    // may introduce errors)
+    public WHT8(boolean scale)
+    {
+       this.fScale = (scale == false) ? 3 : 0;
+       this.iScale = (scale == false) ? 3 : 6;
+       this.data = new int[64];
     }
 
 
     public int[] forward(int[] block)
     {
-        return this.compute(block, 0);
+        return this.compute(block, 0, this.fScale);
     }
 
 
@@ -40,48 +57,48 @@ public final class WHT8 implements IntTransform
     @Override
     public int[] forward(int[] block, int blkptr)
     {
-        return this.compute(block, blkptr);
+        return this.compute(block, blkptr, this.fScale);
     }
 
 
     // Not thread safe
-    // Result multiplied by sqrt(2)
-    private int[] compute(int[] block, int blkptr)
+    // Result multiplied by sqrt(2) or 8*sqrt(2) if 'scale' is set to false
+    private int[] compute(int[] block, int blkptr, int shift)
     {
         int dataptr = 0;
-        int end = blkptr + 64;
-        int[] buffer = this.data;
+        final int end = blkptr + 64;
+        final int[] buffer = this.data;
 
         // Pass 1: process rows.
         for (int i=blkptr; i<end; i+=8)
         {
             // Aliasing for speed
-            int x0 = block[i];
-            int x1 = block[i+1];
-            int x2 = block[i+2];
-            int x3 = block[i+3];
-            int x4 = block[i+4];
-            int x5 = block[i+5];
-            int x6 = block[i+6];
-            int x7 = block[i+7];
+            final int x0 = block[i];
+            final int x1 = block[i+1];
+            final int x2 = block[i+2];
+            final int x3 = block[i+3];
+            final int x4 = block[i+4];
+            final int x5 = block[i+5];
+            final int x6 = block[i+6];
+            final int x7 = block[i+7];
 
-            int a0 = x0 + x1;
-            int a1 = x2 + x3;
-            int a2 = x4 + x5;
-            int a3 = x6 + x7;
-            int a4 = x0 - x1;
-            int a5 = x2 - x3;
-            int a6 = x4 - x5;
-            int a7 = x6 - x7;
+            final int a0 = x0 + x1;
+            final int a1 = x2 + x3;
+            final int a2 = x4 + x5;
+            final int a3 = x6 + x7;
+            final int a4 = x0 - x1;
+            final int a5 = x2 - x3;
+            final int a6 = x4 - x5;
+            final int a7 = x6 - x7;
 
-            int b0 = a0 + a1;
-            int b1 = a2 + a3;
-            int b2 = a4 + a5;
-            int b3 = a6 + a7;
-            int b4 = a0 - a1;
-            int b5 = a2 - a3;
-            int b6 = a4 - a5;
-            int b7 = a6 - a7;
+            final int b0 = a0 + a1;
+            final int b1 = a2 + a3;
+            final int b2 = a4 + a5;
+            final int b3 = a6 + a7;
+            final int b4 = a0 - a1;
+            final int b5 = a2 - a3;
+            final int b6 = a4 - a5;
+            final int b7 = a6 - a7;
 
             buffer[dataptr]   = b0 + b1;
             buffer[dataptr+1] = b2 + b3;
@@ -96,47 +113,48 @@ public final class WHT8 implements IntTransform
         }
 
         dataptr = 0;
-        end = blkptr + 8;
+        final int end2 = blkptr + 8;
+        final int adjust = (1 << shift) >> 1;
 
         // Pass 2: process columns.
-        for (int i=blkptr; i<end; i++)
+        for (int i=blkptr; i<end2; i++)
         {
             // Aliasing for speed
-            int x0 = buffer[dataptr];
-            int x1 = buffer[dataptr+8];
-            int x2 = buffer[dataptr+16];
-            int x3 = buffer[dataptr+24];
-            int x4 = buffer[dataptr+32];
-            int x5 = buffer[dataptr+40];
-            int x6 = buffer[dataptr+48];
-            int x7 = buffer[dataptr+56];
+            final int x0 = buffer[dataptr];
+            final int x1 = buffer[dataptr+8];
+            final int x2 = buffer[dataptr+16];
+            final int x3 = buffer[dataptr+24];
+            final int x4 = buffer[dataptr+32];
+            final int x5 = buffer[dataptr+40];
+            final int x6 = buffer[dataptr+48];
+            final int x7 = buffer[dataptr+56];
 
-            int a0 = x0 + x1;
-            int a1 = x2 + x3;
-            int a2 = x4 + x5;
-            int a3 = x6 + x7;
-            int a4 = x0 - x1;
-            int a5 = x2 - x3;
-            int a6 = x4 - x5;
-            int a7 = x6 - x7;
+            final int a0 = x0 + x1;
+            final int a1 = x2 + x3;
+            final int a2 = x4 + x5;
+            final int a3 = x6 + x7;
+            final int a4 = x0 - x1;
+            final int a5 = x2 - x3;
+            final int a6 = x4 - x5;
+            final int a7 = x6 - x7;
 
-            int b0 = a0 + a1;
-            int b1 = a2 + a3;
-            int b2 = a4 + a5;
-            int b3 = a6 + a7;
-            int b4 = a0 - a1;
-            int b5 = a2 - a3;
-            int b6 = a4 - a5;
-            int b7 = a6 - a7;
+            final int b0 = a0 + a1;
+            final int b1 = a2 + a3;
+            final int b2 = a4 + a5;
+            final int b3 = a6 + a7;
+            final int b4 = a0 - a1;
+            final int b5 = a2 - a3;
+            final int b6 = a4 - a5;
+            final int b7 = a6 - a7;
 
-            block[i]    = (b0 + b1 + 4) >> 3;
-            block[i+8]  = (b2 + b3 + 4) >> 3;
-            block[i+16] = (b4 + b5 + 4) >> 3;
-            block[i+24] = (b6 + b7 + 4) >> 3;
-            block[i+32] = (b0 - b1 + 4) >> 3;
-            block[i+40] = (b2 - b3 + 4) >> 3;
-            block[i+48] = (b4 - b5 + 4) >> 3;
-            block[i+56] = (b6 - b7 + 4) >> 3;
+            block[i]    = (b0 + b1 + adjust) >> shift;
+            block[i+8]  = (b2 + b3 + adjust) >> shift;
+            block[i+16] = (b4 + b5 + adjust) >> shift;
+            block[i+24] = (b6 + b7 + adjust) >> shift;
+            block[i+32] = (b0 - b1 + adjust) >> shift;
+            block[i+40] = (b2 - b3 + adjust) >> shift;
+            block[i+48] = (b4 - b5 + adjust) >> shift;
+            block[i+56] = (b6 - b7 + adjust) >> shift;
 
             dataptr++;
         }
@@ -145,17 +163,17 @@ public final class WHT8 implements IntTransform
     }
 
 
-    // Yep, the transform is symetric
+    // The transform is symmetric (except, potentially, for scaling)
     public int[] inverse(int[] block)
     {
-        return this.compute(block, 0);
+        return this.compute(block, 0, this.iScale);
     }
 
 
     @Override
     public int[] inverse(int[] block, int blkptr)
     {
-        return this.compute(block, blkptr);
+        return this.compute(block, blkptr, this.iScale);
     }
 
 }
