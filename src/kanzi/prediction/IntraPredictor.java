@@ -25,16 +25,12 @@ public class IntraPredictor
 {
    public enum Mode
    {
-      AVERAGE_UL(0, 2),    // Average upper-left, code 00
-      AVERAGE_UR(1, 2),    // Average upper-right, code 01
-      DC_L(8, 4),          // DC left, code 1000
-      DC_R(9, 4),          // DC right, code 1001
-      HORIZONTAL_L(10, 4), // Horizontal left, code 1010
-      HORIZONTAL_R(11, 4), // Horizontal right, code 1011
-      VERTICAL(12, 4),     // Vertical (top), code 1100
-      REFERENCE(13, 4);    // Other block used as reference, code 1101
+      AVERAGE_HV(0, 3),  // Average horizontal-vertical
+      DC(1, 3),          // DC
+      HORIZONTAL(2, 3),  // Horizontal
+      VERTICAL(3, 3),    // Vertical (top)
+      REFERENCE(4, 3);   // Other block used as reference
 
-      // codes 1110 and 1111 free for future modes
       // actual intra mode block can be encoded as reference prediction mode
       // with same frame and deltaX=deltaY=0
 
@@ -51,26 +47,17 @@ public class IntraPredictor
       {
          return this.value;
       }
-      
+
       public static Mode getMode(int val)
       {
-         if (val == AVERAGE_UL.value)
-            return AVERAGE_UL;
+         if (val == AVERAGE_HV.value)
+            return AVERAGE_HV;
 
-         if (val == AVERAGE_UR.value)
-            return AVERAGE_UR;
+         if (val == DC.value)
+            return DC;
 
-         if (val == DC_L.value)
-            return DC_L;
-
-         if (val == DC_R.value)
-            return DC_R;
-
-         if (val == HORIZONTAL_L.value)
-            return HORIZONTAL_L;
-
-         if (val == HORIZONTAL_R.value)
-            return HORIZONTAL_R;
+         if (val == HORIZONTAL.value)
+            return HORIZONTAL;
 
          if (val == VERTICAL.value)
             return VERTICAL;
@@ -80,12 +67,12 @@ public class IntraPredictor
 
          return null;
       }
-      
+
       public int encode(OutputBitStream bs)
       {
          if (bs.writeBits(this.value, this.length) != this.length)
             return -1;
-         
+
          return this.length;
       }
 
@@ -109,6 +96,7 @@ public class IntraPredictor
    public static final int REFERENCE = 4;
 
    public static final int MAX_ERROR = 1 << 26; // Not Integer.Max to avoid add overflow
+   private static final int DEFAULT_VALUE = 128;
 
    private final int width;
    private final int height;
@@ -160,20 +148,20 @@ public class IntraPredictor
      if (stride < 8)
         throw new IllegalArgumentException("The stride must be at least 8");
 
-     if ((height & 7) != 0)
-        throw new IllegalArgumentException("The height must be a multiple of 8");
+     if ((height & 3) != 0)
+        throw new IllegalArgumentException("The height must be a multiple of 4");
 
-     if ((width & 7) != 0)
-        throw new IllegalArgumentException("The width must be a multiple of 8");
+     if ((width & 3) != 0)
+        throw new IllegalArgumentException("The width must be a multiple of 4");
 
-     if ((stride & 7) != 0)
-        throw new IllegalArgumentException("The stride must be a multiple of 8");
+     if ((stride & 3) != 0)
+        throw new IllegalArgumentException("The stride must be a multiple of 4");
 
      if ((maxBlockDim < 4) || (maxBlockDim > 64))
         throw new IllegalArgumentException("The maximum block dimension must be in the [4..64] range"); // for now
 
-     if ((maxBlockDim & 7) != 0)
-        throw new IllegalArgumentException("The maximum block dimension must be a multiple of 8");
+     if ((maxBlockDim & 3) != 0)
+        throw new IllegalArgumentException("The maximum block dimension must be a multiple of 4");
 
      if ((errThreshold < 0) || (errThreshold > 256))
         throw new IllegalArgumentException("The residue energy threshold per pixel must in [0..256]");
@@ -224,6 +212,10 @@ public class IntraPredictor
       if (((reference & DIR_RIGHT) == 0) && ((reference & DIR_LEFT) == 0) && ((reference & REFERENCE) == 0))
          return null;
 
+      // Both directions at the same time are not allowed
+      if (((reference & DIR_RIGHT) != 0) && ((reference & DIR_LEFT) != 0))
+         return null;
+
       int minIdx = 0;
 
       // Intialize predictions
@@ -233,6 +225,7 @@ public class IntraPredictor
          p.x = ix;
          p.y = iy;
          p.frame = input;
+         p.blockDim = blockDim;
       }
 
       // Start with spatial/temporal reference (if any)
@@ -275,7 +268,7 @@ public class IntraPredictor
          Prediction newPrediction = new Prediction(input, 0, 0, blockDim);
 
          // Do the search and update prediction energy, coordinates and result block
-         this.computeReferenceSearch(input, ix, iy, blockDim, minNrj, newPrediction, reference);
+         this.computeReferenceSearch(input, ix, iy, minNrj, newPrediction, reference);
 
          // Is the new prediction an improvement ?
          if (newPrediction.energy < predictions[Mode.REFERENCE.value].energy)
@@ -333,7 +326,8 @@ public class IntraPredictor
       else
       {
          final int mask = (this.isRGB == true) ? 0xFF : -1;
-         
+
+         // Block delta
          for (int j=iIdx; j<endj; j+=st)
          {
             final int endi = j + blockDim;
@@ -396,9 +390,9 @@ public class IntraPredictor
       // Initializations
       if ((direction & DIR_LEFT) != 0)
       {
-         predictions[Mode.HORIZONTAL_L.value].energy = 0;
-         predictions[Mode.DC_L.value].energy = 0;
-         predictions[Mode.AVERAGE_UL.value].energy = 0;
+         predictions[Mode.HORIZONTAL.value].energy = 0;
+         predictions[Mode.DC.value].energy = 0;
+         predictions[Mode.AVERAGE_HV.value].energy = 0;
 
          if (x > 0)
          {
@@ -411,9 +405,9 @@ public class IntraPredictor
 
       if ((direction & DIR_RIGHT) != 0)
       {
-         predictions[Mode.HORIZONTAL_R.value].energy = 0;
-         predictions[Mode.DC_R.value].energy = 0;
-         predictions[Mode.AVERAGE_UR.value].energy = 0;
+         predictions[Mode.HORIZONTAL.value].energy = 0;
+         predictions[Mode.DC.value].energy = 0;
+         predictions[Mode.AVERAGE_HV.value].energy = 0;
 
          if (x < xMax)
          {
@@ -445,21 +439,25 @@ public class IntraPredictor
                dc_r += (input[above+i] & mask);
          }
       }
-      
+
       if (sum_l != 0)
          dc_l = (dc_l + (sum_l >> 1)) / sum_l;
+      else
+         dc_l = DEFAULT_VALUE;
 
       if (sum_r != 0)
          dc_r = (dc_r + (sum_r >> 1)) / sum_r;
+      else
+         dc_r = DEFAULT_VALUE;
 
       // Main loop, line by line
       for (int j=start; j<endj; j+=st)
       {
          final int endi = j + blockDim;
-         
+
          if ((direction & DIR_LEFT) != 0)
          {
-            final int b = (x > 0) ? input[j-1] & mask : 0;
+            final int b = (x > 0) ? input[j-1] & mask : DEFAULT_VALUE;
 
             // Scan from the left to the right
             for (int i=j; i<endi; i+=4)
@@ -468,6 +466,23 @@ public class IntraPredictor
                final int x1 = input[i+1] & mask;
                final int x2 = input[i+2] & mask;
                final int x3 = input[i+3] & mask;
+               int a0, a1, a2, a3;
+
+               if (y > 0)
+               {
+                  final int blockAbove = i - j + start - st;
+                  a0 = input[blockAbove]   & mask;
+                  a1 = input[blockAbove+1] & mask;
+                  a2 = input[blockAbove+2] & mask;
+                  a3 = input[blockAbove+3] & mask;
+               }
+               else
+               {
+                  a0 = DEFAULT_VALUE;
+                  a1 = DEFAULT_VALUE;
+                  a2 = DEFAULT_VALUE;
+                  a3 = DEFAULT_VALUE;
+               }
 
                {
                   // HORIZONTAL_L: xi-bi
@@ -475,7 +490,7 @@ public class IntraPredictor
                   final int val1 = x1 - b;
                   final int val2 = x2 - b;
                   final int val3 = x3 - b;
-                  final Prediction p = predictions[Mode.HORIZONTAL_L.value];
+                  final Prediction p = predictions[Mode.HORIZONTAL.value];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
                   output[idx_l+1] = val1;
@@ -485,36 +500,17 @@ public class IntraPredictor
                }
 
                {
-                  // AVERAGE_UL: (xi,yi)-avg((xi,yi-1),(xi-1,yi))
-                  int px0, px1, px2, px3;
-                  final int xb = ((x>0) || (i>j)) ? input[i-1] & mask : 0;
-
-                  if (i >= st)
-                  {
-                     final int lineAbove = i - st;
-                     px0 = input[lineAbove]   & mask;
-                     px1 = input[lineAbove+1] & mask;
-                     px2 = input[lineAbove+2] & mask;
-                     px3 = input[lineAbove+3] & mask;
-                  }
-                  else
-                  {
-                     px0 = 0;
-                     px1 = 0;
-                     px2 = 0;
-                     px3 = 0;
-                  }
-
+                  // AVERAGE_HV_L: (xi,yi)-avg(ai,bi)
                   int avg;
-                  avg = (xb + px0) >> 1;
+                  avg = (b + a0) >> 1;
                   final int val0 = x0 - avg;
-                  avg = (x0 + px1) >> 1;
+                  avg = (b + a1) >> 1;
                   final int val1 = x1 - avg;
-                  avg = (x1 + px2) >> 1;
+                  avg = (b + a2) >> 1;
                   final int val2 = x2 - avg;
-                  avg = (x2 + px3) >> 1;
+                  avg = (b + a3) >> 1;
                   final int val3 = x3 - avg;
-                  final Prediction p = predictions[Mode.AVERAGE_UL.value];
+                  final Prediction p = predictions[Mode.AVERAGE_HV.value];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
                   output[idx_l+1] = val1;
@@ -529,7 +525,7 @@ public class IntraPredictor
                   final int val1 = x1 - dc_l;
                   final int val2 = x2 - dc_l;
                   final int val3 = x3 - dc_l;
-                  final Prediction p = predictions[Mode.DC_L.value];
+                  final Prediction p = predictions[Mode.DC.value];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
                   output[idx_l+1] = val1;
@@ -541,11 +537,10 @@ public class IntraPredictor
                if (y > 0)
                {
                   // VERTICAL: xi-ai
-                  final int blockAbove = i - j + start - st;
-                  final int val0 = x0 - (input[blockAbove]   & mask);
-                  final int val1 = x1 - (input[blockAbove+1] & mask);
-                  final int val2 = x2 - (input[blockAbove+2] & mask);
-                  final int val3 = x3 - (input[blockAbove+3] & mask);
+                  final int val0 = x0 - a0;
+                  final int val1 = x1 - a1;
+                  final int val2 = x2 - a2;
+                  final int val3 = x3 - a3;
                   final Prediction p = predictions[Mode.VERTICAL.value];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
@@ -558,11 +553,11 @@ public class IntraPredictor
                idx_l += 4;
             }
          } // LEFT
-         
+
          if ((direction & DIR_RIGHT) != 0)
          {
-            final int c = (x < xMax) ? input[endi] & mask : 0;
-            
+            final int c = (x < xMax) ? input[endi] & mask : DEFAULT_VALUE;
+
             // Scan from right to left
             for (int i=endi-4; i>=j; i-=4)
             {
@@ -571,6 +566,23 @@ public class IntraPredictor
                final int x1 = input[i+1] & mask;
                final int x2 = input[i+2] & mask;
                final int x3 = input[i+3] & mask;
+               int a0, a1, a2, a3;
+
+               if (y > 0)
+               {
+                  final int blockAbove = i - j + start - st;
+                  a0 = input[blockAbove]   & mask;
+                  a1 = input[blockAbove+1] & mask;
+                  a2 = input[blockAbove+2] & mask;
+                  a3 = input[blockAbove+3] & mask;
+               }
+               else
+               {
+                  a0 = DEFAULT_VALUE;
+                  a1 = DEFAULT_VALUE;
+                  a2 = DEFAULT_VALUE;
+                  a3 = DEFAULT_VALUE;
+               }
 
                {
                   // HORIZONTAL_R: xi-ci
@@ -578,46 +590,27 @@ public class IntraPredictor
                   final int val1 = x1 - c;
                   final int val2 = x2 - c;
                   final int val3 = x3 - c;
-                  final Prediction p = predictions[Mode.HORIZONTAL_R.value];
+                  final Prediction p = predictions[Mode.HORIZONTAL.value];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
                   output[idx_r+1] = val1;
                   output[idx_r+2] = val2;
                   output[idx_r+3] = val3;
                   p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
-               } 
+               }
 
                {
-                  // AVERAGE_UR: (xi,yi)-avg((xi,yi-1),(xi+1,yi))
-                  final int xc = ((x<xMax) || (i+4 < j-x+w)) ? input[i+4] & mask : 0;
-                  int px0, px1, px2, px3;
-
-                  if (i >= st)
-                  {
-                     final int lineAbove = i - st;
-                     px0 = input[lineAbove]   & mask;
-                     px1 = input[lineAbove+1] & mask;
-                     px2 = input[lineAbove+2] & mask;
-                     px3 = input[lineAbove+3] & mask;
-                  }
-                  else
-                  {
-                     px0 = 0;
-                     px1 = 0;
-                     px2 = 0;
-                     px3 = 0;
-                  }
-
+                  // AVERAGE_HV_R: (xi,yi)-avg(ai, ci)
                   int avg;
-                  avg = (x1 + px0) >> 1;
+                  avg = (c + a0) >> 1;
                   final int val0 = x0 - avg;
-                  avg = (x2 + px1) >> 1;
+                  avg = (c + a1) >> 1;
                   final int val1 = x1 - avg;
-                  avg = (x3 + px2) >> 1;
+                  avg = (c + a2) >> 1;
                   final int val2 = x2 - avg;
-                  avg = (xc + px3) >> 1;
+                  avg = (c + a3) >> 1;
                   final int val3 = x3 - avg;
-                  final Prediction p = predictions[Mode.AVERAGE_UR.value];
+                  final Prediction p = predictions[Mode.AVERAGE_HV.value];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
                   output[idx_r+1] = val1;
@@ -632,7 +625,7 @@ public class IntraPredictor
                   final int val1 = x1 - dc_r;
                   final int val2 = x2 - dc_r;
                   final int val3 = x3 - dc_r;
-                  final Prediction p = predictions[Mode.DC_R.value];
+                  final Prediction p = predictions[Mode.DC.value];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
                   output[idx_r+1] = val1;
@@ -641,14 +634,13 @@ public class IntraPredictor
                   p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
                }
 
-               if ((y > 0) && ((direction & DIR_LEFT) == 0))
+               if (y > 0)
                {
                   // VERTICAL: xi-ai
-                  final int blockAbove = i - j + start - st;
-                  final int val0 = x0 - (input[blockAbove]   & mask);
-                  final int val1 = x1 - (input[blockAbove+1] & mask);
-                  final int val2 = x2 - (input[blockAbove+2] & mask);
-                  final int val3 = x3 - (input[blockAbove+3] & mask);
+                  final int val0 = x0 - a0;
+                  final int val1 = x1 - a1;
+                  final int val2 = x2 - a2;
+                  final int val3 = x3 - a3;
                   final Prediction p = predictions[Mode.VERTICAL.value];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
@@ -669,9 +661,10 @@ public class IntraPredictor
 
    // Add residue to other block
    // Return output
-   private int[] computeBlock(Prediction prediction, int[] output, int oIdx, int blockDim)
+   private int[] computeBlock(Prediction prediction, int[] output, int oIdx)
    {
       final int st = this.stride;
+      final int blockDim = prediction.blockDim;
       final int endj = oIdx + (st * blockDim);
       final int[] residue = prediction.residue;
       final int[] input = prediction.frame;
@@ -680,7 +673,7 @@ public class IntraPredictor
 
       if (input == null)
       {
-          // Simple scale/copy
+          // Simple copy
           for (int j=oIdx; j<endj; j+=st)
           {
              final int endi = j + blockDim;
@@ -725,10 +718,11 @@ public class IntraPredictor
    // residue is a blockDim*blockDim size block
    // input and output are width*height size frames
    // q is the quantizer (residue multiplier)
-   public int[] computeBlock(Prediction prediction, int[] output, int x, int y,
-           int blockDim, Mode mode)
+   public int[] computeBlock(Prediction prediction, int[] output, int x, int y, 
+           Mode mode, int direction)
    {
       final int w = this.width;
+      final int blockDim = prediction.blockDim;
       final int xMax = w - blockDim;
       final int st = this.stride;
       final int start = (y * st) + x;
@@ -739,32 +733,86 @@ public class IntraPredictor
       int k = 0;
 
       if (mode == Mode.REFERENCE)
-         return this.computeBlock(prediction, output, start, blockDim);
+         return this.computeBlock(prediction, output, start);
 
       if (mode == Mode.VERTICAL)
       {
-         for (int j=start; j<endj; j+=st)
+         if ((direction & DIR_LEFT) != 0)
          {
-            final int endi = j + blockDim;
-
-            for (int i=j; i<endi; i+=4)
+            for (int j=start; j<endj; j+=st)
             {
-               final int r0 = residue[k];
-               final int r1 = residue[k+1];
-               final int r2 = residue[k+2];
-               final int r3 = residue[k+3];
+               final int endi = j + blockDim;
 
-               // VERTICAL: xi+ai
-               final int blockAbove = start - st + i - j;
-               output[i]   = r0 + (input[blockAbove]   & mask);
-               output[i+1] = r1 + (input[blockAbove+1] & mask);
-               output[i+2] = r2 + (input[blockAbove+2] & mask);
-               output[i+3] = r3 + (input[blockAbove+3] & mask);
-               k += 4;
+               for (int i=j; i<endi; i+=4)
+               {
+                  int a0, a1, a2, a3;
+
+                  // VERTICAL: xi+ai
+                  if (y > 0)
+                  {
+                     final int blockAbove = i - j + start - st;
+                     a0 = input[blockAbove]   & mask;
+                     a1 = input[blockAbove+1] & mask;
+                     a2 = input[blockAbove+2] & mask;
+                     a3 = input[blockAbove+3] & mask;
+                  }
+                  else
+                  {
+                     a0 = DEFAULT_VALUE;
+                     a1 = DEFAULT_VALUE;
+                     a2 = DEFAULT_VALUE;
+                     a3 = DEFAULT_VALUE;
+                  }
+
+                  output[i]   = residue[k]   + a0;
+                  output[i+1] = residue[k+1] + a1;
+                  output[i+2] = residue[k+2] + a2;
+                  output[i+3] = residue[k+3] + a3;
+                  k += 4;
+               }
+            }
+         }
+         else
+         {
+            int line = 0;
+
+            for (int j=start; j<endj; j+=st)
+            {
+               final int endi = j + blockDim;
+
+               for (int i=endi-4; i>=j ; i-=4)
+               {
+                  k = line + i - j;
+                  int a0, a1, a2, a3;
+
+                  // VERTICAL: xi+ai
+                  if (y > 0)
+                  {
+                     final int blockAbove = i - j + start - st;
+                     a0 = input[blockAbove]   & mask;
+                     a1 = input[blockAbove+1] & mask;
+                     a2 = input[blockAbove+2] & mask;
+                     a3 = input[blockAbove+3] & mask;
+                  }
+                  else
+                  {
+                     a0 = DEFAULT_VALUE;
+                     a1 = DEFAULT_VALUE;
+                     a2 = DEFAULT_VALUE;
+                     a3 = DEFAULT_VALUE;
+                  }
+
+                  output[i]   = residue[k]   + a0;
+                  output[i+1] = residue[k+1] + a1;
+                  output[i+2] = residue[k+2] + a2;
+                  output[i+3] = residue[k+3] + a3;
+               }
+
+               line += blockDim;
             }
          }
       }
-      else if (mode == Mode.AVERAGE_UL)
+      else if ((mode == Mode.AVERAGE_HV) && ((direction & DIR_LEFT) != 0))
       {
          for (int j=start; j<endj; j+=st)
          {
@@ -772,44 +820,35 @@ public class IntraPredictor
 
             for (int i=j; i<endi; i+=4)
             {
-               final int xb = ((x>0) || (i>j)) ? input[i-1] & mask : 0;
-               int px0, px1, px2, px3;
+               final int b = (x > 0) ? input[j-1] & mask : DEFAULT_VALUE;
+               int a0, a1, a2, a3;
 
-               if (i >= st)
+               if (y > 0)
                {
-                  final int lineAbove = i - st;
-                  px0 = input[lineAbove]   & mask;
-                  px1 = input[lineAbove+1] & mask;
-                  px2 = input[lineAbove+2] & mask;
-                  px3 = input[lineAbove+3] & mask;
+                  final int blockAbove = start - st + i - j;
+                  a0 = input[blockAbove]   & mask;
+                  a1 = input[blockAbove+1] & mask;
+                  a2 = input[blockAbove+2] & mask;
+                  a3 = input[blockAbove+3] & mask;
                }
                else
                {
-                  px0 = 0;
-                  px1 = 0;
-                  px2 = 0;
-                  px3 = 0;
+                  a0 = DEFAULT_VALUE;
+                  a1 = DEFAULT_VALUE;
+                  a2 = DEFAULT_VALUE;
+                  a3 = DEFAULT_VALUE;
                }
 
-               final int r0 = residue[k];
-               final int r1 = residue[k+1];
-               final int r2 = residue[k+2];
-               final int r3 = residue[k+3];
-
-               // AVERAGE_UL: (xi,yi)+avg((xi,yi-1),(xi-1,yi))
-               final int x0 = r0 + ((xb + px0) >> 1);
-               final int x1 = r1 + ((x0 + px1) >> 1);
-               final int x2 = r2 + ((x1 + px2) >> 1);
-               final int x3 = r3 + ((x2 + px3) >> 1);
-               output[i]   = x0;
-               output[i+1] = x1;
-               output[i+2] = x2;
-               output[i+3] = x3;
+               // AVERAGE_HV_L: (xi,yi)+avg(ai, bi)
+               output[i]   = residue[k]   + ((b + a0) >> 1);
+               output[i+1] = residue[k+1] + ((b + a1) >> 1);
+               output[i+2] = residue[k+2] + ((b + a2) >> 1);
+               output[i+3] = residue[k+3] + ((b + a3) >> 1);
                k += 4;
             }
          }
       }
-      else if (mode == Mode.AVERAGE_UR)
+      else if ((mode == Mode.AVERAGE_HV) && ((direction & DIR_RIGHT) != 0))
       {
          int line = 0;
 
@@ -819,51 +858,42 @@ public class IntraPredictor
 
             for (int i=endi-4; i>=j ; i-=4)
             {
-               final int xc = ((x<xMax) || (i+4 < j-x+w)) ? input[i+4] & mask : 0;
+               final int c = (x < xMax) ? input[endi] & mask : DEFAULT_VALUE;
                k = line + i - j;
-               int px0, px1, px2, px3;
+               int a0, a1, a2, a3;
 
-               if (i >= st)
+               if (y > 0)
                {
-                  final int lineAbove = i - st;
-                  px0 = input[lineAbove]   & mask;
-                  px1 = input[lineAbove+1] & mask;
-                  px2 = input[lineAbove+2] & mask;
-                  px3 = input[lineAbove+3] & mask;
+                  final int blockAbove = start - st + i - j;
+                  a0 = input[blockAbove]   & mask;
+                  a1 = input[blockAbove+1] & mask;
+                  a2 = input[blockAbove+2] & mask;
+                  a3 = input[blockAbove+3] & mask;
                }
                else
                {
-                  px0 = 0;
-                  px1 = 0;
-                  px2 = 0;
-                  px3 = 0;
+                  a0 = DEFAULT_VALUE;
+                  a1 = DEFAULT_VALUE;
+                  a2 = DEFAULT_VALUE;
+                  a3 = DEFAULT_VALUE;
                }
 
-               final int r0 = residue[k];
-               final int r1 = residue[k+1];
-               final int r2 = residue[k+2];
-               final int r3 = residue[k+3];
-
-               // AVERAGE_UR: (xi,yi)+avg((xi,yi-1),(xi+1,yi))
-               final int x3 = r3 + ((xc + px3) >> 1);
-               final int x2 = r2 + ((x3 + px2) >> 1);
-               final int x1 = r1 + ((x2 + px1) >> 1);
-               final int x0 = r0 + ((x1 + px0) >> 1);
-               output[i]   = x0;
-               output[i+1] = x1;
-               output[i+2] = x2;
-               output[i+3] = x3;
+               // AVERAGE_HV_R: (xi,yi)+avg(bi, ci)
+               output[i]   = residue[k]   + ((c + a0) >> 1);
+               output[i+1] = residue[k+1] + ((c + a1) >> 1);
+               output[i+2] = residue[k+2] + ((c + a2) >> 1);
+               output[i+3] = residue[k+3] + ((c + a3) >> 1);
             }
 
             line += blockDim;
-         } 
+         }
       }
-      else if (mode == Mode.HORIZONTAL_L)
+      else if ((mode == Mode.HORIZONTAL) && ((direction & DIR_LEFT) != 0))
       {
          for (int j=start; j<endj; j+=st)
          {
             final int endi = j + blockDim;
-            final int b = (x > 0) ? input[j-1] & mask : 0;
+            final int b = (x > 0) ? input[j-1] & mask : DEFAULT_VALUE;
 
             for (int i=j; i<endi; i+=4)
             {
@@ -876,12 +906,12 @@ public class IntraPredictor
             }
          }
       }
-      else if (mode == Mode.HORIZONTAL_R)
+      else if ((mode == Mode.HORIZONTAL) && ((direction & DIR_RIGHT) != 0))
       {
          for (int j=start; j<endj; j+=st)
          {
             final int endi = j + blockDim;
-            final int c = (x < xMax) ? input[endi] & mask : 0;
+            final int c = (x < xMax) ? input[endi] & mask : DEFAULT_VALUE;
 
             for (int i=j; i<endi; i+=4)
             {
@@ -894,12 +924,12 @@ public class IntraPredictor
             }
          }
       }
-      else if ((mode == Mode.DC_L) || (mode == Mode.DC_R))
+      else if (mode == Mode.DC)
       {
          final int dc;
          final int above = start - st;
 
-         if (mode == Mode.DC_L)
+         if ((direction & DIR_LEFT) != 0)
          {
             // dc=ai+bi
             int dc_l = 0;
@@ -909,7 +939,7 @@ public class IntraPredictor
             {
                for (int i=0; i<blockDim; i++)
                   dc_l += (input[above+i] & mask);
-               
+
                sum += blockDim;
             }
 
@@ -917,11 +947,11 @@ public class IntraPredictor
             {
               for (int j=start; j<endj; j+=st)
                  dc_l += (input[j-1] & mask);
-               
+
                sum += blockDim;
             }
-            
-            dc = (sum == 0) ? 0 : (dc_l + (sum >> 1)) / sum;
+
+            dc = (sum == 0) ? DEFAULT_VALUE : (dc_l + (sum >> 1)) / sum;
          }
          else
          {
@@ -933,7 +963,7 @@ public class IntraPredictor
             {
               for (int i=0; i<blockDim; i++)
                  dc_r += (input[above+i] & mask);
-              
+
               sum += blockDim;
             }
 
@@ -941,11 +971,11 @@ public class IntraPredictor
             {
               for (int j=start; j<endj; j+=st)
                  dc_r += (input[j+blockDim] & mask);
-              
-              sum += blockDim;
-            }            
 
-            dc = (sum == 0) ? 0 : (dc_r + (sum >> 1)) / sum;
+              sum += blockDim;
+            }
+
+            dc = (sum == 0) ? DEFAULT_VALUE : (dc_r + (sum >> 1)) / sum;
          }
 
          for (int j=start; j<endj; j+=st)
@@ -973,12 +1003,14 @@ public class IntraPredictor
    // Base prediction on difference with nearby blocks using 'winner update' strategy
    // Return energy and update prediction argument
    private int computeReferenceSearch(int[] input, int x, int y,
-           int blockDim, int maxEnergy, Prediction prediction, int direction)
+           int maxEnergy, Prediction prediction, int direction)
    {
+      final int blockDim = prediction.blockDim;
+
       // Populate the set of neighboring candidate blocks
       this.getReferenceSearchBlocks(x, y, blockDim, 0, 0, direction,
               prediction.frame, ACTION_POPULATE, 0);
-      
+
       SearchBlockContext ctx = null;
       final int mask = (this.isRGB == true) ? 0xFF : -1;
       final int st = this.stride;
@@ -1013,7 +1045,7 @@ public class IntraPredictor
              nrj += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
              offs2 += 4;
          }
-         
+
          ctx.energy = nrj;
          ctx.line++;
 
@@ -1024,7 +1056,7 @@ public class IntraPredictor
 
       if (ctx == null)
          return MAX_ERROR;
-      
+
       // Return best result
       prediction.x = ctx.x;
       prediction.y = ctx.y;
@@ -1076,8 +1108,8 @@ public class IntraPredictor
       //    01 02 03 04 05    01 02 03 04 05    01 02 03 04 05
       //    06 07 08 09 10    06 07 08 09 10    06 07 08 09 10
       //       11 XX 12          11 XX                XX 11
-      // for dim!=4, LEFT+RIGHT step=>candidates: dim/1=>12, dim/2=>35, dim/4=>117, dim/8=>425
-      // for dim=4,  LEFT+RIGHT step=>candidates: dim/1=>12, dim/2=>35, dim/4=>117, dim/8=>117
+      // for dim!=4, LEFT+RIGHT steps=>candidates: dim/1=>12, dim/2=>35, dim/4=>117, dim/8=>425
+      // for dim=4,  LEFT+RIGHT steps=>candidates: dim/1=>12, dim/2=>35, dim/4=>117, dim/8=>117
       // LEFT or RIGHT = candidates(LEFT+RIGHT) - 1
       final int jstart = y - (blockDim << 1);
       int val = -1;
@@ -1103,11 +1135,13 @@ public class IntraPredictor
 
             if (action == ACTION_POPULATE)
             {
-               // Add to set sorted by residual energy (increasing)
+               // Add to set sorted by residual energy and coordinates
                this.set.add(SearchBlockContext.getContext(referenceFrame, i, j));
             }
             else if (action == ACTION_GET_INDEX)
             {
+               val++;
+
                if ((i == xr) && (j == yr))
                {
                   final int adjust = (((direction & DIR_LEFT) != 0) &&
@@ -1125,15 +1159,13 @@ public class IntraPredictor
 
                   return (val << 16) | positions;
                }
-
-               val++;
             }
             else if (action == ACTION_GET_COORD)
             {
+               val++;
+
                if (refIndex == val)
                   return (i<<16) | j;
-
-               val++;
             }
          }
       }
@@ -1187,15 +1219,14 @@ public class IntraPredictor
       @Override
       public int compareTo(SearchBlockContext c)
       {
-         int res = this.energy - c.energy;
+         if (c == null)
+            return 1;
 
-         if (res != 0)
-            return res;
+         if (this.energy != c.energy)
+            return this.energy - c.energy;
 
-         res = this.y - c.y;
-
-         if (res != 0)
-            return res;
+         if (this.y != c.y)
+            return this.y - c.y;
 
          return this.x - c.x;
       }
@@ -1235,6 +1266,7 @@ public class IntraPredictor
 
    public static class Prediction
    {
+      public int blockDim;
       public int energy;
       public int[] frame;
       public int[] residue;
@@ -1251,6 +1283,7 @@ public class IntraPredictor
             throw new IllegalArgumentException("The maximum block dimension must be a multiple of 8");
 
          this.residue = new int[maxBlockDim*maxBlockDim];
+         this.blockDim = maxBlockDim;
       }
 
 
@@ -1260,6 +1293,7 @@ public class IntraPredictor
          this.x = x;
          this.y = y;
          this.residue = new int[blockDim*blockDim];
+         this.blockDim = blockDim;
       }
    }
 }
