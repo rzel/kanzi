@@ -24,40 +24,35 @@ import kanzi.entropy.ExpGolombEncoder;
 // Encoder for residue block used before final entropy coding step
 public final class ResidueBlockEncoder implements EntropyEncoder
 {
-    private final int scoreThreshold;
+    private static final int RUN_IDX   = 0;
+    private static final int COEFF_IDX = 1;
+
     private final OutputBitStream stream;
-    private final ExpGolombEncoder gEncoder;
-    private final ExpGolombEncoder testEncoder;
+    private final OutputBitStream testStream;
+    private final EntropyEncoder[] encoders;
+    private final EntropyEncoder[] testEncoders;
     private final int[][] scanTables;
-    private final int rleThreshold;
     private final int maxNonZeros;
     private final int logThresholdNonZeros;
     private final int blockSize;
+    private final int scoreThreshold;
 
     private static final int DEFAULT_SKIP_SCORE = 0;
-    private static final int RLE_THRESHOLD = 2;
 
 
     public ResidueBlockEncoder(OutputBitStream stream, int blockDim)
     {
-        this(stream, blockDim, blockDim*blockDim-1, RLE_THRESHOLD, DEFAULT_SKIP_SCORE);
+        this(stream, blockDim, blockDim*blockDim, DEFAULT_SKIP_SCORE);
     }
 
 
     public ResidueBlockEncoder(OutputBitStream stream, int blockDim, int skipThreshold)
     {
-        this(stream, blockDim, blockDim*blockDim-1, RLE_THRESHOLD, skipThreshold);
+        this(stream, blockDim, blockDim*blockDim, skipThreshold);
     }
 
 
     public ResidueBlockEncoder(OutputBitStream stream, int blockDim, int maxNonZeros, int skipThreshold)
-    {
-        this(stream, blockDim, maxNonZeros, RLE_THRESHOLD, skipThreshold);
-    }
-
-
-    public ResidueBlockEncoder(OutputBitStream stream, int blockDim, int maxNonZeros,
-            int rleThreshold, int skipThreshold)
     {
         if (stream == null)
           throw new NullPointerException("Invalid null stream parameter");
@@ -68,14 +63,16 @@ public final class ResidueBlockEncoder implements EntropyEncoder
         if (skipThreshold < 0) // skipThreshold = 0 => skip all blocks
           throw new IllegalArgumentException("Invalid skipThreshold parameter (must be a least 0)");
 
-        if ((maxNonZeros < 1) || (maxNonZeros >= blockDim*blockDim))
-          throw new IllegalArgumentException("Invalid maxNonZeros parameter (must be in [1.."+(blockDim*blockDim-1)+"])");
+        if ((maxNonZeros < 1) || (maxNonZeros > blockDim*blockDim))
+          throw new IllegalArgumentException("Invalid maxNonZeros parameter (must be in [1.."+(blockDim*blockDim)+"])");
 
         this.scoreThreshold = skipThreshold;
         this.stream = stream;
-        this.gEncoder = new ExpGolombEncoder(this.stream, false);
-        this.testEncoder = new ExpGolombEncoder(new EmptyOutputBitStream(), false);
-        this.rleThreshold = rleThreshold;
+        this.encoders = new EntropyEncoder[] { new ExpGolombEncoder(this.stream, false),
+            new ExpGolombEncoder(this.stream, true) };
+        this.testStream = new NullOutputBitStream();
+        this.testEncoders = new EntropyEncoder[] { new ExpGolombEncoder(this.testStream, false),
+            new ExpGolombEncoder(this.testStream, true) };
         this.maxNonZeros = maxNonZeros;
         this.blockSize = blockDim*blockDim;
         this.scanTables = (this.blockSize == 64) ? Scan.TABLES_64 : Scan.TABLES_16;
@@ -100,9 +97,10 @@ public final class ResidueBlockEncoder implements EntropyEncoder
 
     
     @Override
+    // Input array contains byte encoded shorts (16 bits)
     public int encode(byte[] data, int blkptr, int len)
     {
-       if (len != this.blockSize)
+       if (len != (this.blockSize << 1))
           return -1;
 
        long before, after;
@@ -122,9 +120,9 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           if ((maxCoeff <= 1) && (score <= this.scoreThreshold))
              return this.stream.writeBits(0, this.logThresholdNonZeros);
 
-          before = this.testEncoder.getBitStream().written();
-          this.encodeDirectional(this.testEncoder, data, blkptr, nz, Scan.ORDER_H, maxCoeff);
-          after = this.testEncoder.getBitStream().written();
+          before = this.testStream.written();
+          this.encodeDirectional(this.testEncoders, data, blkptr, nz, Scan.ORDER_H, maxCoeff);
+          after = this.testStream.written();
 
           if ((after - before) < min)
           {
@@ -146,9 +144,9 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           if ((maxCoeff <= 1) && (score <= this.scoreThreshold))
              return this.stream.writeBits(0, this.logThresholdNonZeros);
 
-          before = this.testEncoder.getBitStream().written();
-          this.encodeDirectional(this.testEncoder, data, blkptr, nz, Scan.ORDER_V, maxCoeff);
-          after = this.testEncoder.getBitStream().written();
+          before = this.testStream.written();
+          this.encodeDirectional(this.testEncoders, data, blkptr, nz, Scan.ORDER_V, maxCoeff);
+          after = this.testStream.written();
 
           if ((after - before) < min)
           {
@@ -170,9 +168,9 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           if ((maxCoeff <= 1) && (score <= this.scoreThreshold))
              return this.stream.writeBits(0, this.logThresholdNonZeros);
 
-          before = this.testEncoder.getBitStream().written();
-          this.encodeDirectional(this.testEncoder, data, blkptr, nz, Scan.ORDER_Z, maxCoeff);
-          after = this.testEncoder.getBitStream().written();
+          before = this.testStream.written();
+          this.encodeDirectional(this.testEncoders, data, blkptr, nz, Scan.ORDER_Z, maxCoeff);
+          after = this.testStream.written();
 
           if ((after - before) < min)
           {
@@ -194,9 +192,9 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           if ((maxCoeff <= 1) && (score <= this.scoreThreshold))
              return this.stream.writeBits(0, this.logThresholdNonZeros);
 
-          before = this.testEncoder.getBitStream().written();
-          this.encodeDirectional(this.testEncoder, data, blkptr, nz, Scan.ORDER_HV, maxCoeff);
-          after = this.testEncoder.getBitStream().written();
+          before = this.testStream.written();
+          this.encodeDirectional(this.testEncoders, data, blkptr, nz, Scan.ORDER_HV, maxCoeff);
+          after = this.testStream.written();
 
           if ((after - before) < min)
           {
@@ -207,7 +205,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           }
        }
 
-       return this.encodeDirectional(this.gEncoder, data, blkptr, nonZeros, scan_order, max);
+       return this.encodeDirectional(this.encoders, data, blkptr, nonZeros, scan_order, max);
     }
 
 
@@ -217,21 +215,23 @@ public final class ResidueBlockEncoder implements EntropyEncoder
        int end = this.blockSize - 1;
        int max = 0;
        int idx = 1; // exclude DC coefficient
-       int score = (data[blkptr] == 0) ? 0 : 5; // DC coefficient
-       int nonZeros = (data[blkptr] == 0) ? 0 : 1; // DC coefficient
+       int dc = (data[blkptr] << 8) | (data[blkptr+1] & 0xFF);
+       int score = (dc == 0) ? 0 : 5; // DC coefficient
+       int nonZeros = (dc == 0) ? 0 : 1; // DC coefficient
 
        // Find last non zero coefficient
-       while ((end > 0) && (data[blkptr+scanTable[end]] == 0))
+       while ((end > 0) && (data[blkptr+(scanTable[end]<<1)] == 0) && (data[blkptr+(scanTable[end]<<1)+1] == 0))
           end--;
 
        while (idx <= end)
        {
-          int val = data[blkptr+scanTable[idx++]];
+          int offs = blkptr + (scanTable[idx++]<<1);
+          int val = (data[offs] << 8) | (data[offs+1] & 0xFF);
 
           if (val == 0)
           {
              // Detect runs of 0
-             while ((idx < end) && (data[blkptr+scanTable[idx]] == 0))
+             while ((idx < end) && (data[blkptr+(scanTable[idx]<<1)] == 0) && (data[blkptr+(scanTable[idx]<<1)+1] == 0))
                 idx++;
           }
           else
@@ -256,14 +256,16 @@ public final class ResidueBlockEncoder implements EntropyEncoder
     }
 
 
-    private int encodeDirectional(EntropyEncoder ee, byte[] data, int blkptr,
+    private int encodeDirectional(EntropyEncoder[] encoders, byte[] data, int blkptr,
             int nonZeros, byte scan_order, int max)
     {
        final int thresholdNonZeros = (1 << this.logThresholdNonZeros) - 1;
        int threshold = thresholdNonZeros;
        int log = this.logThresholdNonZeros;
        int nz = nonZeros;
-       OutputBitStream obs = ee.getBitStream();
+       final EntropyEncoder runEncoder = encoders[RUN_IDX];
+       final EntropyEncoder coeffEncoder = encoders[COEFF_IDX];
+       final OutputBitStream obs = coeffEncoder.getBitStream();
 
        while (nz >= threshold)
        {
@@ -281,17 +283,19 @@ public final class ResidueBlockEncoder implements EntropyEncoder
          return -1;
 
        // Encode DC coefficient
-       int val = data[blkptr];
+       int val = (data[blkptr] << 8) | (data[blkptr+1] & 0xFF);
 
        if (val == 0)
        {
-          ee.encodeByte((byte) val);
+          coeffEncoder.encodeByte((byte) 0);
+          coeffEncoder.encodeByte((byte) 0);
        }
        else
        {
           final int sign = val >>> 31;
           val = (val + (val >> 31)) ^ (val >> 31); //abs
-          ee.encodeByte((byte) val);
+          coeffEncoder.encodeByte((byte) (val>>8));
+          coeffEncoder.encodeByte((byte) (val&0xFF));
           obs.writeBit(sign);
           nonZeros--;
        }
@@ -326,7 +330,8 @@ public final class ResidueBlockEncoder implements EntropyEncoder
        // threshold else length+1 zeros followed by remainder (exp golomb encoded).
        while ((nonZeros > 0) && (res == true))
        {
-          val = data[blkptr+scanTable[idx]];
+          int offs = blkptr + (scanTable[idx]<<1);
+          val = (data[offs] << 8) | (data[offs+1] & 0xFF);
           idx++;
 
           if (val == 0)
@@ -336,34 +341,37 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           }
 
           final int sign = val >>> 31;
-          final int remaining = run - this.rleThreshold;
 
           if (mode == 0)
           {
-             res &= ee.encodeByte((byte) run);
+             res &= runEncoder.encodeByte((byte) run);
           }
           else
           {
              // Write run length
-             if (remaining >= 0)
+             if (run > 2)
              {
-                res &= (obs.writeBits(0, this.rleThreshold) == this.rleThreshold);
-                res &= ee.encodeByte((byte) remaining);
+                res &= (obs.writeBits(0, 2) == 2);
+                res &= runEncoder.encodeByte((byte) (run-2));
              }
-             else
+             else // run = 0, 1 or 2
              {
                 if (run > 0)
-                   res &= (obs.writeBits(0, run) == run);
+                   res &= (obs.writeBits(0, run) == run); // short run (len <= 2)
 
-                // Signal end of run
+                // Signal end of run (same as ee.encodeByte(0))
                 obs.writeBit(1);
              }
 
              val = (val + (val >> 31)) ^ (val >> 31); //abs
              val--;
 
-             if (mode == 3) // / Exp golomb : encoded as single bit '1' if x=1 (=> val=0)
-                res &= ee.encodeByte((byte) val);
+             if (mode == 3)
+             {
+                // Exp golomb : encoded as single bit '1' if x=1 (=> val=0)
+                res &= coeffEncoder.encodeByte((byte) (val>>8));
+                res &= coeffEncoder.encodeByte((byte) (val&0xFF));
+             }
              else // encoded as n bits
                 res &= (obs.writeBits(val, mode) == mode);
           }
@@ -374,7 +382,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
           nonZeros--;
        }
 
-       return this.blockSize;
+       return this.blockSize << 1;
     }
 
 
@@ -399,7 +407,7 @@ public final class ResidueBlockEncoder implements EntropyEncoder
 
 
     // Does nothing on write but incrementing the number of bits written
-    private static class EmptyOutputBitStream implements OutputBitStream
+    private static class NullOutputBitStream implements OutputBitStream
     {
       private boolean closed;
       private long size;

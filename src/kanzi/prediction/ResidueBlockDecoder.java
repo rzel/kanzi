@@ -23,29 +23,23 @@ import kanzi.entropy.ExpGolombDecoder;
 // Decoder for residue block used after initial entropy coding step
 public final class ResidueBlockDecoder implements EntropyDecoder
 {
+    private static final int RUN_IDX   = 0;
+    private static final int COEFF_IDX = 1;
+
     private final InputBitStream stream;
-    private final ExpGolombDecoder gDecoder;
+    private final EntropyDecoder[] decoders;
     private final int[][] scanTables;
-    private final int rleThreshold;
     private final int logThresholdNonZeros;
     private final int blockSize;
-
-    private static final int RLE_THRESHOLD = 2;
 
 
     public ResidueBlockDecoder(InputBitStream stream, int blockDim)
     {
-        this(stream, blockDim, blockDim*blockDim-1, RLE_THRESHOLD);
+        this(stream, blockDim, blockDim*blockDim-1);
     }
 
 
     public ResidueBlockDecoder(InputBitStream stream, int blockDim, int maxNonZeros)
-    {
-        this(stream, blockDim, maxNonZeros, RLE_THRESHOLD);
-    }
-
-
-    public ResidueBlockDecoder(InputBitStream stream, int blockDim, int maxNonZeros, int rleThreshold)
     {
         if (stream == null)
           throw new NullPointerException("Invalid null stream parameter");
@@ -57,8 +51,8 @@ public final class ResidueBlockDecoder implements EntropyDecoder
           throw new IllegalArgumentException("Invalid maxNonZeros parameter (must be in [1.."+(blockDim*blockDim-1)+"]");
 
         this.stream = stream;
-        this.gDecoder = new ExpGolombDecoder(this.stream, false);
-        this.rleThreshold = rleThreshold;
+        this.decoders = new EntropyDecoder[] { new ExpGolombDecoder(this.stream, false),
+           new ExpGolombDecoder(this.stream, true) };
         this.blockSize = blockDim*blockDim;
         this.scanTables = (this.blockSize == 64) ? Scan.TABLES_64 : Scan.TABLES_16;
 
@@ -81,14 +75,16 @@ public final class ResidueBlockDecoder implements EntropyDecoder
     }
 
 
-    // Decode the residue data, output to provided array
     @Override
+    // Output array contains byte encoded shorts (16 bits)
     public int decode(byte[] data, int blkptr, int len)
     {
-       if (len != this.blockSize)
+       if (len != (this.blockSize << 1))
           return -1;
        
-       final int end = blkptr + this.blockSize;
+       final int end = blkptr + len;
+       final EntropyDecoder runDecoder = decoders[RUN_IDX];
+       final EntropyDecoder coeffDecoder = decoders[COEFF_IDX];
 
        while (blkptr < end)
        {
@@ -98,21 +94,10 @@ public final class ResidueBlockDecoder implements EntropyDecoder
           if (nz == 0)
           {
               // Block skipped
-              final int endi = blkptr + this.blockSize;
+              while (blkptr < end)
+                 data[blkptr++] = 0;
 
-              for (int i=blkptr; i<endi; i+=8)
-              {
-                 data[i]   = 0;
-                 data[i+1] = 0;
-                 data[i+2] = 0;
-                 data[i+3] = 0;
-                 data[i+4] = 0;
-                 data[i+5] = 0;
-                 data[i+6] = 0;
-                 data[i+7] = 0;
-              }
-
-              return this.blockSize;
+              return len;
           }
 
           final int thresholdNonZeros = (1 << this.logThresholdNonZeros) - 1;
@@ -129,8 +114,7 @@ public final class ResidueBlockDecoder implements EntropyDecoder
           }          
 
           // Decode DC coefficient
-          int val = this.gDecoder.decodeByte();
-          //int val = (int) this.stream.readBits(7);
+          int val = (coeffDecoder.decodeByte() << 8) | (coeffDecoder.decodeByte() & 0xFF);
 
           if (val != 0)
           {
@@ -140,17 +124,16 @@ public final class ResidueBlockDecoder implements EntropyDecoder
              nonZeros--;
           }
 
-          data[blkptr] = (byte) val;
+          data[blkptr]   = (byte) (val >> 8);
+          data[blkptr+1] = (byte) (val & 0xFF);
 
           // Early exit if DC is the only non zero coefficient
           if (nonZeros == 0)
           {
-             final int endi = blkptr + this.blockSize;
-
-             for (int i=blkptr+1; i<endi; i++)
+             for (int i=blkptr+2; i<end; i++)
                 data[i] = 0;
 
-             return this.blockSize;
+             return len;
           }
 
           // Decode decoding mode (for AC coefficients)
@@ -171,44 +154,54 @@ public final class ResidueBlockDecoder implements EntropyDecoder
           {
              if (mode == 0)
              {
-                run = this.gDecoder.decodeByte();
+                run = runDecoder.decodeByte();
              }
              else
              {
-                while ((run < this.rleThreshold) && (this.stream.readBit() == 0))
+                while ((run < 2) && (this.stream.readBit() == 0))
                    run++;
 
                 // Add remainder to get full value of run length
-                if (run == this.rleThreshold)
-                   run += this.gDecoder.decodeByte();
+                if (run == 2)
+                   run += runDecoder.decodeByte();
              }
 
              while (run-- > 0)
-                data[blkptr+scanTable[idx++]] = 0;
+             {
+                data[blkptr+(scanTable[idx]<<1)] = 0;
+                data[blkptr+(scanTable[idx]<<1)+1] = 0;
+                idx++;
+             }
 
              val = 1;
 
              if (mode == 3) //decoded as exp-golomb
-                val += this.gDecoder.decodeByte();
+                val += ((coeffDecoder.decodeByte() << 8) | (coeffDecoder.decodeByte() & 0xFF));
              else if (mode != 0) // decoded as n bits
                 val += this.stream.readBits(mode);
 
              if (this.stream.readBit() == 1)
                 val = -val;
 
-             data[blkptr+scanTable[idx++]] = (byte) val;
+             data[blkptr+(scanTable[idx]<<1)] = (byte) (val >> 8);
+             data[blkptr+(scanTable[idx]<<1)+1] = (byte) (val & 0xFF);
+             idx++;
              run = 0;
              nonZeros--;
           }
 
           // Add remaining 0s (not encoded)
           while (idx < this.blockSize)
-             data[blkptr+scanTable[idx++]] = 0;
+          {
+             data[blkptr+(scanTable[idx]<<1)] = 0;
+             data[blkptr+(scanTable[idx]<<1)+1] = 0;
+             idx++;
+          }
 
-          blkptr += this.blockSize;
+          blkptr += len;
        }
 
-       return this.blockSize;
+       return len;
     }
 
 
