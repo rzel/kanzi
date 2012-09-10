@@ -77,16 +77,19 @@ public class QuadTreeGenerator
    // Input nodes are reused and new nodes are added to the input collection (if needed).
    public Collection<Node> decomposeNodes(Collection<Node> list, int[] input, int offs, int nbNodes)
    {
-      if (nbNodes < 4)
-         throw new IllegalArgumentException("The target number of nodes must be at least 4");
+      if (nbNodes < list.size())
+         throw new IllegalArgumentException("The target number of nodes must be at least list.size()");
 
+      if (nbNodes == list.size())
+         return list;
+      
       return this.decompose(list, input, offs, nbNodes, -1);
    }
 
 
    // Quad-tree decomposition of the input image based on variance of each node
    // The decomposition stops when all the nodes in the tree has a variance lower
-   // than or equak to the target variance or the minimum node dimension has been
+   // than or equal to the target variance or the minimum node dimension has been
    // reached.
    // Input nodes are reused and new nodes are added to the input collection (if needed).
    public Collection<Node> decomposeVariance(Collection<Node> list, int[] input, int offs, int variance)
@@ -104,6 +107,7 @@ public class QuadTreeGenerator
       final TreeSet<Node> processed = new TreeSet<Node>();
       final TreeSet<Node> nodes = new TreeSet<Node>();
       final int st = this.stride;
+      offs += this.offset;
 
       for (Node node : list)
       {
@@ -115,27 +119,13 @@ public class QuadTreeGenerator
 
       if (nodes.isEmpty() == true)
       {
-         final int w = this.width;
-         final int h = this.height;
-         final int y0 = (this.offset + offs) / this.stride;
-         final int x0 = (this.offset + offs) - y0*this.stride;
+         final int y0 = offs / this.stride;
+         final int x0 = offs - y0*this.stride;
 
-         // First level
-         Node root1 = getNode(null, x0, y0, w>>1, h>>1);
-         Node root2 = getNode(null, x0+(w>>1), y0, w>>1, h>>1);
-         Node root3 = getNode(null, x0, y0+(h>>1), w>>1, h>>1);
-         Node root4 = getNode(null, x0+(w>>1), y0+(h>>1), w>>1, h>>1);
-
-         root1.computeVariance(input, st, this.isRGB);
-         root2.computeVariance(input, st, this.isRGB);
-         root3.computeVariance(input, st, this.isRGB);
-         root4.computeVariance(input, st, this.isRGB);
-
-         // Add to set of nodes sorted by decreasing variance
-         nodes.add(root1);
-         nodes.add(root2);
-         nodes.add(root3);
-         nodes.add(root4);
+         // Level 0 (root node)
+         Node root = getNode(null, x0, y0, this.width, this.height, this.isRGB);
+         root.computeVariance(input, st);
+         nodes.add(root);
       }
 
       while ((nodes.size() > 0) && ((nbNodes < 0) || (processed.size() + nodes.size() < nbNodes)))
@@ -155,19 +145,22 @@ public class QuadTreeGenerator
          }
 
          // Create 4 children, taking into account odd dimensions
-         final int pw = parent.w + 1;
-         final int ph = parent.h + 1;
-         final int cw = pw >> 1;
-         final int ch = ph >> 1;
-         Node node1 = getNode(parent, parent.x, parent.y, cw, ch);
-         Node node2 = getNode(parent, parent.x+parent.w-cw, parent.y, cw, ch);
-         Node node3 = getNode(parent, parent.x, parent.y+parent.h-ch, cw, ch);
-         Node node4 = getNode(parent, parent.x+parent.w-cw, parent.y+parent.h-ch, cw, ch);
+         final int pw = parent.w;
+         final int ph = parent.h;
+         final int px = parent.x;
+         final int py = parent.y;
+         final int cw = (pw + 1) >> 1;
+         final int ch = (ph + 1) >> 1;
+         
+         Node node1 = getNode(parent, px, py, cw, ch, this.isRGB);
+         Node node2 = getNode(parent, px+pw-cw, py, cw, ch, this.isRGB);
+         Node node3 = getNode(parent, px, py+ph-ch, cw, ch, this.isRGB);
+         Node node4 = getNode(parent, px+pw-cw, py+ph-ch, cw, ch, this.isRGB);
 
-         node1.computeVariance(input, st, this.isRGB);
-         node2.computeVariance(input, st, this.isRGB);
-         node3.computeVariance(input, st, this.isRGB);
-         node4.computeVariance(input, st, this.isRGB);
+         node1.computeVariance(input, st);
+         node2.computeVariance(input, st);
+         node3.computeVariance(input, st);
+         node4.computeVariance(input, st);
 
          // Add to set of nodes sorted by decreasing variance
          nodes.add(node1);
@@ -175,19 +168,20 @@ public class QuadTreeGenerator
          nodes.add(node3);
          nodes.add(node4);
       }
-
+      
       nodes.addAll(processed);
       list.addAll(nodes);
       return list;
    }
 
 
-   public static Node getNode(Node parent, int x, int y, int w, int h)
+   public static Node getNode(Node parent, int x, int y, int w, int h, boolean isRGB)
    {
-      return new Node(parent, x, y, w, h);
+      // TODO: optimize allocation
+      return new Node(parent, x, y, w, h, isRGB);
    }
 
-   
+
    public static class Node implements Comparable<Node>
    {
       public final Node parent;
@@ -196,14 +190,16 @@ public class QuadTreeGenerator
       public final int w;
       public final int h;
       public int variance;
+      public final boolean isRGB;
 
-      private Node(Node parent, int x, int y, int w, int h)
+      private Node(Node parent, int x, int y, int w, int h, boolean isRGB)
       {
          this.parent = parent;
          this.x = x;
          this.y = y;
          this.w = w;
          this.h = h;
+         this.isRGB = isRGB;
       }
 
 
@@ -269,9 +265,9 @@ public class QuadTreeGenerator
       }
 
 
-      int computeVariance(int[] buffer, int stride, boolean isRGB)
+      int computeVariance(int[] buffer, int stride)
       {
-         return (isRGB == true) ? this.computeVarianceRGB(buffer, stride) :
+         return (this.isRGB == true) ? this.computeVarianceRGB(buffer, stride) :
              this.computeVarianceY(buffer, stride);
       }
 
@@ -280,7 +276,7 @@ public class QuadTreeGenerator
       {
          final int iend = this.x + this.w;
          final int jend = this.y + this.h;
-         final int len = this.w * this.h;
+         final long len = this.w * this.h;
          long sq_sumR = 0, sq_sumB = 0, sq_sumG = 0;
          long sumR = 0, sumG = 0, sumB = 0;
          int offs = this.y * stride;
@@ -308,6 +304,7 @@ public class QuadTreeGenerator
          final long vG = (sq_sumG - ((sumG * sumG) / len));
          final long vB = (sq_sumB - ((sumB * sumB) / len));
          this.variance = (int) ((vR + vG + vB) / (3 * len));
+
          return this.variance;
       }
 
@@ -316,11 +313,11 @@ public class QuadTreeGenerator
       {
          final int iend = this.x + this.w;
          final int jend = this.y + this.h;
-         final int len = this.w * this.h;
+         final long len = this.w * this.h;
          long sq_sum = 0;
          long sum = 0;
          int offs = this.y * stride;
-
+         
          for (int j=this.y; j<jend; j++)
          {
             for (int i=this.x; i<iend; i++)
