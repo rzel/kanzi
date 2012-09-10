@@ -28,9 +28,12 @@ import kanzi.EntropyDecoder;
 import kanzi.IndexedByteArray;
 import kanzi.InputBitStream;
 import kanzi.bitstream.DefaultInputBitStream;
+import kanzi.entropy.BinaryEntropyDecoder;
+import kanzi.entropy.FPAQEntropyDecoder;
+import kanzi.entropy.FPAQPredictor;
 import kanzi.entropy.HuffmanDecoder;
 import kanzi.entropy.NullEntropyDecoder;
-import kanzi.entropy.PAQEntropyDecoder;
+import kanzi.entropy.PAQPredictor;
 import kanzi.entropy.RangeDecoder;
 import kanzi.function.BlockCodec;
 
@@ -125,7 +128,6 @@ public class BlockDecompressor implements Runnable, Callable<Long>
 
          final char entropyType = (char) ibs.readBits(8);
          final int blockSize = (int) ibs.readBits(24);
-         long read = ibs.read();
 
          if ((blockSize < 0) || (blockSize > 16 * 1024 * 1024 - 7))
          {
@@ -136,32 +138,46 @@ public class BlockDecompressor implements Runnable, Callable<Long>
          byte[] buffer = new byte[blockSize+7];
          IndexedByteArray iba = new IndexedByteArray(buffer, 0);
 
-         if (this.debug == true)
-         {
-            String strEntropy = "None";
+         printOut("Block size set to "+blockSize, this.debug);
 
-            if (entropyType == 'H')
-               strEntropy = "Huffman";
-            else if (entropyType == 'R')
-               strEntropy = "Range";
-            else if (entropyType == 'P')
-               strEntropy = "PAQ";
-
-           printOut("Entropy codec: " + strEntropy, !this.silent);
-           printOut("Block size: " + blockSize, !this.silent);
-         }
+         if (entropyType == 'H')
+           printOut("Using Huffman entropy codec", this.debug);
+         else if (entropyType == 'R')
+           printOut("Using Range entropy codec", this.debug);
+         else if (entropyType == 'P')
+           printOut("Using PAQ entropy codec", this.debug);
+         else if (entropyType == 'F')
+           printOut("Using FPAQ entropy codec", this.debug);
+         else
+           printOut("Using no entropy codec", this.debug);
 
          // Decode next block
          do
          {
-            if (entropyType == 'H')
-               entropyDecoder = new HuffmanDecoder(ibs);
-            else if (entropyType == 'R')
-               entropyDecoder = new RangeDecoder(ibs);
-            else if (entropyType == 'P')
-               entropyDecoder = new PAQEntropyDecoder(ibs);
-            else
-               entropyDecoder = new NullEntropyDecoder(ibs);
+            switch (entropyType) 
+            {
+               // Each block is decoded separately
+               // Rebuild the entropy decoder to reset block statistics
+               case 'H' :
+                  entropyDecoder = new HuffmanDecoder(ibs); 
+                  break;
+                 
+               case 'R' :
+                  entropyDecoder = new RangeDecoder(ibs);
+                  break;
+                 
+               case 'P' :
+                  entropyDecoder = new BinaryEntropyDecoder(ibs, new PAQPredictor());
+                  break;
+                 
+               case 'F' :
+                  entropyDecoder = new FPAQEntropyDecoder(ibs, new FPAQPredictor());
+                  break;
+                 
+               default :
+                  if (entropyDecoder == null)
+                     entropyDecoder = new NullEntropyDecoder(ibs);
+            }
 
             iba.index = 0;
             long before = System.nanoTime();
@@ -176,12 +192,12 @@ public class BlockDecompressor implements Runnable, Callable<Long>
             }
 
             // Display block size before and after entropy decoding + block transform
-            printOut("Block "+step+": "+((ibs.read()-read)>>3)+"=>"+decoded, this.debug);
+            printOut("Block "+step+": "+decoded+" byte(s)", this.debug);
 
-            read = ibs.read();
             fos.write(iba.array, 0, decoded);
             sum += decoded;
             step++;
+            entropyDecoder.dispose();
          }
          while (decoded != 0);
          
@@ -195,7 +211,7 @@ public class BlockDecompressor implements Runnable, Callable<Long>
       }
       catch (Exception e)
       {
-         System.err.println("An unexpected condition happened. Exiting ,,,");
+         System.err.println("An unexpected condition happened. Exiting ...");
          e.printStackTrace();
          return -1L;
       }
@@ -288,4 +304,5 @@ public class BlockDecompressor implements Runnable, Callable<Long>
     {
        if ((print == true) && (msg != null))
           System.out.println(msg);
-    }}
+    } 
+}

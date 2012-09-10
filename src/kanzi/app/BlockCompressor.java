@@ -25,9 +25,12 @@ import kanzi.EntropyEncoder;
 import kanzi.IndexedByteArray;
 import kanzi.OutputBitStream;
 import kanzi.bitstream.DefaultOutputBitStream;
+import kanzi.entropy.BinaryEntropyEncoder;
+import kanzi.entropy.FPAQEntropyEncoder;
+import kanzi.entropy.FPAQPredictor;
 import kanzi.entropy.HuffmanEncoder;
 import kanzi.entropy.NullEntropyEncoder;
-import kanzi.entropy.PAQEntropyEncoder;
+import kanzi.entropy.PAQPredictor;
 import kanzi.entropy.RangeEncoder;
 import kanzi.function.BlockCodec;
 
@@ -106,10 +109,12 @@ public class BlockCompressor implements Runnable, Callable<Long>
 
          if (this.entropyType == 'H')
            printOut("Using Huffman entropy codec", this.debug);
-         else if(this.entropyType == 'R')
+         else if (this.entropyType == 'R')
            printOut("Using Range entropy codec", this.debug);
-         else if(this.entropyType == 'P')
+         else if (this.entropyType == 'P')
            printOut("Using PAQ entropy codec", this.debug);
+         else if (this.entropyType == 'F')
+           printOut("Using FPAQ entropy codec", this.debug);
          else
            printOut("Using no entropy codec", this.debug);
 
@@ -117,7 +122,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
          OutputBitStream obs = new DefaultOutputBitStream(fos, 32768);
 
          // Encode
-         EntropyEncoder entropyCoder;
+         EntropyEncoder entropyCoder = null;
          File input = new File(this.fileName);
          FileInputStream fis = new FileInputStream(input);
          long delta = 0L;
@@ -141,14 +146,30 @@ public class BlockCompressor implements Runnable, Callable<Long>
 
          while ((len = fis.read(iba.array, 0, this.blockSize)) > 0)
          {
-            if (this.entropyType == 'H')
-               entropyCoder = new HuffmanEncoder(obs);
-            else if (this.entropyType == 'R')
-               entropyCoder = new RangeEncoder(obs);
-            else if (this.entropyType == 'P')
-               entropyCoder = new PAQEntropyEncoder(obs);
-            else
-               entropyCoder = new NullEntropyEncoder(obs);
+            // Each block is encoded separately
+            // Rebuild the entropy encoder to reset block statistics
+            switch (this.entropyType)
+            {
+               case 'H' :  
+                  entropyCoder = new HuffmanEncoder(obs);
+                  break;
+                  
+               case 'R' :  
+                  entropyCoder = new RangeEncoder(obs);
+                  break;
+                  
+               case 'P' :  
+                  entropyCoder = new BinaryEntropyEncoder(obs, new PAQPredictor());
+                  break;
+                  
+               case 'F' :  
+                  entropyCoder = new FPAQEntropyEncoder(obs, new FPAQPredictor());
+                  break;
+                  
+               default :
+                  if (entropyCoder == null)
+                     entropyCoder = new NullEntropyEncoder(obs);
+            }
 
             read += len;
             long before = System.nanoTime();
@@ -165,8 +186,8 @@ public class BlockCompressor implements Runnable, Callable<Long>
             }
 
             // Display the block size before and after block transform + entropy coding
-            printOut("Block "+step+": "+len+"=>"+
-                   ((obs.written()-written)>>3)+" ("+
+            printOut("Block "+step+": "+
+                   ((obs.written()-written)>>3)+" bytes ("+
                    ((obs.written()-written)*100/(len<<3))+"%)", this.debug);
 
             written = obs.written();
@@ -197,7 +218,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
        }
        catch (Exception e)
        {
-          System.err.println("An unexpected condition happened. Exiting ,,,");
+          System.err.println("An unexpected condition happened. Exiting ...");
           e.printStackTrace();
           return -1L;
        }
@@ -226,7 +247,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
                printOut("-overwrite        : overwrite the output file if it already exists", true);
                printOut("-file=<filename>  : name of the input file to encode or decode", true);
                printOut("-block=<size>     : size of the block (max 16 MB / default 100 KB)", true);
-               printOut("-entropy=         : Entropy codec to use [None|Huffman|Range|PAQ]", true);
+               printOut("-entropy=         : Entropy codec to use [None|Huffman|Range|PAQ|FPAQ]", true);
                System.exit(0);
            }
            else if (arg.equals("-debug"))
@@ -257,6 +278,8 @@ public class BlockCompressor implements Runnable, Callable<Long>
                  entropyType = 'R';
               else if ("PAQ".equals(strVal))
                  entropyType = 'P';
+              else if ("FPAQ".equals(strVal))
+                 entropyType = 'F';
 
               if (entropyType == 0)
                  System.err.println("Invalid entropy codec provided: "+arg.substring(9).trim());
