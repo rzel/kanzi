@@ -65,11 +65,10 @@ public final class WHT32 implements IntTransform
     // Result multiplied by sqrt(2) or 16*sqrt(2) if 'scale' is set to false
     private int[] compute(int[] block, int blkptr, int shift)
     {
-		this.processRows(block, blkptr);
-		this.processColumns(block, blkptr, shift);
-		return block;
-	}
-
+       this.processRows(block, blkptr);
+       this.processColumns(block, blkptr, shift);
+       return block;
+    }
 
 
     private void processRows(int[] block, int blkptr)

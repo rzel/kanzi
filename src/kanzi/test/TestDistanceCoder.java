@@ -182,7 +182,7 @@ public class TestDistanceCoder
         
 
         System.out.println("Iterations: "+iter);
-        System.out.println("Diatance coding [ms]:   "+delta1/1000000L);
+        System.out.println("Distance coding [ms]:   "+delta1/1000000L);
         System.out.println("Distance decoding [ms]: "+delta2/1000000L);
     }
 }

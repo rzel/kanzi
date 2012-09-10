@@ -1,5 +1,5 @@
 /*
-Copyright 2011 Frederic Langlet
+Copyright 2011, 2012 Frederic Langlet
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 you may obtain a copy of the License at
@@ -27,6 +27,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.ColorModelType;
 import kanzi.prediction.IntraPredictor;
+import kanzi.prediction.Prediction;
 import kanzi.util.ImageQualityMonitor;
 import kanzi.util.color.ColorModelConverter;
 import kanzi.util.color.YCbCrColorModelConverter;
@@ -68,17 +69,26 @@ public class TestIntraPredictor
         // Wipe out y2
         Arrays.fill(y2, 0);
 
-        int predictionType = IntraPredictor.DIR_LEFT | IntraPredictor.REFERENCE;
-        testRoundTrip(y1, y2, w, h, 4, predictionType);
-        testRoundTrip(y1, y2, w, h, 8, predictionType);
-        testRoundTrip(y1, y2, w, h, 16, predictionType);
-        testRoundTrip(y1, y2, w, h, 32, predictionType);
-        predictionType = IntraPredictor.DIR_RIGHT | IntraPredictor.REFERENCE;
-        testRoundTrip(y1, y2, w, h, 4, predictionType);
-        testRoundTrip(y1, y2, w, h, 8, predictionType);
-        testRoundTrip(y1, y2, w, h, 16, predictionType);
-        testRoundTrip(y1, y2, w, h, 32, predictionType);
-
+        {
+          int predictionType = IntraPredictor.DIR_RIGHT | IntraPredictor.REFERENCE;
+          System.out.println("Direction: Right");
+          testRoundTrip(y1, y2, w, h, 4, predictionType);
+          testRoundTrip(y1, y2, w, h, 8, predictionType);
+          testRoundTrip(y1, y2, w, h, 16, predictionType);
+          testRoundTrip(y1, y2, w, h, 32, predictionType);
+        }
+        
+        System.out.println();
+        
+        {
+          int predictionType = IntraPredictor.DIR_LEFT | IntraPredictor.REFERENCE; 
+          System.out.println("Direction: Left");
+          testRoundTrip(y1, y2, w, h, 4, predictionType);
+          testRoundTrip(y1, y2, w, h, 8, predictionType);
+          testRoundTrip(y1, y2, w, h, 16, predictionType);
+          testRoundTrip(y1, y2, w, h, 32, predictionType);
+        }
+        
         cvt.convertYUVtoRGB(y2, u2, v2, rgb2, ColorModelType.YUV420);
         img2.getRaster().setDataElements(0, 0, w, h, rgb2);
 
@@ -109,24 +119,29 @@ public class TestIntraPredictor
    private static void testRoundTrip(int[] frame1, int[] frame2, int w, int h, int dim, int predictionType)
    {
       IntraPredictor predictor = new IntraPredictor(w, h, 32, w, false, 5, 2);
-      IntraPredictor.Prediction[] results = new IntraPredictor.Prediction[16];
+      Prediction[] results = new Prediction[8];
+      System.out.println();
 
       for (int i=0; i<results.length; i++)
-         results[i] = new IntraPredictor.Prediction(32);
+         results[i] = new Prediction(32);
 
       for (int j=0; j<h; j+=dim)
       {
          for (int i=0; i<w; i+=dim)
-         {
+         {            
              System.out.println("Processing "+i+"@"+j+" dim="+dim);
              predictor.computeResidues(frame1, i, j, null, i, j, results, dim, predictionType);
 
              for (int nn=0; nn<results.length; nn++)
              {
-                IntraPredictor.Prediction pred = results[nn];
+                Prediction pred = results[nn];
 
                 if (pred.energy != IntraPredictor.MAX_ERROR)
                 {
+                   for (int jj=j; jj<j+dim; jj++)
+                      for (int ii=i; ii<i+dim; ii++)
+                         frame2[jj*w+ii] = 0;
+                   
                    System.out.println("Prediction "+IntraPredictor.Mode.getMode(nn));
                    predictor.computeBlock(pred, frame2, i, j, IntraPredictor.Mode.getMode(nn), predictionType);
                    long error = computeError(frame1, frame2, i, j, w, dim);
