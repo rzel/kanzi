@@ -61,9 +61,9 @@ public class DWT_CDF_9_7 implements IntTransform
             throw new IllegalArgumentException("Invalid transform width (must"
                     + " be at least 8)");
 
-        if (steps < 2)
+        if (steps < 1)
             throw new IllegalArgumentException("Invalid number of iterations "
-                    + "(must be a least 2)");
+                    + "(must be a least 1)");
 
         if ((width >> steps) < 8)
             throw new IllegalArgumentException("Invalid width for band L0 (must"
