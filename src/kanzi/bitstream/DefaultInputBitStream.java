@@ -14,9 +14,9 @@ limitations under the License.
  */
 package kanzi.bitstream;
 
-import kanzi.BitStreamException;
 import java.io.IOException;
 import java.io.InputStream;
+import kanzi.BitStreamException;
 import kanzi.InputBitStream;
 
 
@@ -35,43 +35,45 @@ public final class DefaultInputBitStream implements InputBitStream
    {
       if (is == null)
          throw new NullPointerException("Invalid null input stream parameter");
-   
+
       if (bufferSize < 64)
          throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 64)");
 
       this.is = is;
       this.buffer = new byte[bufferSize];
       this.bitIndex = 7;
+      this.position = -1;
       this.maxPosition = -1;
    }
 
-   
+
   public DefaultInputBitStream(InputStream is, byte[] buffer)
    {
       if (is == null)
          throw new NullPointerException("Invalid null input stream parameter");
-      
+
       if (buffer == null)
          throw new NullPointerException("Invalid null buffer parameter");
-   
+
       if (buffer.length < 64)
          throw new IllegalArgumentException("Invalid buffer size (must be at least 64)");
 
       this.is = is;
       this.buffer = buffer;
       this.bitIndex = 7;
+      this.position = -1;
       this.maxPosition = -1;
    }
 
-  
+
    // Return 1 or 0
    @Override
    public synchronized int readBit() throws BitStreamException
    {
       if (this.bitIndex == 7)
       {
-         if (++this.position > this.maxPosition)
-            this.readFromInputStream(0, this.buffer.length);
+         while (++this.position > this.maxPosition)
+            this.readFromInputStream(this.buffer.length);
       }
 
       final int bit = (this.buffer[this.position] >> this.bitIndex) & 1;
@@ -81,15 +83,14 @@ public final class DefaultInputBitStream implements InputBitStream
    }
 
 
-   private synchronized int readFromInputStream(int offset, int length) throws BitStreamException
+   private synchronized int readFromInputStream(int length) throws BitStreamException
    {
       if (this.closed == true)
          throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
 
       try
       {
-         this.position = 0;
-         final int size = this.is.read(this.buffer, offset, length);
+         final int size = this.is.read(this.buffer, 0, length);
 
          if (size < 0)
          {
@@ -97,7 +98,8 @@ public final class DefaultInputBitStream implements InputBitStream
                     BitStreamException.END_OF_STREAM);
          }
 
-         this.maxPosition = offset + size - 1;
+         this.position = -1;
+         this.maxPosition = size - 1;
          return size;
       }
       catch (IOException e)
@@ -137,8 +139,8 @@ public final class DefaultInputBitStream implements InputBitStream
             // We are byte aligned, fast track
             while (remaining >= 8)
             {
-               if (++this.position > this.maxPosition)
-                  this.readFromInputStream(0, this.buffer.length);
+               while (++this.position > this.maxPosition)
+                  this.readFromInputStream(this.buffer.length);
 
                final long value = this.buffer[this.position] & 0xFF;
                remaining -= 8;
@@ -149,8 +151,8 @@ public final class DefaultInputBitStream implements InputBitStream
             // Extract last bits from the current location in buffer
             if (remaining > 0)
             {
-               if (++this.position > this.maxPosition)
-                  this.readFromInputStream(0, this.buffer.length);
+               while (++this.position > this.maxPosition)
+                  this.readFromInputStream(this.buffer.length);
 
                final int value = this.buffer[this.position] & 0xFF;
                final long bits = (value >> (8 - remaining)) & ((1 << remaining) - 1);
@@ -179,12 +181,12 @@ public final class DefaultInputBitStream implements InputBitStream
       // on readBit() or readBits()
       this.closed = true;
       this.bitIndex = 7;
+      this.position = -1;
       this.maxPosition = -1;
-      this.position = 0;
 
       try
       {
-        this.is.close();
+         this.is.close();
       }
       catch (IOException e)
       {
@@ -207,18 +209,18 @@ public final class DefaultInputBitStream implements InputBitStream
       if (this.closed == true)
          return false;
 
-      if (this.position > this.maxPosition)
+      if ((this.position < this.maxPosition) || (this.bitIndex != 7))
+         return true;
+
+      try
       {
-         try
-         {
-            this.readFromInputStream(0, this.buffer.length);
-         }
-         catch (BitStreamException e)
-         {
-            return false;
-         }
+         this.readFromInputStream(this.buffer.length);
+      }
+      catch (BitStreamException e)
+      {
+         return false;
       }
 
-      return (this.position <= this.maxPosition);
+      return true;
    }
 }
