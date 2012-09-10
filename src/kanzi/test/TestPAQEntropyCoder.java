@@ -16,8 +16,8 @@ limitations under the License.
 package kanzi.test;
 
 import kanzi.BitStreamException;
-import kanzi.entropy.PAQEntropyDecoder;
-import kanzi.entropy.PAQEntropyEncoder;
+import kanzi.entropy.BinaryEntropyDecoder;
+import kanzi.entropy.BinaryEntropyEncoder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import kanzi.InputBitStream;
@@ -25,6 +25,7 @@ import kanzi.OutputBitStream;
 import kanzi.bitstream.DebugOutputBitStream;
 import kanzi.bitstream.DefaultInputBitStream;
 import kanzi.bitstream.DefaultOutputBitStream;
+import kanzi.entropy.PAQPredictor;
 
 
 public class TestPAQEntropyCoder
@@ -37,7 +38,7 @@ public class TestPAQEntropyCoder
         for (int ii=1; ii<20; ii++)
         {
             System.out.println("\n\nTest "+ii);
-            
+
             try
             {
                 int[] values;
@@ -67,7 +68,7 @@ public class TestPAQEntropyCoder
                 OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out);
                 dbgbs.showByte(true);
-                PAQEntropyEncoder rc = new PAQEntropyEncoder(dbgbs);
+                BinaryEntropyEncoder rc = new BinaryEntropyEncoder(dbgbs, new PAQPredictor());
 
                 for (int i=0; i<values.length; i++)
                 {
@@ -79,7 +80,7 @@ public class TestPAQEntropyCoder
                 rc.dispose();
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
-                PAQEntropyDecoder rd = new PAQEntropyDecoder(bs2);
+                BinaryEntropyDecoder rd = new BinaryEntropyDecoder(bs2, new PAQPredictor());
                 System.out.println("\nDecoded:");
                 int len = values.length; // buf.length >> 3;
                 boolean ok = true;
@@ -103,7 +104,7 @@ public class TestPAQEntropyCoder
                 }
 
                 System.out.println("\n"+((ok == true) ? "Identical" : "Different"));
-                rc.dispose();
+                rd.dispose();
             }
             catch (Exception e)
             {
@@ -124,7 +125,7 @@ public class TestPAQEntropyCoder
 
             for (int i=0; i<values1.length; i++)
                 values1[i] = (byte) (i & 63);
-            
+
             int iter = 10000;
 
             for (int ii=0; ii<iter; ii++)
@@ -134,7 +135,7 @@ public class TestPAQEntropyCoder
                 // Encode
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
                 OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
-                PAQEntropyEncoder rc = new PAQEntropyEncoder(bs);
+                BinaryEntropyEncoder rc = new BinaryEntropyEncoder(bs, new PAQPredictor());
                 before = System.nanoTime();
                 rc.encode(values1, 0, values1.length);
 
@@ -146,12 +147,12 @@ public class TestPAQEntropyCoder
                 // Decode
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
-                PAQEntropyDecoder rd = new PAQEntropyDecoder(bs2);
+                BinaryEntropyDecoder rd = new BinaryEntropyDecoder(bs2, new PAQPredictor());
                 before = System.nanoTime();
                 rd.decode(values2, 0, values2.length);
                 after = System.nanoTime();
                 delta2 += (after - before);
-                
+
                 // Sanity check
                 for (int i=0; i<values1.length; i++)
                 {
@@ -162,7 +163,8 @@ public class TestPAQEntropyCoder
                       break;
                    }
                 }
-                
+
+                rd.dispose();
             }
 
             System.out.println();
