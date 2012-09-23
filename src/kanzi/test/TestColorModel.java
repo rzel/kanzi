@@ -60,18 +60,19 @@ public class TestColorModel
 
         System.out.println(w + "x" + h);
 
-        UpSampler uFourTap = new FourTapUpSampler(w/2, h/2, 2, false);
+        UpSampler uFourTap1 = new FourTapUpSampler(w/2, h/2, 2, true);
+        UpSampler uFourTap2 = new FourTapUpSampler(w/2, h/2, 2, false);
         UpSampler uBilinear = new BilinearUpSampler(w/2, h/2, 2);
         DownSampler dFourTap = new DecimateDownSampler(w, h, 2); // For now !!!
         DownSampler dBilinear = new DecimateDownSampler(w, h, 2);//BilinearDownSampler(w, h, 2);
 
         ColorModelConverter[] cvts = new ColorModelConverter[]
         {
-           new YCbCrColorModelConverter(w, h, dFourTap, uFourTap),
+           new YCbCrColorModelConverter(w, h, dFourTap, uFourTap1),
            new YCbCrColorModelConverter(w, h, dBilinear, uBilinear),
            new YCbCrColorModelConverter(w, h),
            new YCbCrColorModelConverter(w, h),
-           new YSbSrColorModelConverter(w, h, dFourTap, uFourTap),
+           new YSbSrColorModelConverter(w, h, dFourTap, uFourTap2),
            new YSbSrColorModelConverter(w, h, dBilinear, uBilinear),
            new YSbSrColorModelConverter(w, h),
            new YSbSrColorModelConverter(w, h),
@@ -164,7 +165,7 @@ public class TestColorModel
         frame2.add(new JLabel(newIcon));
         frame2.setVisible(true);
         System.out.println("Speed test");
-
+nn = 0;
         if (y420)
         {
            for (int i=0; i<nn; i++)
