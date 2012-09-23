@@ -16,8 +16,6 @@ limitations under the License.
 package kanzi.prediction;
 
 import java.util.TreeSet;
-import kanzi.InputBitStream;
-import kanzi.OutputBitStream;
 
 
 // Class used to predict a block based on its neighbors in the frame
@@ -25,76 +23,52 @@ public class IntraPredictor
 {
    public enum Mode
    {
-      HORIZONTAL(0, 3),  // Horizontal
-      VERTICAL(1, 3),    // Vertical (top)
-      DC(2, 3),          // DC
-      AVERAGE_HV(3, 3),  // Average horizontal-vertical
-      DIAGONAL(4, 3),    // Diagonal
-      REFERENCE(5, 3);   // Other block used as reference
+      HORIZONTAL,  // Horizontal
+      VERTICAL,    // Vertical (top)
+      DC,          // DC
+      AVERAGE_HV,  // Average horizontal-vertical
+      MEDIAN,      // Median horizontal-vertical-dc
+      DIAGONAL,    // Diagonal
+      BILINEAR,    // Bilinear interpolation
+      REFERENCE;   // Other block used as reference
 
       // 'direct' mode block can be encoded as reference prediction mode
       // with same frame and deltaX=deltaY=0
-
-      private final byte value;
-      private final byte length; // code length in bits
-
-      Mode(int value, int length)
-      {
-         this.value = (byte) value;
-         this.length = (byte) length;
-      }
-
-      public int value()
-      {
-         return this.value;
-      }
-
+      
       public static Mode getMode(int val)
       {
-         if (val == AVERAGE_HV.value)
+         if (val == BILINEAR.ordinal())
+            return BILINEAR;
+
+         if (val == MEDIAN.ordinal())
+            return MEDIAN;
+
+         if (val == AVERAGE_HV.ordinal())
             return AVERAGE_HV;
 
-         if (val == DC.value)
+         if (val == DC.ordinal())
             return DC;
 
-         if (val == HORIZONTAL.value)
+         if (val == HORIZONTAL.ordinal())
             return HORIZONTAL;
 
-         if (val == VERTICAL.value)
+         if (val == VERTICAL.ordinal())
             return VERTICAL;
 
-         if (val == DIAGONAL.value)
+         if (val == DIAGONAL.ordinal())
             return DIAGONAL;
 
-         if (val == REFERENCE.value)
+         if (val == REFERENCE.ordinal())
             return REFERENCE;
 
          return null;
-      }
-
-      public int encode(OutputBitStream bs)
-      {
-         if (bs.writeBits(this.value, this.length) != this.length)
-            return -1;
-
-         return this.length;
-      }
-
-      public static Mode decode(InputBitStream bs)
-      {
-         int bit = bs.readBit();
-
-         if (bit == 0)
-            return getMode((bit << 1) | bs.readBit());
-
-         return getMode((int) ((bit << 3) | bs.readBits(3)));
       }
    };
 
    private static final int ACTION_POPULATE       = 1;
    private static final int ACTION_GET_INDEX      = 2;
-   private static final int ACTION_GET_COORD      = 3;
-      
+   private static final int ACTION_GET_COORD      = 3;   
+
    public static final int DIR_LEFT  = 1;
    public static final int DIR_RIGHT = 2;
    public static final int REFERENCE = 4;
@@ -106,7 +80,7 @@ public class IntraPredictor
    private final int height;
    private final int stride;
    private final TreeSet<SearchBlockContext> set; // used during reference search
-   private final int sqrErrThreshold; // used to trigger reference search
+   private final int thresholdSAD; // used to trigger reference search
    private final int refSearchStepRatio;
    private final boolean isRGB;
    private final int maxBlockDim;
@@ -132,13 +106,13 @@ public class IntraPredictor
    }
 
 
-   // errThreshold is the residue energy per pixel that would trigger a spatial
+   // errThreshold is the residue error per pixel that would trigger a spatial
    // search for neighbor blocks. It is checked at the end of the 1st step of
-   // prediction to possibly trigger a 2nd step (if the residue energy is too high).
+   // prediction to possibly trigger a 2nd step (if the residue error is too high).
    // a value of 0 means that the spatial search happens always (except if the
-   // residue energy per pixel is 0 at the end of step 1)
+   // residue error per pixel is 0 at the end of step 1)
    // a value of 256 means that the spatial search never happens.
-   // refSearchStepRatio can be 1/8,2/8,4/8 or 8/8. It indicates the reference 
+   // refSearchStepRatio can be 1/8,2/8,4/8 or 8/8. It indicates the reference
    // search step size compared to the block dimension (1/8 is excluded if block
    // dim is 4)
    public IntraPredictor(int width, int height, int maxBlockDim, int stride,
@@ -169,7 +143,7 @@ public class IntraPredictor
         throw new IllegalArgumentException("The maximum block dimension must be a multiple of 4");
 
      if ((errThreshold < 0) || (errThreshold > 256))
-        throw new IllegalArgumentException("The residue energy threshold per pixel must in [0..256]");
+        throw new IllegalArgumentException("The residue error threshold per pixel must in [0..256]");
 
      if ((refSearchStepRatio != 1) && (refSearchStepRatio != 2) &&
              (refSearchStepRatio != 4) && (refSearchStepRatio != 8))
@@ -180,7 +154,7 @@ public class IntraPredictor
      this.width = width;
      this.stride = stride;
      this.set = new TreeSet<SearchBlockContext>();
-     this.sqrErrThreshold = errThreshold * errThreshold;
+     this.thresholdSAD = errThreshold;
      this.maxBlockDim = maxBlockDim;
      this.isRGB = isRGB;
      this.refPrediction = new Prediction(maxBlockDim);
@@ -223,7 +197,7 @@ public class IntraPredictor
       // Intialize predictions
       for (Prediction p : predictions)
       {
-         p.energy = MAX_ERROR;
+         p.sad = MAX_ERROR;
          p.x = ix;
          p.y = iy;
          p.frame = input;
@@ -233,17 +207,17 @@ public class IntraPredictor
       // Start with spatial/temporal reference (if any)
       if (other != null)
       {
-         Prediction p = predictions[Mode.REFERENCE.value];
+         Prediction p = predictions[Mode.REFERENCE.ordinal()];
          p.frame = other;
          p.x = ox;
          p.y = oy;
-         p.energy = this.computeReferenceDiff(input, iy*this.stride+ix,
+         p.sad = this.computeReferenceDiff(input, iy*this.stride+ix,
                  other, oy*this.stride+ox, p.residue, blockDim);
 
-         if (p.energy == 0)
-           return Mode.REFERENCE.value;
+         if (p.sad == 0)
+           return Mode.REFERENCE.ordinal();
 
-         minIdx = Mode.REFERENCE.value;
+         minIdx = Mode.REFERENCE.ordinal();
       }
 
       // Compute block residues based on prediction modes
@@ -253,34 +227,34 @@ public class IntraPredictor
       for (int i=0; i<predictions.length; i++)
       {
          // Favor lower modes (less bits to encode than reference mode)
-         if (predictions[minIdx].energy > predictions[i].energy)
+         if (predictions[minIdx].sad > predictions[i].sad)
             minIdx = i;
       }
 
-      final int minNrj = predictions[minIdx].energy;
+      final int minSAD = predictions[minIdx].sad;
 
-      if (minNrj == 0)
+      if (minSAD == 0)
          return minIdx;
 
-      // If the energy of the best prediction is not low 'enough' and the
+      // If the error of the best prediction is not low 'enough' and the
       // spatial reference is set, start a spatial search
-      if (((predictionType & REFERENCE) != 0) && (minNrj >= blockDim * blockDim * this.sqrErrThreshold))
+      if (((predictionType & REFERENCE) != 0) && (minSAD >= blockDim * blockDim * this.thresholdSAD))
       {
          // Spatial search of best matching nearby block
          Prediction newPrediction = this.refPrediction;
          newPrediction.frame = input;
          newPrediction.blockDim = blockDim;
 
-         // Do the search and update prediction energy, coordinates and result block
-         this.computeReferenceSearch(input, ix, iy, minNrj, newPrediction, predictionType);
+         // Do the search and update prediction  error, coordinates and result block
+         this.computeReferenceSearch(input, ix, iy, minSAD, newPrediction, predictionType);
 
          // Is the new prediction an improvement ?
-         if (newPrediction.energy < predictions[Mode.REFERENCE.value].energy)
+         if (newPrediction.sad < predictions[Mode.REFERENCE.ordinal()].sad)
          {
-            Prediction refPred = predictions[Mode.REFERENCE.value];
+            Prediction refPred = predictions[Mode.REFERENCE.ordinal()];
             refPred.x = newPrediction.x;
             refPred.y = newPrediction.y;
-            refPred.energy = newPrediction.energy;
+            refPred.sad = newPrediction.sad;
 
             // Create residue block for reference mode
             this.computeReferenceDiff(input, iy*this.stride+ix, input,
@@ -288,9 +262,9 @@ public class IntraPredictor
                     newPrediction.residue, blockDim);
 
             System.arraycopy(newPrediction.residue, 0, refPred.residue, 0, newPrediction.residue.length);
-            
-            if (predictions[minIdx].energy > predictions[Mode.REFERENCE.value].energy)
-               minIdx = Mode.REFERENCE.value;
+
+            if (predictions[minIdx].sad > predictions[Mode.REFERENCE.ordinal()].sad)
+               minIdx = Mode.REFERENCE.ordinal();
          }
       }
 
@@ -299,14 +273,15 @@ public class IntraPredictor
 
 
    // Compute residue against another (spatial/temporal) block
-   // Return energy of difference block
+   // Return error of difference block
    private int computeReferenceDiff(int[] input, int iIdx, int[] other, int oIdx,
            int[] output, int blockDim)
    {
       final int st = this.stride;
       final int endj = iIdx + (st * blockDim);
+      final int mask = (this.isRGB == true) ? 0xFF : -1;
       int k = 0;
-      int energy = 0;
+      int sad = 0;
 
       if (other == null)
       {
@@ -317,23 +292,24 @@ public class IntraPredictor
 
              for (int i=j; i<endi; i+=4)
              {
-                final int val0 = input[i];
-                final int val1 = input[i+1];
-                final int val2 = input[i+2];
-                final int val3 = input[i+3];
+                final int val0 = input[i]   & mask;
+                final int val1 = input[i+1] & mask;
+                final int val2 = input[i+2] & mask;
+                final int val3 = input[i+3] & mask;
                 output[k]   = val0;
                 output[k+1] = val1;
                 output[k+2] = val2;
                 output[k+3] = val3;
                 k += 4;
-                energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
              }
           }
       }
       else
       {
-         final int mask = (this.isRGB == true) ? 0xFF : -1;
-
          // Block delta
          for (int j=iIdx; j<endj; j+=st)
          {
@@ -350,23 +326,26 @@ public class IntraPredictor
                 output[k+2] = val2;
                 output[k+3] = val3;
                 k += 4;
-                energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
                 oIdx += 4;
+                sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
             }
 
             oIdx += (st - blockDim);
          }
       }
 
-      return energy;
+      return sad;
    }
 
 
    // Compute residue based on several prediction modes
-   // Return energy of residual block
+   // Return predictions
    // Proceed line by line (for cache) and avoid branches when possible (for speed)
    // Example 8x8
-   //       a0 a1 a2 a3 a4 a5 a6 a7
+   //   d   a0 a1 a2 a3 a4 a5 a6 a7   e
    //  b0   x0 x1 x2 x3 x4 x5 x6 x7   c0
    //  b1   x0 x1 x2 x3 x4 x5 x6 x7   c1
    //  b2   x0 x1 x2 x3 x4 x5 x6 x7   c2
@@ -392,39 +371,65 @@ public class IntraPredictor
       int dc_r = 0;
       int sum_l = 0;
       int sum_r = 0;
-      predictions[Mode.VERTICAL.value].energy = 0;
+      int d_l = DEFAULT_VALUE;
+      int d_r = DEFAULT_VALUE;      
+      int aa = DEFAULT_VALUE;
+      int bb = DEFAULT_VALUE;
+      int xy = DEFAULT_VALUE;
+      final int maxIndex = blockDim - 1;
+      final int adjust = maxIndex >> 1;
+
+      predictions[Mode.VERTICAL.ordinal()].sad = 0;
+      predictions[Mode.HORIZONTAL.ordinal()].sad = 0;
+      predictions[Mode.DC.ordinal()].sad = 0;
+      predictions[Mode.DIAGONAL.ordinal()].sad = 0;
+      predictions[Mode.MEDIAN.ordinal()].sad = 0;
+      predictions[Mode.AVERAGE_HV.ordinal()].sad = 0;
+      predictions[Mode.BILINEAR.ordinal()].sad = 0;
 
       // Initializations
       if ((direction & DIR_LEFT) != 0)
       {
-         predictions[Mode.HORIZONTAL.value].energy = 0;
-         predictions[Mode.DC.value].energy = 0;
-         predictions[Mode.DIAGONAL.value].energy = 0;
-         predictions[Mode.AVERAGE_HV.value].energy = 0;
-
          if (x > 0)
          {
             sum_l += blockDim;
 
             for (int j=start; j<endj; j+=st)
                dc_l += (input[j-1] & mask);
+
+            // Pixel left of last row
+            bb = input[start+(st*blockDim)-st-1] & mask;
          }
+         
+         // Last pixel above first row
+         if (y > 0) 
+            aa = input[start-st+blockDim-1] & mask;
+         
+         // Last pixel, last row
+         xy = input[start+(st*blockDim)-st+blockDim-1] & mask;
+         predictions[Mode.BILINEAR.ordinal()].anchor = xy;
       }
 
       if ((direction & DIR_RIGHT) != 0)
       {
-         predictions[Mode.HORIZONTAL.value].energy = 0;
-         predictions[Mode.DC.value].energy = 0;
-         predictions[Mode.DIAGONAL.value].energy = 0;
-         predictions[Mode.AVERAGE_HV.value].energy = 0;
-
          if (x < xMax)
          {
             sum_r += blockDim;
 
             for (int j=start; j<endj; j+=st)
                dc_r += (input[j+blockDim] & mask);
+
+            // Pixel right of last row
+            bb = input[start+(st*blockDim)-st+blockDim] & mask;
          }
+         
+         // First pixel above first row
+         if (y > 0) 
+            aa = input[start-st] & mask;
+         
+         // First pixel, last row
+         xy = input[start+(st*blockDim)-st] & mask ;
+         predictions[Mode.BILINEAR.ordinal()].anchor = xy;
       }
 
       if (y > 0)
@@ -437,6 +442,9 @@ public class IntraPredictor
 
             for (int i=0; i<blockDim; i++)
                dc_l += (input[above+i] & mask);
+
+            if (x > 0)
+               d_l = input[above-1] & mask;
          }
 
          if ((direction & DIR_RIGHT) != 0)
@@ -445,6 +453,9 @@ public class IntraPredictor
 
             for (int i=0; i<blockDim; i++)
                dc_r += (input[above+i] & mask);
+
+            if (x < xMax)
+               d_r = input[above+blockDim] & mask;
          }
       }
 
@@ -457,7 +468,7 @@ public class IntraPredictor
          dc_r = (dc_r + (sum_r >> 1)) / sum_r;
       else
          dc_r = DEFAULT_VALUE;
-
+              
       // Main loop, line by line
       for (int j=0,offs=start; offs<endj; offs+=st, j++)
       {
@@ -465,8 +476,12 @@ public class IntraPredictor
 
          if ((direction & DIR_LEFT) != 0)
          {
+            // Pixel column to the left for current row
             final int b = (x > 0) ? input[offs-1] & mask : DEFAULT_VALUE;
-
+            
+            // Interpolated pixel at end of current row
+            final int xv = ((xy*j) + (aa*(maxIndex-j)) + adjust) / maxIndex;
+            
             // Scan from the left to the right
             for (int i=offs; i<endi; i+=4)
             {
@@ -499,13 +514,16 @@ public class IntraPredictor
                   final int val1 = x1 - b;
                   final int val2 = x2 - b;
                   final int val3 = x3 - b;
-                  final Prediction p = predictions[Mode.HORIZONTAL.value];
+                  final Prediction p = predictions[Mode.HORIZONTAL.ordinal()];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
                   output[idx_l+1] = val1;
                   output[idx_l+2] = val2;
                   output[idx_l+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
                {
@@ -519,53 +537,133 @@ public class IntraPredictor
                   final int val2 = x2 - avg;
                   avg = (b + a3) >> 1;
                   final int val3 = x3 - avg;
-                  final Prediction p = predictions[Mode.AVERAGE_HV.value];
+                  final Prediction p = predictions[Mode.AVERAGE_HV.ordinal()];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
                   output[idx_l+1] = val1;
                   output[idx_l+2] = val2;
                   output[idx_l+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
+               {
+                  // MEDIAN_L: (xi,yi)-MEDIAN(ai, bi, (ai+bi)-d_l)
+                  final int val = b - d_l;
+                  int med;
+                  med = val + a0;
+
+                  if (a0 < b)
+                     med = (med < a0) ? a0 : ((med < b) ? med : b);
+                  else
+                     med = (med < b) ? b : ((med < a0) ? med : a0);
+
+                  final int val0 = x0 - med;
+                  med = val + a1;
+
+                  if (a1 < b)
+                     med = (med < a1) ? a1 : ((med < b) ? med : b);
+                  else
+                     med = (med < b) ? b : ((med < a1) ? med : a1);
+
+                  final int val1 = x1 - med;
+                  med = val + a2;
+
+                  if (a2 < b)
+                     med = (med < a2) ? a2 : ((med < b) ? med : b);
+                  else
+                     med = (med < b) ? b : ((med < a2) ? med : a2);
+
+                  final int val2 = x2 - med;
+                  med = val + a3;
+
+                  if (a3 < b)
+                     med = (med < a3) ? a3 : ((med < b) ? med : b);
+                  else
+                     med = (med < b) ? b : ((med < a3) ? med : a3);
+
+                  final int val3 = x3 - med;
+                  final Prediction p = predictions[Mode.MEDIAN.ordinal()];
+                  final int[] output = p.residue;
+                  output[idx_l]   = val0;
+                  output[idx_l+1] = val1;
+                  output[idx_l+2] = val2;
+                  output[idx_l+3] = val3;
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
+               }
+
+               {
+                  // BILINEAR_L
+                  int xh;
+                  xh = (xy*ii     + bb*(maxIndex-ii)     + adjust) / maxIndex;
+                  final int val0 = x0 - ((xv + xh + 1) >> 1);
+                  xh = (xy*(ii+1) + bb*(maxIndex-(ii+1)) + adjust) / maxIndex;
+                  final int val1 = x1 - ((xv + xh + 1) >> 1);
+                  xh = (xy*(ii+2) + bb*(maxIndex-(ii+2)) + adjust) / maxIndex;
+                  final int val2 = x2 - ((xv + xh + 1) >> 1);
+                  xh = (xy*(ii+3) + bb*(maxIndex-(ii+3)) + adjust) / maxIndex;
+                  final int val3 = x3 - ((xv + xh + 1) >> 1);
+                  final Prediction p = predictions[Mode.BILINEAR.ordinal()];
+                  final int[] output = p.residue;
+                  output[idx_l]   = val0;
+                  output[idx_l+1] = val1;
+                  output[idx_l+2] = val2;
+                  output[idx_l+3] = val3;
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
+               }
+               
                {
                   // DC_L: xi-dc_l
                   final int val0 = x0 - dc_l;
                   final int val1 = x1 - dc_l;
                   final int val2 = x2 - dc_l;
                   final int val3 = x3 - dc_l;
-                  final Prediction p = predictions[Mode.DC.value];
+                  final Prediction p = predictions[Mode.DC.ordinal()];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
                   output[idx_l+1] = val1;
                   output[idx_l+2] = val2;
                   output[idx_l+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
                {
                   // DIAGONAL_L
                   final int iV = ii - j - 1 + start - st;
                   final int iH = start + (j-ii-1)*st - 1;
-                  final int y0 = (ii   >= j) ? ((y > 0) ? input[iV]   & mask : DEFAULT_VALUE) 
+                  final int y0 = (ii   >= j) ? ((y > 0) ? input[iV]   & mask : DEFAULT_VALUE)
                           : ((x > 0) ? input[iH]      & mask : DEFAULT_VALUE);
-                  final int y1 = (ii+1 >= j) ? ((y > 0) ? input[iV+1] & mask : DEFAULT_VALUE) 
+                  final int y1 = (ii+1 >= j) ? ((y > 0) ? input[iV+1] & mask : DEFAULT_VALUE)
                           : ((x > 0) ? input[iH-st]   & mask : DEFAULT_VALUE);
-                  final int y2 = (ii+2 >= j) ? ((y > 0) ? input[iV+2] & mask : DEFAULT_VALUE) 
+                  final int y2 = (ii+2 >= j) ? ((y > 0) ? input[iV+2] & mask : DEFAULT_VALUE)
                           : ((x > 0) ? input[iH-st*2] & mask : DEFAULT_VALUE);
-                  final int y3 = (ii+3 >= j) ? ((y > 0) ? input[iV+3] & mask : DEFAULT_VALUE) 
+                  final int y3 = (ii+3 >= j) ? ((y > 0) ? input[iV+3] & mask : DEFAULT_VALUE)
                           : ((x > 0) ? input[iH-st*3] & mask : DEFAULT_VALUE);
                   final int val0 = x0 - y0;
                   final int val1 = x1 - y1;
                   final int val2 = x2 - y2;
                   final int val3 = x3 - y3;
-                  final Prediction p = predictions[Mode.DIAGONAL.value];
+                  final Prediction p = predictions[Mode.DIAGONAL.ordinal()];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
                   output[idx_l+1] = val1;
                   output[idx_l+2] = val2;
                   output[idx_l+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
                {
@@ -574,13 +672,16 @@ public class IntraPredictor
                   final int val1 = x1 - a1;
                   final int val2 = x2 - a2;
                   final int val3 = x3 - a3;
-                  final Prediction p = predictions[Mode.VERTICAL.value];
+                  final Prediction p = predictions[Mode.VERTICAL.ordinal()];
                   final int[] output = p.residue;
                   output[idx_l]   = val0;
                   output[idx_l+1] = val1;
                   output[idx_l+2] = val2;
                   output[idx_l+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
                idx_l += 4;
@@ -590,6 +691,9 @@ public class IntraPredictor
          if ((direction & DIR_RIGHT) != 0)
          {
             final int c = (x < xMax) ? input[endi] & mask : DEFAULT_VALUE;
+
+            // Interpolated pixel at start of current row
+            final int xv = ((xy*j) + (aa*(maxIndex-j)) + adjust) / maxIndex;
 
             // Scan from right to left
             for (int i=endi-4; i>=offs; i-=4)
@@ -624,13 +728,16 @@ public class IntraPredictor
                   final int val1 = x1 - c;
                   final int val2 = x2 - c;
                   final int val3 = x3 - c;
-                  final Prediction p = predictions[Mode.HORIZONTAL.value];
+                  final Prediction p = predictions[Mode.HORIZONTAL.ordinal()];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
                   output[idx_r+1] = val1;
                   output[idx_r+2] = val2;
                   output[idx_r+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
                {
@@ -644,13 +751,87 @@ public class IntraPredictor
                   final int val2 = x2 - avg;
                   avg = (c + a3) >> 1;
                   final int val3 = x3 - avg;
-                  final Prediction p = predictions[Mode.AVERAGE_HV.value];
+                  final Prediction p = predictions[Mode.AVERAGE_HV.ordinal()];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
                   output[idx_r+1] = val1;
                   output[idx_r+2] = val2;
                   output[idx_r+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
+               }
+
+               {
+                  // MEDIAN_R: (xi,yi)-MEDIAN(ai, ci, (ai+ci)-d_r)
+                  final int val = c - d_r;
+                  int med;
+                  med = val + a0;
+
+                  if (a0 < c)
+                     med = (med < a0) ? a0 : ((med < c) ? med : c);
+                  else
+                     med = (med < c) ? c : ((med < a0) ? med : a0);
+
+                  final int val0 = x0 - med;
+                  med = val + a1;
+
+                  if (a1 < c)
+                     med = (med < a1) ? a1 : ((med < c) ? med : c);
+                  else
+                     med = (med < c) ? c : ((med < a1) ? med : a1);
+
+                  final int val1 = x1 - med;
+                  med = val + a2;
+
+                  if (a2 < c)
+                     med = (med < a2) ? a2 : ((med < c) ? med : c);
+                  else
+                     med = (med < c) ? c : ((med < a2) ? med : a2);
+
+                  final int val2 = x2 - med;
+                  med = val + a3;
+
+                  if (a3 < c)
+                     med = (med < a3) ? a3 : ((med < c) ? med : c);
+                  else
+                     med = (med < c) ? c : ((med < a3) ? med : a3);
+
+                  final int val3 = x3 - med;
+                  final Prediction p = predictions[Mode.MEDIAN.ordinal()];
+                  final int[] output = p.residue;
+                  output[idx_r]   = val0;
+                  output[idx_r+1] = val1;
+                  output[idx_r+2] = val2;
+                  output[idx_r+3] = val3;
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
+               }
+               
+               {
+                  // BILINEAR_R
+                  int xh;
+                  xh = (bb*ii     + xy*(maxIndex-ii)     + adjust) / maxIndex;
+                  final int val0 = x0 - ((xv + xh + 1) >> 1);
+                  xh = (bb*(ii+1) + xy*(maxIndex-(ii+1)) + adjust) / maxIndex;
+                  final int val1 = x1 - ((xv + xh + 1) >> 1);
+                  xh = (bb*(ii+2) + xy*(maxIndex-(ii+2)) + adjust) / maxIndex;
+                  final int val2 = x2 - ((xv + xh + 1) >> 1);
+                  xh = (bb*(ii+3) + xy*(maxIndex-(ii+3)) + adjust) / maxIndex;
+                  final int val3 = x3 - ((xv + xh + 1) >> 1);
+                  final Prediction p = predictions[Mode.BILINEAR.ordinal()];
+                  final int[] output = p.residue;
+                  output[idx_r]   = val0;
+                  output[idx_r+1] = val1;
+                  output[idx_r+2] = val2;
+                  output[idx_r+3] = val3;
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
                {
@@ -659,13 +840,16 @@ public class IntraPredictor
                   final int val1 = x1 - dc_r;
                   final int val2 = x2 - dc_r;
                   final int val3 = x3 - dc_r;
-                  final Prediction p = predictions[Mode.DC.value];
+                  final Prediction p = predictions[Mode.DC.ordinal()];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
                   output[idx_r+1] = val1;
                   output[idx_r+2] = val2;
                   output[idx_r+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
                {
@@ -673,25 +857,28 @@ public class IntraPredictor
                   final int diag = endi - 1 - offs;
                   final int iV = ii + j + 1 + start - st;
                   final int iH = start + (ii+j-diag-1)*st + diag + 1;
-                  final int y0 = (ii+j   <= diag) ? ((y > 0) ? input[iV]   & mask : DEFAULT_VALUE) 
+                  final int y0 = (ii+j   <= diag) ? ((y > 0) ? input[iV]   & mask : DEFAULT_VALUE)
                           : ((x < xMax) ? input[iH]      & mask : DEFAULT_VALUE);
-                  final int y1 = (ii+1+j <= diag) ? ((y > 0) ? input[iV+1] & mask : DEFAULT_VALUE) 
+                  final int y1 = (ii+1+j <= diag) ? ((y > 0) ? input[iV+1] & mask : DEFAULT_VALUE)
                           : ((x < xMax) ? input[iH+st]   & mask : DEFAULT_VALUE);
-                  final int y2 = (ii+2+j <= diag) ? ((y > 0) ? input[iV+2] & mask : DEFAULT_VALUE) 
+                  final int y2 = (ii+2+j <= diag) ? ((y > 0) ? input[iV+2] & mask : DEFAULT_VALUE)
                           : ((x < xMax) ? input[iH+st*2] & mask : DEFAULT_VALUE);
-                  final int y3 = (ii+3+j <= diag) ? ((y > 0) ? input[iV+3] & mask : DEFAULT_VALUE) 
+                  final int y3 = (ii+3+j <= diag) ? ((y > 0) ? input[iV+3] & mask : DEFAULT_VALUE)
                           : ((x < xMax) ? input[iH+st*3] & mask : DEFAULT_VALUE);
                   final int val0 = x0 - y0;
                   final int val1 = x1 - y1;
                   final int val2 = x2 - y2;
                   final int val3 = x3 - y3;
-                  final Prediction p = predictions[Mode.DIAGONAL.value];
+                  final Prediction p = predictions[Mode.DIAGONAL.ordinal()];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
                   output[idx_r+1] = val1;
-                  output[idx_r+2] = val2;  
+                  output[idx_r+2] = val2;
                   output[idx_r+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
 
                if ((direction & DIR_LEFT) == 0) // if not already done
@@ -701,13 +888,16 @@ public class IntraPredictor
                   final int val1 = x1 - a1;
                   final int val2 = x2 - a2;
                   final int val3 = x3 - a3;
-                  final Prediction p = predictions[Mode.VERTICAL.value];
+                  final Prediction p = predictions[Mode.VERTICAL.ordinal()];
                   final int[] output = p.residue;
                   output[idx_r]   = val0;
                   output[idx_r+1] = val1;
                   output[idx_r+2] = val2;
                   output[idx_r+3] = val3;
-                  p.energy += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+                  p.sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+                  p.sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+                  p.sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+                  p.sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
                }
             }
 
@@ -721,7 +911,7 @@ public class IntraPredictor
 
    // Add residue to other block
    // Return output
-   private int[] computeBlock(Prediction prediction, int[] output, int oIdx)
+   private int[] computeBlockReference(Prediction prediction, int[] output, int oIdx)
    {
       final int st = this.stride;
       final int blockDim = prediction.blockDim;
@@ -781,27 +971,33 @@ public class IntraPredictor
            Mode mode, int direction)
    {
       if (mode == Mode.REFERENCE)
-         return this.computeBlock(prediction, output, (y*this.stride)+x);
+         return this.computeBlockReference(prediction, output, (y*this.stride)+x);
+
+      if (mode == Mode.BILINEAR)
+         return this.computeBlockBilinear(prediction, output, x, y, direction);
 
       if (mode == Mode.VERTICAL)
          return this.computeBlockVertical(prediction, output, x, y, direction);
 
+      if (mode == Mode.MEDIAN)
+         return this.computeMedian(prediction, output, x, y, direction);
+
       if (mode == Mode.AVERAGE_HV)
          return this.computeBlockAverageHV(prediction, output, x, y, direction);
-         
+
       if (mode == Mode.HORIZONTAL)
          return this.computeBlockHorizontal(prediction, output, x, y, direction);
-      
+
       if (mode == Mode.DC)
          return this.computeBlockDC(prediction, output, x, y, direction);
-      
+
       if (mode == Mode.DIAGONAL)
          return this.computeBlockDiagonal(prediction, output, x, y, direction);
-      
+
       return output;
    }
 
-   
+
     private int[] computeBlockHorizontal(Prediction prediction, int[] output, int x, int y,
          int direction)
     {
@@ -832,7 +1028,7 @@ public class IntraPredictor
                 k += 4;
              }
           }
-       }         
+       }
        else if ((direction & DIR_RIGHT) != 0)
        {
           for (int j=start; j<endj; j+=st)
@@ -849,13 +1045,13 @@ public class IntraPredictor
                 output[i+3] = residue[k+3] + c;
                 k += 4;
              }
-          }            
+          }
        }
 
        return output;
     }
 
-    
+
     private int[] computeBlockVertical(Prediction prediction, int[] output, int x, int y,
          int direction)
     {
@@ -910,7 +1106,7 @@ public class IntraPredictor
           for (int j=start; j<endj; j+=st)
           {
              final int endi = j + blockDim;
- 
+
              for (int i=endi-4; i>=j ; i-=4)
              {
                 k = line + i - j;
@@ -946,7 +1142,7 @@ public class IntraPredictor
        return output;
     }
 
-    
+
     private int[] computeBlockAverageHV(Prediction prediction, int[] output, int x, int y,
          int direction)
     {
@@ -1039,8 +1235,272 @@ public class IntraPredictor
      
        return output;
     }
+
     
-    
+    private int[] computeBlockBilinear(Prediction prediction, int[] output, int x, int y,
+         int direction)
+    {
+       final int blockDim = prediction.blockDim;
+       final int st = this.stride;
+       final int start = (y * st) + x;
+       final int endj = start + (st * blockDim);
+       final int[] residue = prediction.residue;
+       final int[] input = prediction.frame;
+       final int mask = (this.isRGB == true) ? 0xFF : -1;
+       final int xMax = this.width - blockDim;
+       int k = 0;
+       int aa = DEFAULT_VALUE;
+       int bb = DEFAULT_VALUE;
+       int xy;
+       final int maxIndex = blockDim - 1;
+       final int adjust = maxIndex >> 1;
+
+       if ((direction & DIR_LEFT) != 0)
+       {          
+          // Last pixel above first row
+          if (y > 0) 
+             aa = input[start-st+blockDim-1] & mask;
+         
+          // Pixel left of last row
+          if (x > 0) 
+             bb = input[start+(st*blockDim)-st-1] & mask;
+
+          // Last pixel, last row
+          xy = prediction.anchor;
+          
+          for (int offs=start, j=0; offs<endj; offs+=st, j++)
+          {
+             final int endi = offs + blockDim;
+            
+             // Interpolated pixel at end of current row
+             final int xv = ((xy*j) + (aa*(maxIndex-j)) + adjust) / maxIndex;
+
+             for (int i=offs; i<endi; i+=4)
+             {
+                // BILINEAR_L
+                final int ii = i - offs;
+                int xh;
+                xh = (xy*ii     + bb*(maxIndex-ii)     + adjust) / maxIndex;
+                final int val0 = (xv + xh + 1) >> 1;
+                xh = (xy*(ii+1) + bb*(maxIndex-(ii+1)) + adjust) / maxIndex;
+                final int val1 = (xv + xh + 1) >> 1;
+                xh = (xy*(ii+2) + bb*(maxIndex-(ii+2)) + adjust) / maxIndex;
+                final int val2 = (xv + xh + 1) >> 1;
+                xh = (xy*(ii+3) + bb*(maxIndex-(ii+3)) + adjust) / maxIndex;
+                final int val3 = (xv + xh + 1) >> 1;
+                output[i]   = residue[k]   + val0;
+                output[i+1] = residue[k+1] + val1;
+                output[i+2] = residue[k+2] + val2;
+                output[i+3] = residue[k+3] + val3;
+                k += 4;                
+             }
+          }
+       }
+       else if ((direction & DIR_RIGHT) != 0)
+       {
+          // First pixel above first row
+          if (y > 0) 
+             aa = input[start-st] & mask;
+         
+          // Pixel right of last row
+          if (x < xMax) 
+             bb = input[start+(st*blockDim)-st+blockDim] & mask;
+
+          // First pixel, last row
+          xy = prediction.anchor;
+          
+          int line = 0;
+          
+          for (int offs=start, j=0; offs<endj; offs+=st, j++)
+          {
+             final int endi = offs + blockDim;
+         
+             // Interpolated pixel at start of current row
+             final int xv = ((xy*j) + (aa*(maxIndex-j)) + adjust) / maxIndex;
+             
+             for (int i=endi-4; i>=offs ; i-=4)
+             {
+                // BILINEAR_R
+                final int ii = i - offs;
+                k = line + ii;
+                int xh;
+                xh = (bb*ii     + xy*(maxIndex-ii)     + adjust) / maxIndex;
+                final int val0 = (xv + xh + 1) >> 1;
+                xh = (bb*(ii+1) + xy*(maxIndex-(ii+1)) + adjust) / maxIndex;
+                final int val1 = (xv + xh + 1) >> 1;
+                xh = (bb*(ii+2) + xy*(maxIndex-(ii+2)) + adjust) / maxIndex;
+                final int val2 = (xv + xh + 1) >> 1;
+                xh = (bb*(ii+3) + xy*(maxIndex-(ii+3)) + adjust) / maxIndex;
+                final int val3 = (xv + xh + 1) >> 1;
+                output[i]   = residue[k]   + val0;
+                output[i+1] = residue[k+1] + val1;
+                output[i+2] = residue[k+2] + val2;
+                output[i+3] = residue[k+3] + val3;
+             }
+
+             line += blockDim;
+          }
+       }
+       
+       return output;
+    }
+
+               
+    private int[] computeMedian(Prediction prediction, int[] output, int x, int y,
+         int direction)
+    {
+       final int blockDim = prediction.blockDim;
+       final int xMax = this.width - blockDim;
+       final int st = this.stride;
+       final int start = (y * st) + x;
+       final int endj = start + (st * blockDim);
+       final int[] residue = prediction.residue;
+       final int[] input = prediction.frame;
+       final int mask = (this.isRGB == true) ? 0xFF : -1;
+       int k = 0;
+
+       if ((direction & DIR_LEFT) != 0)
+       {
+          final int d_l = ((y > 0) && (x > 0)) ? input[start-st-1] & mask : DEFAULT_VALUE;
+          
+          for (int j=start; j<endj; j+=st)
+          {
+             final int endi = j + blockDim;
+
+             for (int i=j; i<endi; i+=4)
+             {
+                final int b = (x > 0) ? input[j-1] & mask : DEFAULT_VALUE;
+                int a0, a1, a2, a3;
+
+                if (y > 0)
+                {
+                   final int blockAbove = start - st + i - j;
+                   a0 = input[blockAbove]   & mask;
+                   a1 = input[blockAbove+1] & mask;
+                   a2 = input[blockAbove+2] & mask;
+                   a3 = input[blockAbove+3] & mask;
+                }
+                else
+                {
+                   a0 = DEFAULT_VALUE;
+                   a1 = DEFAULT_VALUE;
+                   a2 = DEFAULT_VALUE;
+                   a3 = DEFAULT_VALUE;
+                }
+
+                // MEDIAN: (xi,yi)-MEDIAN(ai, bi, (ai+bi)-d)
+                final int val = b - d_l;
+                int med0 = val + a0;
+
+                if (a0 < b)
+                   med0 = (med0 < a0) ? a0 : ((med0 < b) ? med0 : b);
+                else
+                   med0 = (med0 < b) ? b : ((med0 < a0) ? med0 : a0);
+
+                int med1 = val + a1;
+
+                if (a1 < b)
+                   med1 = (med1 < a1) ? a1 : ((med1 < b) ? med1 : b);
+                else
+                   med1 = (med1 < b) ? b : ((med1 < a1) ? med1 : a1);
+
+                int med2 = val + a2;
+
+                if (a2 < b)
+                   med2 = (med2 < a2) ? a2 : ((med2 < b) ? med2 : b);
+                else
+                   med2 = (med2 < b) ? b : ((med2 < a2) ? med2 : a2);
+
+                int med3 = val + a3;
+
+                if (a3 < b)
+                   med3 = (med3 < a3) ? a3 : ((med3 < b) ? med3 : b);
+                else
+                   med3 = (med3 < b) ? b : ((med3 < a3) ? med3 : a3);
+
+                output[i]   = residue[k]   + med0;
+                output[i+1] = residue[k+1] + med1;
+                output[i+2] = residue[k+2] + med2;
+                output[i+3] = residue[k+3] + med3;
+                k += 4;
+             }
+          }
+       }
+       else if ((direction & DIR_RIGHT) != 0)
+       {
+          final int d_r = ((y > 0) && (x < xMax)) ? input[start-st+blockDim] & mask : DEFAULT_VALUE;
+          int line = 0;
+
+          for (int j=start; j<endj; j+=st)
+          {
+             final int endi = j + blockDim;
+
+             for (int i=endi-4; i>=j ; i-=4)
+             {
+                final int c = (x < xMax) ? input[endi] & mask : DEFAULT_VALUE;
+                k = line + i - j;
+                int a0, a1, a2, a3;
+
+                if (y > 0)
+                {
+                   final int blockAbove = start - st + i - j;
+                   a0 = input[blockAbove]   & mask;
+                   a1 = input[blockAbove+1] & mask;
+                   a2 = input[blockAbove+2] & mask;
+                   a3 = input[blockAbove+3] & mask;
+                }
+                else
+                {
+                   a0 = DEFAULT_VALUE;
+                   a1 = DEFAULT_VALUE;
+                   a2 = DEFAULT_VALUE;
+                   a3 = DEFAULT_VALUE;
+                }
+
+                // MEDIAN: (xi,yi)-MEDIAN(ai, ci, (ai+ci)-e)
+                final int val = c - d_r;
+                int med0 = val + a0;
+
+                if (a0 < c)
+                   med0 = (med0 < a0) ? a0 : ((med0 < c) ? med0 : c);
+                else
+                   med0 = (med0 < c) ? c : ((med0 < a0) ? med0 : a0);
+
+                int med1 = val + a1;
+
+                if (a1 < c)
+                   med1 = (med1 < a1) ? a1 : ((med1 < c) ? med1 : c);
+                else
+                   med1 = (med1 < c) ? c : ((med1 < a1) ? med1 : a1);
+
+                int med2 = val + a2;
+
+                if (a2 < c)
+                   med2 = (med2 < a2) ? a2 : ((med2 < c) ? med2 : c);
+                else
+                   med2 = (med2 < c) ? c : ((med2 < a2) ? med2 : a2);
+
+                int med3 = val + a3;
+
+                if (a3 < c)
+                   med3 = (med3 < a3) ? a3 : ((med3 < c) ? med3 : c);
+                else
+                   med3 = (med3 < c) ? c : ((med3 < a3) ? med3 : a3);
+                
+                output[i]   = residue[k]   + med0;
+                output[i+1] = residue[k+1] + med1;
+                output[i+2] = residue[k+2] + med2;
+                output[i+3] = residue[k+3] + med3;
+             }
+
+             line += blockDim;
+          }
+       }
+
+       return output;
+    }
+
+
     private int[] computeBlockDiagonal(Prediction prediction, int[] output, int x, int y,
          int direction)
     {
@@ -1066,13 +1526,13 @@ public class IntraPredictor
                 final int ii = i - offs;
                 final int iV = ii - j - 1 + start - st;
                 final int iH = start + (j-ii-1)*st - 1;
-                final int val0 = (ii   >= j) ? ((y > 0) ? input[iV]   & mask : DEFAULT_VALUE) 
+                final int val0 = (ii   >= j) ? ((y > 0) ? input[iV]   & mask : DEFAULT_VALUE)
                         : ((x > 0) ? input[iH]      & mask : DEFAULT_VALUE);
-                final int val1 = (ii+1 >= j) ? ((y > 0) ? input[iV+1] & mask : DEFAULT_VALUE) 
+                final int val1 = (ii+1 >= j) ? ((y > 0) ? input[iV+1] & mask : DEFAULT_VALUE)
                         : ((x > 0) ? input[iH-st]   & mask : DEFAULT_VALUE);
-                final int val2 = (ii+2 >= j) ? ((y > 0) ? input[iV+2] & mask : DEFAULT_VALUE) 
+                final int val2 = (ii+2 >= j) ? ((y > 0) ? input[iV+2] & mask : DEFAULT_VALUE)
                         : ((x > 0) ? input[iH-st*2] & mask : DEFAULT_VALUE);
-                final int val3 = (ii+3 >= j) ? ((y > 0) ? input[iV+3] & mask : DEFAULT_VALUE) 
+                final int val3 = (ii+3 >= j) ? ((y > 0) ? input[iV+3] & mask : DEFAULT_VALUE)
                         : ((x > 0) ? input[iH-st*3] & mask : DEFAULT_VALUE);
                 output[i]   = residue[k]   + val0;
                 output[i+1] = residue[k+1] + val1;
@@ -1085,7 +1545,7 @@ public class IntraPredictor
        else if ((direction & DIR_RIGHT) != 0)
        {
           int line = 0;
-          
+
           for (int j=0, offs=start; offs<endj; offs+=st, j++)
           {
              final int endi = offs + blockDim;
@@ -1098,20 +1558,20 @@ public class IntraPredictor
                 final int diag = endi - 1 - offs;
                 final int iV = ii + j + 1 + start - st;
                 final int iH = start + (ii+j-diag-1)*st + diag + 1;
-                final int val0 = (ii+j   <= diag) ? ((y > 0) ? input[iV]   & mask : DEFAULT_VALUE) 
+                final int val0 = (ii+j   <= diag) ? ((y > 0) ? input[iV]   & mask : DEFAULT_VALUE)
                         : ((x < xMax) ? input[iH]      & mask : DEFAULT_VALUE);
-                final int val1 = (ii+1+j <= diag) ? ((y > 0) ? input[iV+1] & mask : DEFAULT_VALUE) 
+                final int val1 = (ii+1+j <= diag) ? ((y > 0) ? input[iV+1] & mask : DEFAULT_VALUE)
                         : ((x < xMax) ? input[iH+st]   & mask : DEFAULT_VALUE);
-                final int val2 = (ii+2+j <= diag) ? ((y > 0) ? input[iV+2] & mask : DEFAULT_VALUE) 
+                final int val2 = (ii+2+j <= diag) ? ((y > 0) ? input[iV+2] & mask : DEFAULT_VALUE)
                         : ((x < xMax) ? input[iH+st*2] & mask : DEFAULT_VALUE);
-                final int val3 = (ii+3+j <= diag) ? ((y > 0) ? input[iV+3] & mask : DEFAULT_VALUE) 
+                final int val3 = (ii+3+j <= diag) ? ((y > 0) ? input[iV+3] & mask : DEFAULT_VALUE)
                         : ((x < xMax) ? input[iH+st*3] & mask : DEFAULT_VALUE);
                 output[i]   = residue[k]   + val0;
                 output[i+1] = residue[k+1] + val1;
                 output[i+2] = residue[k+2] + val2;
                 output[i+3] = residue[k+3] + val3;
              }
-             
+
              line += blockDim;
           }
        }
@@ -1119,7 +1579,7 @@ public class IntraPredictor
        return output;
     }
 
-    
+
     private int[] computeBlockDC(Prediction prediction, int[] output, int x, int y,
          int direction)
     {
@@ -1205,9 +1665,9 @@ public class IntraPredictor
 
    // Search for a similar block that can be used as reference
    // Base prediction on difference with nearby blocks using 'winner update' strategy
-   // Return energy and update prediction argument
+   // Return error and update prediction argument
    private int computeReferenceSearch(int[] input, int x, int y,
-           int maxEnergy, Prediction prediction, int direction)
+           int maxSAD, Prediction prediction, int direction)
    {
       final int blockDim = prediction.blockDim;
 
@@ -1222,7 +1682,7 @@ public class IntraPredictor
       // Critical speed path
       while (this.set.size() > 0)
       {
-         // Select partial winner (lowest energy) to update
+         // Select partial winner (lowest error) to update
          ctx = this.set.pollFirst();
 
          // Full winner found ?
@@ -1237,7 +1697,7 @@ public class IntraPredictor
          final int start = (y+ctx.line)*st + x;
          final int end = start + blockDim;
          int offs2 = (ctx.y+ctx.line)*st + ctx.x;
-         int nrj = ctx.energy;
+         int sad = ctx.sad;
 
          // Compute line difference
          for (int i=start; i<end; i+=4)
@@ -1246,34 +1706,37 @@ public class IntraPredictor
              final int val1 = (input[i+1] & mask) - (data[offs2+1] & mask);
              final int val2 = (input[i+2] & mask) - (data[offs2+2] & mask);
              final int val3 = (input[i+3] & mask) - (data[offs2+3] & mask);
-             nrj += ((val0*val0) + (val1*val1) + (val2*val2) + (val3*val3));
+             sad += ((val0 + (val0 >> 31)) ^ (val0 >> 31)); //abs
+             sad += ((val1 + (val1 >> 31)) ^ (val1 >> 31)); //abs
+             sad += ((val2 + (val2 >> 31)) ^ (val2 >> 31)); //abs
+             sad += ((val3 + (val3 >> 31)) ^ (val3 >> 31)); //abs
              offs2 += 4;
          }
 
-         ctx.energy = nrj;
+         ctx.sad = sad;
          ctx.line++;
 
          // Put back current block context into sorted set (likely new position)
-         if (nrj < maxEnergy)
+         if (sad < maxSAD)
             this.set.add(ctx);
       }
 
       if (ctx == null)
-         prediction.energy = MAX_ERROR;
+         prediction.sad = MAX_ERROR;
       else
       {
          // Return best result
          prediction.x = ctx.x;
          prediction.y = ctx.y;
-         prediction.energy = ctx.energy;
+         prediction.sad = ctx.sad;
       }
-      
-      return prediction.energy;
+
+      return prediction.sad;
    }
 
-   
+
    public static int getReferenceCandidates(int refSearchStepRatio, int blockDim)
-   {      
+   {
       // for dim!=4, LEFT or RIGHT steps=>candidates: dim/1=>11, dim/2=>34, dim/4=>116, dim/8=>424
       // for dim=4,  LEFT or RIGHT steps=>candidates: dim/1=>11, dim/2=>34, dim/4=>116, dim/8=>116
       if (refSearchStepRatio == 8) // step=dim*8/8
@@ -1284,10 +1747,10 @@ public class IntraPredictor
          return 116;
       else if (refSearchStepRatio == 1) // step=dim*1/8
          return 424;
-      
+
       return -1;
    }
-   
+
 
    // (x,y) coordinates of current block
    // (xr, yr) coordinates of reference block
@@ -1355,7 +1818,7 @@ public class IntraPredictor
 
             if (action == ACTION_POPULATE)
             {
-               // Add to set sorted by residual energy and coordinates
+               // Add to set sorted by residual error and coordinates
                this.set.add(SearchBlockContext.getContext(referenceFrame, i, j));
             }
             else if (action == ACTION_GET_INDEX)
@@ -1377,7 +1840,7 @@ public class IntraPredictor
 
       if (action == ACTION_POPULATE)
          val = this.set.size();
-      
+
       return val;
    }
 
@@ -1386,7 +1849,7 @@ public class IntraPredictor
    private static class SearchBlockContext implements Comparable<SearchBlockContext>
    {
       int line;      // line to be processed
-      int energy;    // energy so far
+      int sad;       // sum of absolute differences so far
       int[] data;    // frame data
       int x;
       int y;
@@ -1412,7 +1875,7 @@ public class IntraPredictor
          if (++INDEX == CACHE.length)
             INDEX = 0;
 
-         res.energy = 0;
+         res.sad = 0;
          res.data = data;
          res.line = 0;
          res.x = x;
@@ -1427,8 +1890,8 @@ public class IntraPredictor
          if (c == null)
             return 1;
 
-         if (this.energy != c.energy)
-            return this.energy - c.energy;
+         if (this.sad != c.sad)
+            return this.sad - c.sad;
 
          if (this.y != c.y)
             return this.y - c.y;
@@ -1450,7 +1913,7 @@ public class IntraPredictor
 
             SearchBlockContext c = (SearchBlockContext) o;
 
-            if (this.energy != c.energy)
+            if (this.sad != c.sad)
                return false;
 
             if (this.y != c.y)
@@ -1465,6 +1928,13 @@ public class IntraPredictor
          {
             return false;
          }
+      }
+      
+      
+      @Override
+      public int hashCode()
+      {
+         return (this.y << 16) | (this.x & 0xFFFF);
       }
    }
 }

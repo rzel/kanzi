@@ -20,11 +20,12 @@ package kanzi.prediction;
 public class Prediction
 {
    public int blockDim;
-   public int energy;
+   public int sad;
    public int[] frame;
    public int[] residue;
    public int x;
    public int y;
+   public int anchor;
 
 
    public Prediction(int maxBlockDim)
