@@ -28,7 +28,7 @@ public class TestFlashSort
         for (int ii=1; ii<20; ii++)
         {
             System.out.println("\n\nTest "+ii);
-            int idx = 10;
+            int idx = ii;
             final int[] array = new int[64];
             java.util.Random random = new java.util.Random();
 
@@ -46,7 +46,7 @@ public class TestFlashSort
                 System.out.print(array[i]+" ");
 
             System.out.println();
-            new FlashSort(array.length-idx).sort(array, idx);
+            new FlashSort().sort(array, idx);
 
             for (int i=idx; i<b.length; i++)
                 b[i] = (byte) (array[i] & 255);
@@ -54,7 +54,15 @@ public class TestFlashSort
             System.out.println(new String(b));
 
             for (int i=idx; i<array.length; i++)
+            {
                 System.out.print(array[i]+" ");
+                
+                if ((i > 0) && (array[i] < array[i-1]))
+                {
+                   System.err.println("Error at position "+(i-idx));
+                   System.exit(1);
+                }
+            }
         }
 
         // Test speed
@@ -66,9 +74,9 @@ public class TestFlashSort
             java.util.Random random = new java.util.Random();
             long before, after;
 
-             FlashSort fSort = new FlashSort(10000);
+             FlashSort sorter = new FlashSort(10000);
 
-            for (int k=0; k<3; k++)
+            for (int k=0; k<5; k++)
             {
                 long sum = 0;
                 long sum2 = 0;
@@ -76,7 +84,7 @@ public class TestFlashSort
                 for (int i=0; i<rnd.length; i++)
                     rnd[i] = Math.abs(random.nextInt());
 
-                for (int ii=0; ii<20000; ii++)
+                for (int ii=0; ii<10000; ii++)
                 {
                     for (int i=0; i<array.length; i++)
                         array[i] = rnd[i] & 255;
@@ -85,7 +93,7 @@ public class TestFlashSort
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
-                    fSort.sort(array, 0);
+                    sorter.sort(array, 0);
                     after = System.nanoTime();
                     sum += (after - before);
                     before = System.nanoTime();
