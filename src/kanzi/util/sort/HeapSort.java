@@ -25,115 +25,90 @@ public final class HeapSort implements IntSorter
 {
     private final ArrayComparator cmp;
     private final int size;
-    
-    
+
+
     public HeapSort()
     {
         this(0, null);
     }
-    
-    
+
+
     public HeapSort(int size)
     {
         this(size, null);
     }
-    
-    
+
+
     public HeapSort(int size, ArrayComparator cmp)
     {
         if (size < 0)
             throw new IllegalArgumentException("Invalid size parameter (must be a least 0)");
-        
+
         this.cmp = cmp;
         this.size = size;
     }
-    
-    
+
+
     @Override
     public void sort(int[] array, int blkptr)
     {
-        int length = (this.size == 0) ? array.length : this.size;
-        
-        if (this.cmp != null)
+        final int sz = (this.size == 0) ? array.length : this.size;
+
+        for (int k=sz>>1; k>0; k--)
         {
-            for (int k=length>>1; k>0; k--)
-            {
-                this.sortWithComparator(array, blkptr+k, length);
-            }
-            
-            for (int i=length-1; i>0; i--)
-            {
-                int temp = array[0];
-                array[0] = array[i];
-                array[i] = temp;
-                this.sortWithComparator(array, blkptr+1, i);
-            }
+            doSort(array, blkptr, k, sz, this.cmp);
+        }
+
+        for (int i=sz-1; i>0; i--)
+        {
+            final int temp = array[blkptr];
+            array[blkptr] = array[blkptr+i];
+            array[blkptr+i] = temp;
+            doSort(array, blkptr, 1, i, this.cmp);
+        }
+    }
+
+
+    private static void doSort(int[] array, int blkptr, int idx, int count,
+            ArrayComparator cmp)
+    {
+        int k = idx;
+        final int temp = array[blkptr+k-1];
+        final int n = count >> 1;
+
+        if (cmp != null)
+        {
+           while (k <= n)
+           {
+               int j = k << 1;
+
+               if ((j < count) && (cmp.compare(array[blkptr+j-1], array[blkptr+j]) < 0))
+                   j++;
+
+               if (temp >= array[blkptr+j-1])
+                   break;
+
+               array[blkptr+k-1] = array[blkptr+j-1];
+               k = j;
+           }
         }
         else
         {
-            for (int k=length>>1; k>0; k--)
-            {
-                this.sortNoComparator(array, blkptr+k, length);
-            }
-            
-            for (int i=length-1; i>0; i--)
-            {
-                int temp = array[0];
-                array[0] = array[i];
-                array[i] = temp;
-                this.sortNoComparator(array, blkptr+1, i);
-            }
+           while (k <= n)
+           {
+               int j = k << 1;
+
+               if ((j < count) && (array[blkptr+j-1] < array[blkptr+j]))
+                   j++;
+
+               if (temp >= array[blkptr+j-1])
+                   break;
+
+               array[blkptr+k-1] = array[blkptr+j-1];
+               k = j;
+           }
         }
-        
+
+        array[blkptr+k-1] = temp;
     }
-    
-    
-    private void sortWithComparator(int[] array, int idx, int count)
-    {
-        int k = idx;
-        final int temp = array[k-1];
-        final int n = count >> 1;
-        final ArrayComparator c = this.cmp;
-        
-        while (k <= n)
-        {
-            int j = k << 1;
-            
-            if ((j < count) && (c.compare(array[j-1], array[j]) < 0))
-                j++;
-            
-            if (temp >= array[j-1])
-                break;
-            
-            array[k-1] = array[j-1];
-            k = j;
-        }
-        
-        array[k-1] = temp;
-    }
-    
-    
-    private void sortNoComparator(int[] array, int idx, int count)
-    {
-        int k = idx;
-        final int temp = array[k-1];
-        final int n = count >> 1;
-        
-        while (k <= n)
-        {
-            int j = k << 1;
-            
-            if ((j < count) && (array[j-1] < array[j]))
-                j++;
-            
-            if (temp >= array[j-1])
-                break;
-            
-            array[k-1] = array[j-1];
-            k = j;
-        }
-        
-        array[k-1] = temp;
-    }
-    
 }
