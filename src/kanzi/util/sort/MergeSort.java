@@ -46,15 +46,15 @@ public class MergeSort implements IntSorter
 
     // Not thread safe
     @Override
-    public void sort(int[] array, int blkptr)
+    public void sort(int[] input, int blkptr)
     {
-        int sz =(this.size == 0) ? array.length : this.size;
+        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
 
         if (this.buffer.length < sz)
             this.buffer = new int[sz];
 
-        System.arraycopy(array, blkptr, this.buffer, 0, sz);
-        IndexedIntArray src = new IndexedIntArray(array, blkptr);
+        System.arraycopy(input, blkptr, this.buffer, 0, sz);
+        IndexedIntArray src = new IndexedIntArray(input, blkptr);
         IndexedIntArray dst = new IndexedIntArray(this.buffer, 0);
         sort(dst, src, blkptr, blkptr+sz);
     }

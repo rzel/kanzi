@@ -64,7 +64,7 @@ public class BucketSort implements IntSorter, ByteSorter
     @Override
     public void sort(int[] input, int blkptr)
     {
-        final int sz = (this.size == 0) ? input.length : this.size;
+        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
         final int len16 = sz & -16;
         final int end16 = blkptr + len16;
         final int[] c = this.count;

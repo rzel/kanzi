@@ -72,17 +72,17 @@ public class QuickSort implements IntSorter
 
 
     @Override
-    public void sort(int[] array, int idx)
+    public void sort(int[] input, int blkptr)
     {
-        int maxIdx = (this.size == 0) ? array.length - 1 : this.size - 1;
+        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
 
-        if (idx >= maxIdx)
+        if (blkptr >= sz-1)
             return;
 
         if (this.cmp != null)
-            this.sortWithComparator(array, idx, maxIdx);
+            this.sortWithComparator(input, blkptr, blkptr+sz-1);
         else
-            this.sortNoComparator(array, idx, maxIdx);
+            this.sortNoComparator(input, blkptr, blkptr+sz-1);
     }
 
 

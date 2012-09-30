@@ -50,21 +50,21 @@ public final class HeapSort implements IntSorter
 
 
     @Override
-    public void sort(int[] array, int blkptr)
+    public void sort(int[] input, int blkptr)
     {
-        final int sz = (this.size == 0) ? array.length : this.size;
+        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
 
         for (int k=sz>>1; k>0; k--)
         {
-            doSort(array, blkptr, k, sz, this.cmp);
+            doSort(input, blkptr, k, sz, this.cmp);
         }
 
         for (int i=sz-1; i>0; i--)
         {
-            final int temp = array[blkptr];
-            array[blkptr] = array[blkptr+i];
-            array[blkptr+i] = temp;
-            doSort(array, blkptr, 1, i, this.cmp);
+            final int temp = input[blkptr];
+            input[blkptr] = input[blkptr+i];
+            input[blkptr+i] = temp;
+            doSort(input, blkptr, 1, i, this.cmp);
         }
     }
 

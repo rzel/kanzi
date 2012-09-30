@@ -54,7 +54,7 @@ public class BitonicSort implements IntSorter
     @Override
     public void sort(int[] input, int blkptr)
     {
-        final int sz = (this.size == 0) ? input.length : this.size;
+        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
 
         if (sz > 1)
            sort(input, blkptr, sz, true);

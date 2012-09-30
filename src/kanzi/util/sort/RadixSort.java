@@ -106,7 +106,7 @@ public final class RadixSort implements IntSorter, ByteSorter
     @Override
     public void sort(int[] input, int blkptr)
     {
-        final int sz = (this.size == 0) ? input.length : this.size;
+        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
         final int end = blkptr + sz;
         final int len = this.queues.length; // aliasing
         final int bSize = this.bufferSize; // aliasing

@@ -49,15 +49,14 @@ public class InsertionSort implements IntSorter
     }
     
     
-    public void sort(int[] array, int blkptr)
+    public void sort(int[] input, int blkptr)
     {
-        int len = (this.size == 0) ? array.length : this.size;
-        int end = blkptr + len;
+        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
         
         if (this.cmp == null)
-            this.sortNoComparator(array, blkptr, end);
+            this.sortNoComparator(input, blkptr, blkptr+sz);
         else
-            this.sortWithComparator(array, blkptr, end);
+            this.sortWithComparator(input, blkptr, blkptr+sz);
     }
     
     

@@ -53,8 +53,8 @@ public class FlashSort implements IntSorter
 
     public void sort(int[] input, int blkptr)
     {
-       int sz = (this.size == 0) ? input.length : this.size;
-       int m = sz / 5; // speed optimum m in [0.2n .. m=0.5n]
+       final int sz = (this.size == 0) ? input.length - blkptr : this.size;
+       final int m = sz / 5; // speed optimum m in [0.2n .. m=0.5n]
 
        if (this.buffer.length < m)
           this.buffer = new int[(m < 32) ? 32 : (m + 7) & 0xFFFFFFF8];
