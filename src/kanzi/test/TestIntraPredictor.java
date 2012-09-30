@@ -136,7 +136,7 @@ public class TestIntraPredictor
              {
                 Prediction pred = results[nn];
 
-                if (pred.energy != IntraPredictor.MAX_ERROR)
+                if (pred.sad != IntraPredictor.MAX_ERROR)
                 {
                    for (int jj=j; jj<j+dim; jj++)
                       for (int ii=i; ii<i+dim; ii++)
