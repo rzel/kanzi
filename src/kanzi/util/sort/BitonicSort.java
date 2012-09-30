@@ -57,7 +57,7 @@ public class BitonicSort implements IntSorter
         final int sz = (this.size == 0) ? input.length : this.size;
 
         if (sz > 1)
-           sort(input, blkptr, blkptr+sz, true);
+           sort(input, blkptr, sz, true);
     }
 
 
@@ -81,19 +81,19 @@ public class BitonicSort implements IntSorter
        // Find greatest power of two smaller than n
        int m;
 
-       if (n < POWER_OF_TWO.length)
+       if (n < POWER_OF_TWO.length) 
        {
-            m = POWER_OF_TWO[n];
-       }
-       else
+          m = POWER_OF_TWO[n];
+       } 
+       else 
        {
-         m = 1;
+          m = 1;
 
-         while (m < n)
-            m <<= 1;
+          while (m < n)
+             m <<= 1;
 
           m >>= 1;
-        }
+       }
 
         final int end = lo + n - m;
 
