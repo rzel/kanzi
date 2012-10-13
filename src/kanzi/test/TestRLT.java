@@ -15,10 +15,10 @@ limitations under the License.
 
 package kanzi.test;
 
-import kanzi.IndexedByteArray;
-import kanzi.function.RLT;
 import java.util.Arrays;
 import java.util.Random;
+import kanzi.IndexedByteArray;
+import kanzi.function.RLT;
 
 
 public class TestRLT
@@ -98,8 +98,7 @@ public class TestRLT
                       input[j] = (byte) (0);
                }
 
-               RLT rlt = new RLT();
-
+               RLT rlt = new RLT(arr.length);
                System.out.println("\nOriginal: ");
 
                for (int i = 0; i < input.length; i++)
@@ -128,7 +127,7 @@ public class TestRLT
                   System.out.print((output[i] & 255) + " "); //+"("+Integer.toBinaryString(output[i] & 255)+") ");
                }
 
-               rlt = new RLT(); // Required to reset internal attributes
+               rlt = new RLT(iba1.index); // Required to reset internal attributes
                iba1.index = 0;
                iba2.index = 0;
                iba3.index = 0;
@@ -184,36 +183,32 @@ public class TestRLT
                input[n++] = val;
          }
 
-         RLT rlt = new RLT();
          long before, after;
          long delta1 = 0;
          long delta2 = 0;
 
-         before = System.nanoTime();
-
          for (int ii = 0; ii < iter; ii++)
          {
-            rlt = new RLT(); // Required to reset internal attributes
+            RLT rlt = new RLT(); // Required to reset internal attributes
             iba1.index = 0;
             iba2.index = 0;
+            before = System.nanoTime();
             rlt.forward(iba1, iba2);
+            after = System.nanoTime();
+            delta1 += (after - before);
          }
-
-         after = System.nanoTime();
-         delta1 += (after - before);
-         before = System.nanoTime();
 
          for (int ii = 0; ii < iter; ii++)
          {
-            rlt = new RLT(); // Required to reset internal attributes
+            RLT rlt = new RLT(); // Required to reset internal attributes
             iba3.index = 0;
             iba2.index = 0;
+            before = System.nanoTime();
             rlt.inverse(iba2, iba3);
+            after = System.nanoTime();
+            delta2 += (after - before);
          }
 
-         after = System.nanoTime();
-         delta2 += (after - before);
-         System.out.println();
          int idx = -1;
          
          // Sanity check
