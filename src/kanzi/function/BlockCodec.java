@@ -27,8 +27,8 @@ import kanzi.transform.MTFT;
 
 // Utility class to compress/decompress a data block
 // Fast reversible block coder/decoder based on a pipeline of transformations:
-// Forward: [Run Length ->] Burrows-Wheeler -> Move to Front -> Zero Length
-// Inverse: Zero Length -> Move to Front -> Burrows-Wheeler [-> Run Length]
+// Forward: Burrows-Wheeler -> Move to Front -> Zero Length
+// Inverse: Zero Length -> Move to Front -> Burrows-Wheeler
 // The block size determine the balance between speed and compression ratio
 // The max block size is around 250 KB and provides the best compression ratio.
 // The default block size provides a good balance.
@@ -485,35 +485,10 @@ public class BlockCodec implements ByteFunction
          else
          {
             this.dataSize = this.mode & 0x0F;
-            int val = (int) (bs.readBits(8) & 0xFF);
-            this.blockLength = val;
-
-            if (this.dataSize > 1)
-            {
-               val = (int) (bs.readBits(8) & 0xFF);
-               this.blockLength = (this.blockLength << 8) | val;
-            }
-
-            if (this.dataSize > 2)
-            {
-               val = (int) (bs.readBits(8) & 0xFF);
-               this.blockLength = (this.blockLength << 8) | val;
-            }
-            
-            val = (int) (bs.readBits(8) & 0xFF);
-            this.primaryIndex = val;
-
-            if (this.dataSize > 1)
-            {
-               val = (int) (bs.readBits(8) & 0xFF);
-               this.primaryIndex = (this.primaryIndex << 8) | val;
-            }
-
-            if (this.dataSize > 2)
-            {
-               val = (int) (bs.readBits(8) & 0xFF);
-               this.primaryIndex = (this.primaryIndex << 8) | val;
-            }
+            final int length = this.dataSize << 3;
+            final int mask = (1 << length) - 1;
+            this.blockLength = (int) (bs.readBits(length) & mask);
+            this.primaryIndex = (int) (bs.readBits(length) & mask);
          }
       }
    }
