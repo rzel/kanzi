@@ -50,19 +50,17 @@ public final class ExpGolombEncoder extends AbstractEncoder
        int val2 = val;
        val2 = (val2 + (val2 >> 31)) ^ (val2 >> 31); // abs(val2)
        val2++;
-       long emit;
+       long emit = val2;
        int n;
        
        if (val2 <= 3) // shortcut when abs(input) = 1 or 2
        {
-          emit = val2;
           n = 3;
        }
        else
        {
           //  Count the bits (log2), subtract one, and write that number of zeros
           //  preceding the previous bit string to get the encoded value
-          emit = val2;
           int log2 = 0;
 
           for ( ; val2>1; val2>>=1)

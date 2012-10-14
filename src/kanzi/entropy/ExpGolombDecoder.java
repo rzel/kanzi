@@ -62,7 +62,7 @@ public final class ExpGolombDecoder extends AbstractDecoder
        // Read signed if necessary
        if ((res != 0) && (this.signed == true))
        {
-           // If res != 0, Get the sign (0 for negative values)
+           // If res != 0, get the sign (1 for negative values)
            if (this.bitstream.readBit() == 1)
                return (byte) -res;
        }
