@@ -24,6 +24,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import kanzi.OutputBitStream;
 import kanzi.bitstream.DefaultOutputBitStream;
+import kanzi.entropy.BinaryEntropyEncoder;
+import kanzi.entropy.PAQPredictor;
 
 
 public class TestEntropyCoders
@@ -58,8 +60,6 @@ public class TestEntropyCoders
 
             for (int ii = 0; ii < maxIter; ii++)
             {
-
-
                 // ExpGolomb
                 fis = new FileInputStream(new File(fileName));
                 outputFileName = outputFileName.substring(0, outputFileName.length() - 3).concat("egl");
@@ -155,6 +155,33 @@ public class TestEntropyCoders
                 if (ii == 0)
                     System.out.println("Range       size = " + obs.written() + " bits   ratio = "+((float) obs.written()/(8*sz)));
                 System.out.println("Range       elapsed [ms] = " + (after - before) / 1000000);
+                System.out.println();
+            
+                
+                // BinaryEntropy
+                fis = new FileInputStream(new File(fileName));
+                outputFileName = outputFileName.substring(0, outputFileName.length() - 3).concat("rng");
+                fos = new FileOutputStream(new File(outputFileName));
+                obs = new DefaultOutputBitStream(fos, 16384);
+                encoder = new BinaryEntropyEncoder(obs, new PAQPredictor());
+                before = System.nanoTime();
+
+                do
+                {
+                    n = fis.read(buffer);
+
+                    for (int i = 0; i < n; i++)
+                        encoder.encodeByte(buffer[i]);
+                }
+                while (n == buffer.length);
+
+                after = System.nanoTime();
+                fis.close();
+                obs.close();
+
+                if (ii == 0)
+                    System.out.println("PAQ         size = " + obs.written() + " bits   ratio = "+((float) obs.written()/(8*sz)));
+                System.out.println("PAQ         elapsed [ms] = " + (after - before) / 1000000);
                 System.out.println();
             }
         }

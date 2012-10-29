@@ -130,41 +130,54 @@ public class TestHuffmanCoder
 
         // Test speed
         System.out.println("\n\nSpeed Test");
-        
+        int[] repeats = { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3 };
+
         for (int jj=0; jj<3; jj++)
         {
+            System.out.println("\nTest "+(jj+1));
             byte[] values1 = new byte[50000];
             byte[] values2 = new byte[50000];
-            int[] freq = new int[256];
-            long delta = 0;
+            long delta1 = 0, delta2 = 0;
 
-            for (int ii=0; ii<2000; ii++)
+            for (int ii=0; ii<4000; ii++)
             {
-                for (int i=0; i<256; i++)
-                   freq[i] = 0;
-                
+                int idx = 0;
+
                 for (int i=0; i<values1.length; i++)
                 {
-                    values1[i] = (byte) (i & 255);
-                    freq[values1[i] & 0xFF]++;
+                    int i0 = i;
+                    int len = repeats[idx];
+                    idx = (idx + 1) & 0x0F;
+
+                    if (i0+len >= values1.length)
+                        len = 1;
+
+                    for (int j=i0; j<i0+len; j++)
+                    {
+                       values1[j] = (byte) (i0 & 255);
+                       i++;
+                    }
                 }
-                 
+
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
+                ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
                 HuffmanEncoder rc = new HuffmanEncoder(bs);
-                long before = System.nanoTime();
+                long before1 = System.nanoTime();
                 rc.encode(values1, 0, values1.length);
+                long after1 = System.nanoTime();
+                delta1 += (after1 - before1);
                 rc.dispose();
                 bs.close();
-                
+
                 // Decode
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1000);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
                 HuffmanDecoder rd = new HuffmanDecoder(bs2);
+                long before2 = System.nanoTime();
                 rd.decode(values2, 0, values2.length);
-                long after = System.nanoTime();
-                delta += (after - before);  
+                long after2 = System.nanoTime();
+                delta2 += (after2 - before2);
                 rd.dispose();
 
                 // Sanity check
@@ -178,8 +191,9 @@ public class TestHuffmanCoder
                    }
                 }
             }
- 
-            System.out.println("Elapsed [ms]: "+delta/1000000);
+
+            System.out.println("Encode [ms]: "+delta1/1000000);
+            System.out.println("Decode [ms]: "+delta2/1000000);
         }
     }
 }

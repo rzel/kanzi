@@ -68,19 +68,19 @@ public class TestPAQEntropyCoder
                 OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out);
                 dbgbs.showByte(true);
-                BinaryEntropyEncoder rc = new BinaryEntropyEncoder(dbgbs, new PAQPredictor());
+                BinaryEntropyEncoder bec = new BinaryEntropyEncoder(dbgbs, new PAQPredictor());
 
                 for (int i=0; i<values.length; i++)
                 {
-                    if (rc.encodeByte((byte) (values[i] & 255)) == false)
+                    if (bec.encodeByte((byte) (values[i] & 255)) == false)
                         break;
                 }
 
                 //dbgbs.flush();
-                rc.dispose();
+                bec.dispose();
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
-                BinaryEntropyDecoder rd = new BinaryEntropyDecoder(bs2, new PAQPredictor());
+                BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new PAQPredictor());
                 System.out.println("\nDecoded:");
                 int len = values.length; // buf.length >> 3;
                 boolean ok = true;
@@ -89,7 +89,7 @@ public class TestPAQEntropyCoder
                 {
                     try
                     {
-                        byte n = rd.decodeByte();
+                        byte n = bed.decodeByte();
 
                         if (values[j++] != n)
                            ok = false;
@@ -104,7 +104,7 @@ public class TestPAQEntropyCoder
                 }
 
                 System.out.println("\n"+((ok == true) ? "Identical" : "Different"));
-                rd.dispose();
+                bed.dispose();
             }
             catch (Exception e)
             {
@@ -115,43 +115,55 @@ public class TestPAQEntropyCoder
 
         // Test speed
         System.out.println("\n\nSpeed Test");
+        int[] repeats = { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3 };
 
         for (int jj=0; jj<3; jj++)
         {
-            byte[] values1 = new byte[10000];
-            byte[] values2 = new byte[10000];
-            long delta1 = 0;
-            long delta2 = 0;
+            System.out.println("\nTest "+(jj+1));
+            byte[] values1 = new byte[50000];
+            byte[] values2 = new byte[50000];
+            long delta1 = 0, delta2 = 0;
 
-            for (int i=0; i<values1.length; i++)
-                values1[i] = (byte) (i & 63);
-
-            int iter = 10000;
-
-            for (int ii=0; ii<iter; ii++)
+            for (int ii=0; ii<4000; ii++)
             {
-                long before, after;
+                int idx = 0;
+
+                for (int i=0; i<values1.length; i++)
+                {
+                    int i0 = i;
+                    int len = repeats[idx];
+                    idx = (idx + 1) & 0x0F;
+
+                    if (i0+len >= values1.length)
+                        len = 1;
+
+                    for (int j=i0; j<i0+len; j++)
+                    {
+                       values1[j] = (byte) (i0 & 255);
+                       i++;
+                    }
+                }
 
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
-                BinaryEntropyEncoder rc = new BinaryEntropyEncoder(bs, new PAQPredictor());
-                before = System.nanoTime();
-                rc.encode(values1, 0, values1.length);
-
-                after = System.nanoTime();
-                delta1 += (after - before);
-                bs.flush();
-                rc.dispose();
+                ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
+                BinaryEntropyEncoder bec = new BinaryEntropyEncoder(bs, new PAQPredictor());
+                long before1 = System.nanoTime();
+                bec.encode(values1, 0, values1.length);
+                long after1 = System.nanoTime();
+                delta1 += (after1 - before1);
+                bec.dispose();
+                bs.close();
 
                 // Decode
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
-                BinaryEntropyDecoder rd = new BinaryEntropyDecoder(bs2, new PAQPredictor());
-                before = System.nanoTime();
-                rd.decode(values2, 0, values2.length);
-                after = System.nanoTime();
-                delta2 += (after - before);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
+                BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new PAQPredictor());
+                long before2 = System.nanoTime();
+                bed.decode(values2, 0, values2.length);
+                long after2 = System.nanoTime();
+                delta2 += (after2 - before2);
+                bed.dispose();
 
                 // Sanity check
                 for (int i=0; i<values1.length; i++)
@@ -163,13 +175,10 @@ public class TestPAQEntropyCoder
                       break;
                    }
                 }
-
-                rd.dispose();
             }
 
-            System.out.println();
-            System.out.println("Encoding [ms]: "+delta1/1000000);
-            System.out.println("Decoding [ms]: "+delta2/1000000);
+            System.out.println("Encode [ms]: "+delta1/1000000);
+            System.out.println("Decode [ms]: "+delta2/1000000);
         }
     }
 }

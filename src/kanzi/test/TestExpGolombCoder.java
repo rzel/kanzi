@@ -123,30 +123,73 @@ public class TestExpGolombCoder
             }
         }
         
+
         // Test speed
+        System.out.println("\n\nSpeed Test");
+        int[] repeats = { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3 };
+
+        for (int jj=0; jj<3; jj++)
         {
-            System.out.println("\nTest speed");
-            ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-            long before, after, sum = 0;
-            
-            for (int i=0; i<16384; i++)
-                os.write(i);
-            
-            for (int ii=0; ii<50000; ii++)
+            System.out.println("\nTest "+(jj+1));
+            byte[] values1 = new byte[50000];
+            byte[] values2 = new byte[50000];
+            long delta1 = 0, delta2 = 0;
+
+            for (int ii=0; ii<4000; ii++)
             {
-                OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
+                int idx = 0;
+
+                for (int i=0; i<values1.length; i++)
+                {
+                    int i0 = i;
+                    int len = repeats[idx];
+                    idx = (idx + 1) & 0x0F;
+
+                    if (i0+len >= values1.length)
+                        len = 1;
+
+                    for (int j=i0; j<i0+len; j++)
+                    {
+                       values1[j] = (byte) (i0 & 255);
+                       i++;
+                    }
+                }
+
+                // Encode
+                ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
+                OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
                 ExpGolombEncoder gc = new ExpGolombEncoder(bs, true);
-                before = System.nanoTime();
-                
-                for (int i=0; i<2000; i++)
-                    gc.encodeByte((byte) (i & 255));
-                
-                after = System.nanoTime();
-                sum += (after - before);
-//                bs.flush();
-          }
-            
-            System.out.println("Elapsed [ms]: "+(sum/1000000));
+                long before1 = System.nanoTime();
+                gc.encode(values1, 0, values1.length);
+                long after1 = System.nanoTime();
+                delta1 += (after1 - before1);
+                gc.dispose();
+                bs.close();
+
+                // Decode
+                byte[] buf = os.toByteArray();
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
+                ExpGolombDecoder gd = new ExpGolombDecoder(bs2, true);
+                long before2 = System.nanoTime();
+                gd.decode(values2, 0, values2.length);
+                long after2 = System.nanoTime();
+                delta2 += (after2 - before2);
+                gd.dispose();
+
+                // Sanity check
+                for (int i=0; i<values1.length; i++)
+                {
+                   if (values1[i] != values2[i])
+                   {
+                      System.out.println("Error at index "+i+" ("+values1[i]
+                              +"<->"+values2[i]+")");
+                      break;
+                   }
+                }
+            }
+
+            System.out.println("Encode [ms]: "+delta1/1000000);
+            System.out.println("Decode [ms]: "+delta2/1000000);
         }
     }
 }
