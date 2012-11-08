@@ -25,14 +25,17 @@ import kanzi.OutputBitStream;
 import kanzi.bitstream.DebugOutputBitStream;
 import kanzi.bitstream.DefaultInputBitStream;
 import kanzi.bitstream.DefaultOutputBitStream;
+import kanzi.entropy.FPAQEntropyDecoder;
+import kanzi.entropy.FPAQEntropyEncoder;
+import kanzi.entropy.FPAQPredictor;
 import kanzi.entropy.PAQPredictor;
 
 
-public class TestPAQEntropyCoder
+public class TestFPAQEntropyCoder
 {
     public static void main(String[] args)
     {
-        System.out.println("TestPAQEntropyCoder");
+        System.out.println("TestFPAQEntropyCoder");
 
         // Test behavior
         for (int ii=1; ii<20; ii++)
@@ -68,16 +71,18 @@ public class TestPAQEntropyCoder
                 OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out);
                 dbgbs.showByte(true);
-                BinaryEntropyEncoder bec = new BinaryEntropyEncoder(dbgbs, new PAQPredictor());  
-                bec.encode(values, 0, values.length);
-                bec.dispose();
+                FPAQEntropyEncoder fpec = new FPAQEntropyEncoder(dbgbs, new FPAQPredictor());
+                fpec.encode(values, 0, values.length);
+                
+                //dbgbs.flush();
+                fpec.dispose();
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
-                BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new PAQPredictor());
+                FPAQEntropyDecoder fped = new FPAQEntropyDecoder(bs2, new FPAQPredictor());
                 System.out.println("\nDecoded:");
                 boolean ok = true;
                 byte[] values2 = new byte[values.length];
-                bed.decode(values2, 0, values2.length);
+                fped.decode(values2, 0, values2.length);
 
                 try
                 {
@@ -96,7 +101,7 @@ public class TestPAQEntropyCoder
                 }
 
                 System.out.println("\n"+((ok == true) ? "Identical" : "Different"));
-                bed.dispose();
+                fped.dispose();
             }
             catch (Exception e)
             {
@@ -116,7 +121,7 @@ public class TestPAQEntropyCoder
             byte[] values2 = new byte[50000];
             long delta1 = 0, delta2 = 0;
 
-            for (int ii=0; ii<2000; ii++)
+            for (int ii=0; ii<4000; ii++)
             {
                 int idx = 0;
 
