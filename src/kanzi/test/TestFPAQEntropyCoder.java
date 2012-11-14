@@ -121,7 +121,7 @@ public class TestFPAQEntropyCoder
             byte[] values2 = new byte[50000];
             long delta1 = 0, delta2 = 0;
 
-            for (int ii=0; ii<4000; ii++)
+            for (int ii=0; ii<2000; ii++)
             {
                 int idx = 0;
 

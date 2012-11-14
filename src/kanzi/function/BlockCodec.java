@@ -83,7 +83,7 @@ public class BlockCodec implements ByteFunction
        this.bwt = new BWT();
        this.mtft = new MTFT();
        this.size = blockSize;
-       this.buffer = new IndexedByteArray(new byte[0], 0);
+       this.buffer = new IndexedByteArray(new byte[blockSize], 0);
    }
 
 
@@ -121,22 +121,13 @@ public class BlockCodec implements ByteFunction
        if ((input == null) || (output == null) || (input == output))
            return false;
 
-       int length = (this.size == 0) ? input.array.length - input.index : this.size;
+       final int length = (this.size == 0) ? input.array.length - input.index : this.size;
 
        if ((length < 0) || (length > MAX_BLOCK_SIZE))
           return false;
 
        if (length + input.index > input.array.length)
            return false;
-
-       if (length == 0)
-       {
-           if (output.array.length < output.index + 1)
-              return false;
-
-           output.array[output.index++] = (byte) COPY_BLOCK_MASK;
-           return true;
-       }
 
        final int headerStartIdx = output.index;
 
@@ -148,8 +139,7 @@ public class BlockCodec implements ByteFunction
               return false;
 
           // Add 'mode' byte
-          output.array[headerStartIdx] = (byte) (COPY_BLOCK_MASK | length);
-          output.index++;
+          output.array[output.index++] = (byte) (COPY_BLOCK_MASK | length);
 
           // Copy block
           for (int i=0; i<length; i++)
@@ -354,7 +344,7 @@ public class BlockCodec implements ByteFunction
    }
 
 
-   // Return -1 if error, otherwise the number of bytes written in the encoder
+   // Return -1 if error, otherwise the number of encoded bytes 
    public int encode(IndexedByteArray data, EntropyEncoder ee)
    {
       if (ee == null)
