@@ -28,7 +28,8 @@ import kanzi.BitStreamException;
 public final class RangeDecoder extends AbstractDecoder
 {
     private static final long TOP       = 1L << 48;
-    private static final long BOTTOM    = 1L << 40;
+    private static final long BOTTOM    = (1L << 40) - 1;
+    private static final long MAX_RANGE = BOTTOM + 1;
     private static final long MASK      = 0x00FFFFFFFFFFFFFFL;
 
     private static final int NB_SYMBOLS = 257; //256 + EOF
@@ -118,11 +119,11 @@ public final class RangeDecoder extends AbstractDecoder
 
         long checkRange = (this.low ^ (this.low + this.range)) & MASK;
 
-        while ((checkRange < TOP) || (this.range < BOTTOM))
+        while ((checkRange < TOP) || (this.range < MAX_RANGE))
         {
             // Normalize
             if (checkRange >= TOP)
-                this.range = (-this.low & MASK) & (BOTTOM-1);
+                this.range = (-this.low & MASK) & BOTTOM;
 
             this.code <<= 8;
             this.code |= (this.bitstream.readBits(8) & 0xFF);
