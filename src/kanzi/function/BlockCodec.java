@@ -57,7 +57,8 @@ public class BlockCodec implements ByteFunction
    public static final int NO_RLT_MASK      = 0x20;
    public static final int NO_ZLT_MASK      = 0x40;
 
-   public static final int DEFAULT_BLOCK_SIZE = 65530;
+   public static final int MAX_HEADER_SIZE = 7;
+   public static final int DEFAULT_BLOCK_SIZE = 0x10000 - MAX_HEADER_SIZE;
    public static final int MAX_BLOCK_SIZE = 0xFFFFFF; // 16 MB (24 bits)
 
    private final IndexedByteArray buffer;
