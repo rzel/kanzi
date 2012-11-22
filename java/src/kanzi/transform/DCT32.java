@@ -91,8 +91,8 @@ public final class DCT32 implements IntTransform
       90, -90,  88, -85,  82, -78,  73, -67,  61, -54,  46, -38,  31, -22,  13,  -4
     };
         
-    private final int MAX_VAL = 1<<16;
-    private final int MIN_VAL = -(MAX_VAL+1);
+    private static final int MAX_VAL = 1<<16;
+    private static final int MIN_VAL = -(MAX_VAL+1);
             
     private final int fShift;
     private final int iShift;

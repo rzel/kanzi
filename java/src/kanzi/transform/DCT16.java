@@ -112,8 +112,8 @@ public final class DCT16 implements IntTransform
     private static final int W246 = 87;
     private static final int W247 = -90;
     
-    private final int MAX_VAL = 1<<16;
-    private final int MIN_VAL = -(MAX_VAL+1);
+    private static final int MAX_VAL = 1<<16;
+    private static final int MIN_VAL = -(MAX_VAL+1);
             
     private final int fShift;
     private final int iShift;
@@ -145,7 +145,6 @@ public final class DCT16 implements IntTransform
     
     private int[] computeForward(int[] input, int iIdx, int[] output, int oIdx, int shift)
     {       
-       //final int shift = this.fShift;
        final int round = (shift == 0) ? 0 : 1 << (shift - 1);    
        int offs = iIdx;
 
