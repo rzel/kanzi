@@ -26,28 +26,37 @@ public class TestBlockCoder
     public static void main(String[] args)
     {
        BlockCompressor enc = new BlockCompressor(args);
+       long status = enc.call();
        
-       if (enc.call() < 0L)
+       if (status < 0L)
        {
-          System.out.println("Compression failed, skipping decompression");
-          System.exit(1);
+          System.out.println("Compression failed with status " + status + ", skipping decompression");
+          System.exit((int) status);
        }
 
        Set<String> set = new HashSet<String>();
 
        for (int i=0; i<args.length; i++)
        {
-          if (args[i].startsWith("-file="))
+          if (args[i].startsWith("-input="))
              set.add(args[i]+".knz");
           else if (args[i].equals("-debug"))
              set.add(args[i]);
           else if (args[i].equals("-silent"))
              set.add(args[i]);
+          else if (args[i].equals("-overwrite"))
+             set.add(args[i]);
        }
 
        args = (String[]) set.toArray(new String[set.size()]);
        BlockDecompressor dec = new BlockDecompressor(args);
-       dec.call();
+       status = dec.call();
+
+       if (status < 0L)
+       {
+          System.out.println("Decompression failed with status " + status);
+          System.exit((int) status);
+       }
     }
     
 }
