@@ -268,6 +268,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
                   case 'N' :
                      if (entropyCoder == null)
                         entropyCoder = new NullEntropyEncoder(obs);
+                     break;
 
                   default :
                      System.err.println("Invalid entropy encoder: " + this.entropyType);

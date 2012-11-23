@@ -291,6 +291,7 @@ public class BlockDecompressor implements Runnable, Callable<Long>
                   case 'N' :
                      if (entropyDecoder == null)
                         entropyDecoder = new NullEntropyDecoder(ibs);
+                     break;
 
                   default :
                      System.err.println("Invalid entropy codec type: " + entropyType);
