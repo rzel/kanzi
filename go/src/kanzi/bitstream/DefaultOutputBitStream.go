@@ -186,17 +186,6 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 		this.bitIndex = 7
 	}
 
-	for this.written&63 != 0 {
-		// Pad with 0xFF
-		this.buffer[this.position] = byte(0xFF)
-		this.written += 8
-		this.position++
-
-		if this.position >= len(this.buffer) {
-			this.Flush()
-		}
-	}
-
 	this.Flush()
 	this.closed = true
 

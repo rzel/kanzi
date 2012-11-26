@@ -200,17 +200,6 @@ public final class DefaultOutputBitStream implements OutputBitStream
          this.bitIndex = 7;
       }
 
-      // Adjust stream size to multiple of 8 bytes (to allow decoding of long)
-      while ((this.written & 63) != 0)
-      {
-         // Pad with 0xFF
-         this.buffer[this.position] = (byte) 0xFF;
-         this.written += 8;
-
-         if (++this.position >= this.buffer.length)
-            this.flush();
-      }
-
       this.flush();
       this.closed = true;
 
