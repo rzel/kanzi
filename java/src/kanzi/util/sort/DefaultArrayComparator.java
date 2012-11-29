@@ -35,6 +35,12 @@ public final class DefaultArrayComparator implements ArrayComparator
     
     public int compare(int lidx, int ridx)
     {
-        return this.array[lidx] - this.array[ridx];
+        int res = this.array[lidx] - this.array[ridx];
+        
+        // Make the sort stable
+        if (res == 0)
+           res = lidx - ridx;
+        
+        return res;
     }
 }
