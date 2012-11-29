@@ -220,7 +220,7 @@ func initStretch() []int {
 var STRETCH = initStretch()
 
 type PAQPredictor struct {
-	pr     uint      // next predicted value (0-4095)
+	pr     int       // next predicted value (0-4095)
 	c0     uint      // bitwise context: last 0-7 bits with a leading 1 (1-255)
 	c4     uint      // last 4 whole bytes, last is in low 8 bits
 	bpos   uint      // number of bits in c0 (0-7)
@@ -296,13 +296,11 @@ func (this *PAQPredictor) Update(bit byte) {
 	if c1c == this.c0 {
 		c1d += 2
 	}
-	//println("y ",y," ctx ",this.ctxPtr," c1c ",c1c," c1d ",c1d)
+
 	// Prediction chain
 	this.ctxPtr = this.c0
 	pred := this.sm.get(y, this.states[this.ctxPtr])
-	//println("pred ",pred)	
 	pred = this.apm2.get(y, pred, this.c0|(c1d<<8), 7)
-	//println("pred ",pred)	
 	pred = this.apm3.get(y, pred, this.runCtx, 8)
 	//     ctx := int(this.c0 ^ (((this.c4*uint64(123456791)) & uint64(0xFFFFFFFF)) >> 21)))
 	//     pred = (this.apm5.get(y, pred, ctx, 7) + pred + 1) >> 1
@@ -311,10 +309,10 @@ func (this *PAQPredictor) Update(bit byte) {
 
 func (this *PAQPredictor) Get() uint {
 	if this.pr >= 2048 {
-		return this.pr
+		return uint(this.pr)
 	}
 
-	return this.pr + 1
+	return uint(this.pr + 1)
 }
 
 // return p = 1/(1 + exp(-d)), d scaled by 8 bits, p scaled by 12 bits
@@ -369,12 +367,10 @@ func newStateMap() (*StateMap, error) {
 	return this, nil
 }
 
-func (this *StateMap) get(y int, cx int) uint {
-	//println("y ",y," cx ",cx," data ",this.data[this.ctx])
+func (this *StateMap) get(y int, cx int) int {
 	this.data[this.ctx] += (((y << 16) - this.data[this.ctx] + 128) >> 8)
-	//println("y ",y," cx ",cx," data ",this.data[this.ctx])
 	this.ctx = uint(cx)
-	return uint(this.data[cx] >> 4)
+	return this.data[this.ctx] >> 4
 }
 
 /////////////////////////////////////////////////////////////////
@@ -400,7 +396,7 @@ func newAdaptiveProbMap(n uint) (*AdaptiveProbMap, error) {
 	for i := uint(0); i < n; i++ {
 		for j := 0; j < 33; j++ {
 			if i == 0 {
-				this.data[k+j] = int(squash((j - 16) << 7))
+				this.data[k+j] = int(squash((j-16)<<7) << 4)
 			} else {
 				this.data[k+j] = this.data[j]
 			}
@@ -412,13 +408,12 @@ func newAdaptiveProbMap(n uint) (*AdaptiveProbMap, error) {
 	return this, nil
 }
 
-func (this *AdaptiveProbMap) get(y int, pr uint, ctx uint, rate uint) uint {
-	//println(len(STRETCH)," ",pr)
-	pr = uint(STRETCH[pr])
+func (this *AdaptiveProbMap) get(y int, pr int, ctx uint, rate uint) int {
+	pr = STRETCH[pr]
 	g := (y << 16) + (y << rate) - (y << 1)
 	this.data[this.index] += ((g - this.data[this.index]) >> rate)
 	this.data[this.index+1] += ((g - this.data[this.index+1]) >> rate)
-	w := int(pr & 127) // interpolation weight (33 points)
-	this.index = ((pr + 2048) >> 7) + (ctx * 33)
-	return uint(this.data[this.index]*(128-w)+this.data[this.index+1]*w) >> 11
+	w := pr & 127 // interpolation weight (33 points)
+	this.index = (uint(pr+2048) >> 7) + (ctx * 33)
+	return (this.data[this.index]*(128-w) + this.data[this.index+1]*w) >> 11
 }
