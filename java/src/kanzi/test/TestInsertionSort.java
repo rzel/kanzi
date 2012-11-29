@@ -90,7 +90,7 @@ public class TestInsertionSort
                     for (int i=0; i<array.length; i++)
                         array[i] = rnd[i] & 255;
 
-                     for (int i=0; i<array.length; i++)
+                     for (int i=0; i<array2.length; i++)
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
