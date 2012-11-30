@@ -19,55 +19,30 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import kanzi.EntropyEncoder;
 import kanzi.IndexedByteArray;
-import kanzi.OutputBitStream;
-import kanzi.bitstream.DefaultOutputBitStream;
-import kanzi.entropy.BinaryEntropyEncoder;
-import kanzi.entropy.FPAQEntropyEncoder;
-import kanzi.entropy.FPAQPredictor;
-import kanzi.entropy.HuffmanEncoder;
-import kanzi.entropy.NullEntropyEncoder;
-import kanzi.entropy.PAQPredictor;
-import kanzi.entropy.RangeEncoder;
 import kanzi.function.BlockCodec;
+import kanzi.io.CompressedOutputStream;
+import kanzi.io.Error;
 
 
-public class BlockCompressor implements Runnable, Callable<Long>
+public class BlockCompressor implements Runnable, Callable<Integer>
 {
-   private static final int BITSTREAM_TYPE = 0x4B4E5A; // "KNZ"
-   private static final int BITSTREAM_FORMAT_VERSION = 0;
-   private static final int MAX_BLOCK_HEADER_SIZE = BlockCodec.MAX_HEADER_SIZE;
-   
-   public static final int ERR_MISSING_FILENAME  = -1;
-   public static final int ERR_BLOCK_SIZE        = -2;
-   public static final int ERR_INVALID_CODEC     = -3;
-   public static final int ERR_CREATE_COMPRESSOR = -4;
-   public static final int ERR_OUTPUT_IS_DIR     = -5;
-   public static final int ERR_OVERWRITE_FILE    = -6;
-   public static final int ERR_CREATE_FILE       = -7;
-   public static final int ERR_CREATE_BITSTREAM  = -8;
-   public static final int ERR_OPEN_FILE         = -9;
-   public static final int ERR_READ_FILE         = -10;
-   public static final int ERR_WRITE_FILE        = -11;
-   public static final int ERR_PROCESS_BLOCK     = -12;
-   public static final int ERR_CREATE_CODEC      = -13;
-   public static final int ERR_UNKNOWN           = -127;
-   public static final int WARN_EMPTY_INPUT      = -128;
-   
+   private static final int DEFAULT_BUFFER_SIZE = 32768;
+   public static final int WARN_EMPTY_INPUT = -128;
+
    private boolean debug;
    private boolean silent;
    private boolean overwrite;
-   private char entropyType;
    private String inputName;
    private String outputName;
-   private final BlockCodec blockCodec;
+   private String codec;
    private int blockSize;
-   private FileInputStream fis;
-   private FileOutputStream fos;
+   private InputStream is;
+   private CompressedOutputStream cos;
 
 
    public BlockCompressor(String[] args)
@@ -79,17 +54,15 @@ public class BlockCompressor implements Runnable, Callable<Long>
       this.overwrite = (Boolean) map.get("overwrite");
       this.inputName = (String) map.get("inputName");
       this.outputName = (String) map.get("outputName");
+      this.codec = (String) map.get("codec");
       this.blockSize = (Integer) map.get("blockSize");
-      char entropy = (Character) map.get("entropyType");
-      this.entropyType = (entropy == 0) ? 'H' : entropy;      
-      this.blockCodec = new BlockCodec();
    }
 
 
    public static void main(String[] args)
    {
       BlockCompressor bc = null;
-      
+
       try
       {
          bc = new BlockCompressor(args);
@@ -97,38 +70,42 @@ public class BlockCompressor implements Runnable, Callable<Long>
       catch (Exception e)
       {
          System.err.println("Could not create the block codec: "+e.getMessage());
-         System.exit(ERR_CREATE_COMPRESSOR);
+         System.exit(Error.ERR_CREATE_COMPRESSOR);
       }
 
-      final long code = bc.call();
-      System.exit((code < 0) ? (int) code : 0);
+      final int code = bc.call();
+
+      if (code != 0)
+         bc.closeAll();
+
+      System.exit(code);
    }
 
 
-   public void dispose()
+   private void closeAll()
    {
-      try 
-      { 
-         if (this.fis != null) 
-            this.fis.close(); 
+      try
+      {
+         if (this.is != null)
+            this.is.close();
       }
-      catch (IOException ioe) 
-      { 
-         /* ignore */ 
+      catch (IOException ioe)
+      {
+         /* ignore */
       }
 
-      try 
-      { 
-         if (this.fos != null) 
-            this.fos.close(); 
+      try
+      {
+         if (this.cos != null)
+            this.cos.close();
       }
-      catch (IOException ioe) 
-      { 
+      catch (IOException ioe)
+      {
          /* ignore */
-      }  
+      }
    }
 
-   
+
    @Override
    public void run()
    {
@@ -136,202 +113,137 @@ public class BlockCompressor implements Runnable, Callable<Long>
    }
 
 
+   // Return status (success = 0, error < 0)
    @Override
-   public Long call()
+   public Integer call()
    {
       printOut("Input file name set to '" + this.inputName + "'", this.debug);
       printOut("Output file name set to '" + this.outputName + "'", this.debug);
       printOut("Block size set to "+this.blockSize, this.debug);
       printOut("Debug set to "+this.debug, this.debug);
-      printOut("Ouput file overwrite set to "+this.overwrite, this.debug);
+      printOut("Overwrite set to "+this.overwrite, this.debug);
+      String ecodec = ("NONE".equals(this.codec)) ? "no" : this.codec;
+      printOut("Using " + ecodec + " entropy codec", this.debug);
 
-      if (this.entropyType == 'H')
-        printOut("Using Huffman entropy codec", this.debug);
-      else if (this.entropyType == 'R')
-        printOut("Using Range entropy codec", this.debug);
-      else if (this.entropyType == 'P')
-        printOut("Using PAQ entropy codec", this.debug);
-      else if (this.entropyType == 'F')
-        printOut("Using FPAQ entropy codec", this.debug);
-      else
-        printOut("Using no entropy codec", this.debug);
-
-      File output;
-      long delta = 0L;
-      int read = 0;
-      OutputBitStream obs;
-      
       try
       {
-         output = new File(this.outputName);
-      }
+         File output = new File(this.outputName);
+
+         if (output.exists())
+         {
+            if (output.isDirectory())
+            {
+               System.err.println("The output file is a directory");
+               return Error.ERR_OUTPUT_IS_DIR;
+            }
+
+            if (this.overwrite == false)
+            {
+               System.err.println("The output file exists and the 'overwrite' command "
+                       + "line option has not been provided");
+               return Error.ERR_OVERWRITE_FILE;
+            }
+         }
+
+         try
+         {   
+            this.cos = new CompressedOutputStream(this.codec,
+                 new FileOutputStream(output),
+                 this.blockSize,
+                 (this.debug == true) ? System.out : null);
+         }
+         catch (Exception e)
+         {
+            System.err.println("Cannot create crompressed stream: "+e.getMessage());
+            return Error.ERR_CREATE_COMPRESSOR;
+         }
+     }
       catch (Exception e)
       {
          System.err.println("Cannot open output file '"+ this.outputName+"' for writing: " + e.getMessage());
-         return (long) ERR_CREATE_FILE;
+         return Error.ERR_CREATE_FILE;
       }
-      
-      if (output.exists())
-      {
-         if (output.isDirectory())
-         {
-            System.err.println("The output file is a directory");         
-            return (long) ERR_OUTPUT_IS_DIR;
-         }
-
-         if (this.overwrite == false)
-         {
-            System.err.println("The output file exists and the 'overwrite' command "
-                    + "line option has not been provided");
-            return (long) ERR_OVERWRITE_FILE;
-         }
-      }
-
-      try 
-      {
-         this.fos = new FileOutputStream(output);
-         obs = new DefaultOutputBitStream(this.fos, 32768);
-      }
-      catch (Exception e)
-      {
-         System.err.println("Cannot create output bit stream: "+e.getMessage());
-         return (long) ERR_CREATE_BITSTREAM;
-      }
-      
-      // Encode
-      EntropyEncoder entropyCoder = null;
-      File input;
 
       try
       {
-         input = new File(this.inputName);
-         this.fis = new FileInputStream(input);
+         File input = new File(this.inputName);
+         this.is = new FileInputStream(input);
       }
       catch (Exception e)
       {
          System.err.println("Cannot open input file '"+ this.inputName+"': " + e.getMessage());
-         return (long) ERR_OPEN_FILE;
+         return Error.ERR_OPEN_FILE;
       }
 
-      int len;
-      int step = 0;
+      // Encode
       printOut("Encoding ...", !this.silent);
+      long delta = 0L;
+      int read = 0;
 
-      try 
-      {
-         // Write header
-         obs.writeBits(BITSTREAM_TYPE, 24);
-         obs.writeBits(BITSTREAM_FORMAT_VERSION, 8);
-         obs.writeBits(this.entropyType, 8);
-         obs.writeBits(this.blockSize, 24);
-      }
-      catch (Exception e)
-      {
-         System.err.println("Cannot write header to output file '"+ this.outputName+"': " + e.getMessage());
-         return (long) ERR_WRITE_FILE;
-      }
-      
+      // If the compression ratio is greater than one for this block,
+      // the compression will fail (unless up to MAX_BLOCK_HEADER_SIZE bytes are reserved
+      // in the block for header data)
+      IndexedByteArray iba = new IndexedByteArray(new byte[DEFAULT_BUFFER_SIZE], 0);
+      int len;
+
       try
       {
-         long written = obs.written();
-
-         // If the compression ratio is greater than one for this block,
-         // the compression will fail (unless up to MAX_BLOCK_HEADER_SIZE bytes are reserved
-         // in the block for header data)
-         byte[] buffer = new byte[this.blockSize+MAX_BLOCK_HEADER_SIZE];
-         IndexedByteArray iba = new IndexedByteArray(buffer, 0);
-
-         while ((len = this.fis.read(iba.array, 0, this.blockSize)) > 0)
+         while ((len = this.is.read(iba.array, 0, iba.array.length)) > 0)
          {
             try
-            {   
-               // Each block is encoded separately
-               // Rebuild the entropy encoder to reset block statistics
-               switch (this.entropyType)
-               {
-                  case 'H' :  
-                     entropyCoder = new HuffmanEncoder(obs);
-                     break;
-
-                  case 'R' :  
-                     entropyCoder = new RangeEncoder(obs);
-                     break;
-
-                  case 'P' :  
-                     entropyCoder = new BinaryEntropyEncoder(obs, new PAQPredictor());
-                     break;
-
-                  case 'F' :  
-                     entropyCoder = new FPAQEntropyEncoder(obs, new FPAQPredictor());
-                     break;
-
-                  case 'N' :
-                     if (entropyCoder == null)
-                        entropyCoder = new NullEntropyEncoder(obs);
-                     break;
-
-                  default :
-                     System.err.println("Invalid entropy encoder: " + this.entropyType);
-                     return (long) ERR_INVALID_CODEC;
-               }
-            }
-            catch (Exception e)
             {
-               System.err.println("Failed to create entropy encoder");
-	       return (long) ERR_CREATE_CODEC;               
+               // Just write block to the compressed output stream !
+               read += len;
+               long before = System.nanoTime();
+               this.cos.write(iba.array, 0, len);
+               long after = System.nanoTime();
+               delta += (after - before);
             }
-
-            read += len;
-            long before = System.nanoTime();
-            iba.index = 0;
-            this.blockCodec.setSize(len);
-            int encoded = this.blockCodec.encode(iba, entropyCoder);
-            long after = System.nanoTime();
-            delta += (after - before);
-
-            if (encoded < 0)
+            catch (kanzi.io.IOException e)
             {
-               System.err.println("Error in block codec forward()");
-               return (long) ERR_PROCESS_BLOCK;
+               System.err.println(e.getMessage());
+               return e.getErrorCode();
             }
-
-            // Display the block size before and after block transform + entropy coding
-            printOut("Block "+step+": "+
-                   ((obs.written()-written)>>3)+" bytes ("+
-                   ((obs.written()-written)*100/(len<<3))+"%)", this.debug);
-
-            written = obs.written();
-            entropyCoder.dispose();
-            step++;
+            catch (IOException e)
+            {
+               System.err.println(e.getMessage());
+               return Error.ERR_UNKNOWN;
+            }
           }
-
-          // End block of size 0
-          // The 'real' value is BlockCodec.COPY_BLOCK_MASK | (0 & BlockCodec.COPY_LENGTH_MASK)
-          obs.writeBits(0x80, 8);
-          obs.close();
+       }
+       catch (kanzi.io.IOException e)
+       {
+          System.err.println(e.getMessage());
+          return e.getErrorCode();
        }
        catch (Exception e)
        {
           System.err.println("An unexpected condition happened. Exiting ...");
           e.printStackTrace();
-          return (long) ERR_UNKNOWN;
+          return Error.ERR_UNKNOWN;
        }
 
        if (read == 0)
        {
           System.out.println("Empty input file ... nothing to do");
-          return (long) WARN_EMPTY_INPUT;
+          return WARN_EMPTY_INPUT;
        }
 
-       delta /= 1000000; // convert to ms
+       // Close streams to ensure all data are flushed
+       this.closeAll();
+
+       delta /= 1000000L; // convert to ms
        printOut("", !this.silent);
-       printOut("File size:        "+read, !this.silent);
-       printOut("Encoding took "+delta+" ms", !this.silent);
-       printOut("Ratio:            "+(obs.written() >> 3) / (float) read, !this.silent);
-       printOut("Encoded:          "+(obs.written() >> 3), !this.silent);
-       printOut("Troughput (KB/s): "+(((read * 1000L) >> 10) / delta), !this.silent);
+       printOut("Encoding:          "+delta+" ms", !this.silent);
+       printOut("Input size:        "+read, !this.silent);
+       printOut("Output size:       "+this.cos.getWritten(), !this.silent);
+       printOut("Ratio:             "+this.cos.getWritten() / (float) read, !this.silent);
+       
+       if (delta > 0)
+          printOut("Throughput (KB/s): "+(((read * 1000L) >> 10) / delta), !this.silent);
+       
        printOut("", !this.silent);
-       return obs.written();
+       return 0;
     }
 
 
@@ -339,12 +251,12 @@ public class BlockCompressor implements Runnable, Callable<Long>
     {
         // Set default values
         int blockSize = 100000;
-        char entropyType = 0;
         boolean debug = false;
         boolean silent = false;
         boolean overwrite = false;
         String inputName = null;
         String outputName = null;
+        String codec = null;
 
         for (String arg : args)
         {
@@ -357,7 +269,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
                printOut("-silent              : silent mode: no output (except warnings and errors)", true);
                printOut("-overwrite           : overwrite the output file if it already exists", true);
                printOut("-input=<inputName>   : mandatory name of the input file to encode", true);
-               printOut("-output=<inputName>  : optional name of the output file (defaults to <input.knz>)", true);
+               printOut("-output=<outputName> : optional name of the output file (defaults to <input.knz>)", true);
                printOut("-block=<size>        : size of the block (max 16 MB / default 100 KB)", true);
                printOut("-entropy=            : Entropy codec to use [None|Huffman|Range|PAQ|FPAQ]", true);
                System.exit(0);
@@ -384,24 +296,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
            }
            else if (arg.startsWith("-entropy="))
            {
-              String strVal = arg.substring(9).trim().toUpperCase();
-
-              if ("NONE".equals(strVal))
-                 entropyType = 'N';
-              else if ("HUFFMAN".equals(strVal))
-                 entropyType = 'H';
-              else if ("RANGE".equals(strVal))
-                 entropyType = 'R';
-              else if ("PAQ".equals(strVal))
-                 entropyType = 'P';
-              else if ("FPAQ".equals(strVal))
-                 entropyType = 'F';
-
-              if (entropyType == 0) 
-              {
-                 System.err.println("Invalid entropy codec provided: "+arg.substring(9).trim());
-                 System.exit(ERR_INVALID_CODEC);
-              }
+              codec = arg.substring(9).trim().toUpperCase();
            }
            else if (arg.startsWith("-block="))
            {
@@ -409,26 +304,12 @@ public class BlockCompressor implements Runnable, Callable<Long>
 
               try
               {
-                 final int blksz = Integer.parseInt(arg);
-
-                 if (blksz < 256)
-                 {
-                     System.err.println("The minimum block size is 256, the provided value is "+arg);
-                     System.exit(ERR_BLOCK_SIZE);
-                 }
-                 else if (blksz > 16 * 1024 * 1024 - MAX_BLOCK_HEADER_SIZE)
-                 {
-                     final int max = 16 * 1024 * 1024 - MAX_BLOCK_HEADER_SIZE;
-                     System.err.println("The maximum block size is "+ max +", the provided value is  "+arg);
-                     System.exit(ERR_BLOCK_SIZE);
-                 }
-                 else
-                     blockSize = blksz;
+                 blockSize = Integer.parseInt(arg);
               }
               catch (NumberFormatException e)
               {
                  System.err.println("Invalid block size provided on command line: "+arg);
-                 System.exit(ERR_BLOCK_SIZE);
+                 System.exit(Error.ERR_BLOCK_SIZE);
               }
            }
            else
@@ -440,7 +321,7 @@ public class BlockCompressor implements Runnable, Callable<Long>
         if (inputName == null)
         {
            System.err.println("Missing input file name, exiting ...");
-           System.exit(ERR_MISSING_FILENAME);
+           System.exit(Error.ERR_MISSING_FILENAME);
         }
 
         if (outputName == null)
@@ -453,12 +334,12 @@ public class BlockCompressor implements Runnable, Callable<Long>
         }
 
         map.put("blockSize", blockSize);
-        map.put("entropyType", entropyType);
         map.put("debug", debug);
         map.put("silent", silent);
         map.put("overwrite", overwrite);
         map.put("inputName", inputName);
         map.put("outputName", outputName);
+        map.put("codec", codec);
     }
 
 

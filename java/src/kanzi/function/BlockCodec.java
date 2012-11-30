@@ -30,8 +30,6 @@ import kanzi.transform.MTFT;
 // Forward: Burrows-Wheeler -> Move to Front -> Zero Length
 // Inverse: Zero Length -> Move to Front -> Burrows-Wheeler
 // The block size determine the balance between speed and compression ratio
-// The max block size is around 250 KB and provides the best compression ratio.
-// The default block size provides a good balance.
 
 // Stream format: Header (m bytes) Data (n bytes)
 // Header: mode (4 bits) + header data size (4 bits) + compressed data length (8, 16 or 24 bits)
@@ -52,14 +50,12 @@ import kanzi.transform.MTFT;
 
 public class BlockCodec implements ByteFunction
 {
-   public static final int COPY_LENGTH_MASK = 0x7F;
-   public static final int COPY_BLOCK_MASK  = 0x80;
-   public static final int NO_RLT_MASK      = 0x20;
-   public static final int NO_ZLT_MASK      = 0x40;
-
-   public static final int MAX_HEADER_SIZE = 7;
-   public static final int DEFAULT_BLOCK_SIZE = 0x10000 - MAX_HEADER_SIZE;
-   public static final int MAX_BLOCK_SIZE = 0xFFFFFF; // 16 MB (24 bits)
+   private static final int COPY_LENGTH_MASK = 0x7F;
+   private static final int COPY_BLOCK_MASK  = 0x80;
+   private static final int NO_RLT_MASK      = 0x20;
+   private static final int NO_ZLT_MASK      = 0x40;
+   private static final int MAX_HEADER_SIZE  = 7;
+   public static final int MAX_BLOCK_SIZE    = (16*1024*1024) - MAX_HEADER_SIZE;
 
    private final IndexedByteArray buffer;
    private final MTFT mtft;
@@ -69,7 +65,7 @@ public class BlockCodec implements ByteFunction
 
    public BlockCodec()
    {
-      this(DEFAULT_BLOCK_SIZE);
+      this(MAX_BLOCK_SIZE);
    }
 
 

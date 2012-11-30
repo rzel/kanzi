@@ -18,34 +18,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"kanzi"
-	"kanzi/bitstream"
-	"kanzi/entropy"
-	"kanzi/function"
+	"kanzi/io"
 	"os"
 	"strings"
 	"time"
 )
 
 const (
-	BITSTREAM_TYPE           = 0x4B4E5A // "KNZ"
-	BITSTREAM_FORMAT_VERSION = 0
-	MAX_BLOCK_HEADER_SIZE    = 7
-	ERR_MISSING_FILENAME     = -1
-	ERR_BLOCK_SIZE           = -2
-	ERR_INVALID_CODEC        = -3
-	ERR_CREATE_DECOMPRESSOR  = -4
-	ERR_OUTPUT_IS_DIR        = -5
-	ERR_OVERWRITE_FILE       = -6
-	ERR_CREATE_FILE          = -7
-	ERR_CREATE_BITSTREAM     = -8
-	ERR_OPEN_FILE            = -9
-	ERR_READ_FILE            = -10
-	ERR_WRITE_FILE           = -11
-	ERR_PROCESS_BLOCK        = -12
-	ERR_CREATE_CODEC         = -13
-	ERR_INVALID_FILE         = -14
-	ERR_STREAM_VERSION       = -15
+	DEFAULT_BUFFER_SIZE = 32768
 )
 
 type BlockDecompressor struct {
@@ -54,7 +34,6 @@ type BlockDecompressor struct {
 	overwrite  bool
 	inputName  string
 	outputName string
-	blockCodec *function.BlockCodec
 }
 
 func NewBlockDecompressor() (*BlockDecompressor, error) {
@@ -88,12 +67,15 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 
 	if len(*inputName) == 0 {
 		fmt.Printf("Missing input file name, exiting ...\n")
-		os.Exit(ERR_MISSING_FILENAME)
+		os.Exit(io.ERR_MISSING_FILENAME)
 	}
 
+    if strings.HasSuffix(*inputName, ".knz") == false {
+		printOut("Warning: the input file name does not end with the .KNZ extension", true)
+	}
+	
 	if len(*outputName) == 0 {
 		if strings.HasSuffix(*inputName, ".knz") == false {
-			printOut("Warning: the input file name does not end with the .KNZ extension", true)
 			*outputName = *inputName + ".tmp"
 		} else {
 			*outputName = strings.TrimRight(*inputName, ".knz")
@@ -105,9 +87,7 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 	this.inputName = *inputName
 	this.outputName = *outputName
 	this.overwrite = *overwrite
-	var err error
-	this.blockCodec, err = function.NewBlockCodec(uint(0))
-	return this, err
+	return this, nil
 }
 
 func main() {
@@ -115,7 +95,7 @@ func main() {
 
 	if err != nil {
 		fmt.Printf("Failed to create block decompressor: %v\n", err)
-		os.Exit(ERR_CREATE_DECOMPRESSOR)
+		os.Exit(io.ERR_CREATE_DECOMPRESSOR)
 	}
 
 	code, _ := bd.call()
@@ -129,8 +109,8 @@ func (this *BlockDecompressor) call() (int, uint64) {
 	printOut("Output file name set to '"+this.outputName+"'", this.debug)
 	msg = fmt.Sprintf("Debug set to %t", this.debug)
 	printOut(msg, this.debug)
-	msg = fmt.Sprintf("Overwrite set to %t", this.debug)
-	printOut(msg, this.overwrite)
+	msg = fmt.Sprintf("Overwrite set to %t", this.overwrite)
+	printOut(msg, this.debug)
 
 	output, err := os.OpenFile(this.outputName, os.O_RDWR, 666)
 
@@ -140,7 +120,7 @@ func (this *BlockDecompressor) call() (int, uint64) {
 			fmt.Printf("The output file '%v' exists and the 'overwrite' command ", this.outputName)
 			fmt.Println("line option has not been provided")
 			output.Close()
-			return ERR_OVERWRITE_FILE, 0
+			return io.ERR_OVERWRITE_FILE, 0
 		}
 	} else {
 		// File does not exist, create
@@ -148,166 +128,94 @@ func (this *BlockDecompressor) call() (int, uint64) {
 
 		if err != nil {
 			fmt.Printf("Cannot open output file '%v' for writing: %v\n", this.outputName, err)
-			return ERR_CREATE_FILE, 0
+			return io.ERR_CREATE_FILE, 0
 		}
 	}
 
 	defer output.Close()
 	delta := int64(0)
-	decoded := 0
-	sum := uint64(0)
-	step := 0
+	read := uint64(0)
 	printOut("Decoding ...", !this.silent)
 
 	// Decode
-	var entropyDecoder kanzi.EntropyDecoder
 	input, err := os.Open(this.inputName)
 
 	if err != nil {
 		fmt.Printf("Cannot open input file '%v': %v\n", this.inputName, err)
-		return ERR_OPEN_FILE, sum
+		return io.ERR_OPEN_FILE, read
 	}
 
 	defer input.Close()
-	ibs, err := bitstream.NewDefaultInputBitStream(input)
+	debugWriter := os.Stdout
+
+	if this.debug == false {
+		debugWriter = nil
+	}
+
+	cis, err := io.NewCompressedInputStream(input, debugWriter)
 
 	if err != nil {
-		fmt.Printf("Cannot create input bit stream: %v\n", err)
-		return ERR_CREATE_BITSTREAM, sum
+		if err.(*io.IOError) != nil {
+			fmt.Printf("%s\n", err.(*io.IOError).Message())
+			return err.(*io.IOError).ErrorCode(), read
+		} else {
+			fmt.Printf("Cannot create compressed stream: %v\n", err)
+			return io.ERR_CREATE_DECOMPRESSOR, read
+		}
 	}
 
-	// Read header
-	fileType, err := ibs.ReadBits(24)
-
-	if err != nil {
-		fmt.Printf("Error reading header from input file: %v\n", err)
-		return ERR_READ_FILE, sum
-	}
-
-	// Sanity check
-	if fileType != BITSTREAM_TYPE {
-		errMsg := fmt.Sprintf("Invalid stream type: expected %#X, got %#X\n", BITSTREAM_TYPE, fileType)
-		fmt.Printf(errMsg)
-		return ERR_INVALID_FILE, sum
-	}
-
-	header, err := ibs.ReadBits(40)
-
-	if err != nil {
-		fmt.Printf("Error reading input file: %v\n", err)
-		return ERR_READ_FILE, sum
-	}
-
-	version := int((header >> 32) & 0xFF)
-
-	// Sanity check
-	if version < BITSTREAM_FORMAT_VERSION {
-		fmt.Printf("Cannot read this version of the stream: %d\n", version)
-		return ERR_STREAM_VERSION, sum
-	}
-
-	entropyType := byte((header >> 24) & 0xFF)
-	blockSize := uint(header & 0xFFFFFF)
-
-	if blockSize > uint(16*1024*1024-MAX_BLOCK_HEADER_SIZE) {
-		fmt.Printf("Invalid block size read from file: %d", blockSize)
-		return ERR_BLOCK_SIZE, sum
-	}
-
-	buffer := make([]byte, blockSize+MAX_BLOCK_HEADER_SIZE)
-	firstBlock := true
-	msg = fmt.Sprintf("Block size set to %d", blockSize)
-	printOut(msg, this.debug)
-
-	if entropyType == 'H' {
-		printOut("Using Huffman entropy codec", this.debug)
-	} else if entropyType == 'R' {
-		printOut("Using Range entropy codec", this.debug)
-	} else if entropyType == 'P' {
-		printOut("Using PAQ entropy codec", this.debug)
-	} else if entropyType == 'F' {
-		printOut("Using FPAQ entropy codec", this.debug)
-	} else {
-		printOut("Using no entropy codec", this.debug)
-	}
+	buffer := make([]byte, DEFAULT_BUFFER_SIZE)
+	decoded := len(buffer)
 
 	// Decode next block
-	for decoded != 0 || firstBlock == true {
-		firstBlock = false
-
-		switch entropyType {
-		// Each block is decoded separately
-		// Rebuild the entropy decoder to reset block statistics
-		case 'H':
-			entropyDecoder, err = entropy.NewHuffmanDecoder(ibs)
-
-		case 'R':
-			entropyDecoder, err = entropy.NewRangeDecoder(ibs)
-
-		case 'P':
-			predictor, _ := entropy.NewPAQPredictor()
-			entropyDecoder, err = entropy.NewBinaryEntropyDecoder(ibs, predictor)
-
-		case 'F':
-			predictor, _ := entropy.NewFPAQPredictor()
-			entropyDecoder, err = entropy.NewFPAQEntropyDecoder(ibs, predictor)
-
-		case 'N':
-			if entropyDecoder == nil {
-				entropyDecoder, err = entropy.NewNullEntropyDecoder(ibs)
-			}
-
-		default:
-			fmt.Printf("Invalid entropy codec type: '%c'\n", entropyType)
-			return ERR_INVALID_CODEC, sum
-		}
-
-		if err != nil {
-			fmt.Printf("Failed to create entropy decoder: %v\n", err)
-			return ERR_CREATE_CODEC, sum
-		}
-
+	for decoded == len(buffer) {
 		before := time.Now()
-		decoded, err = this.blockCodec.Decode(buffer, entropyDecoder)
+
+		if decoded, err = cis.Read(buffer); err != nil {
+			if ioerr, isIOErr := err.(*io.IOError); isIOErr == true {
+				fmt.Printf("%s\n", ioerr.Message())
+				return ioerr.ErrorCode(), read
+			} else {
+				fmt.Printf("Error in block codec inverse(): %v\n", err)
+				return io.ERR_PROCESS_BLOCK, read
+			}
+		}
+
 		after := time.Now()
 		delta += after.Sub(before).Nanoseconds()
 
-		if decoded < 0 || err != nil {
+		if decoded > 0 {
+			_, err = output.Write(buffer[0:decoded])
+
 			if err != nil {
-				fmt.Printf("Error in block codec inverse(): %v\n", err)
-			} else {
-				fmt.Println("Error in block codec inverse()")
+				fmt.Printf("Failed to write next block: %v\n", err)
+				return io.ERR_WRITE_FILE, read
 			}
 
-			return ERR_PROCESS_BLOCK, sum
+			read += uint64(decoded)
 		}
-
-		// Display block size after entropy decoding + block transform
-		msg := fmt.Sprintf("Block %d: %d byte(s)", step, decoded)
-		printOut(msg, this.debug)
-
-		_, err = output.Write(buffer[0:decoded])
-
-		if err != nil {
-			fmt.Printf("Failed to write next block: %v\n", err)
-			return ERR_WRITE_FILE, sum
-		}
-
-		sum += uint64(decoded)
-		step++
-		entropyDecoder.Dispose()
 	}
+
+	// Close streams to ensure all data are flushed
+	// Deferred close is fallback for error paths
+	cis.Close()
 
 	delta /= 1000000 // convert to ms
 	printOut("", !this.silent)
-	msg = fmt.Sprintf("Decoding took %d ms", delta)
+	msg = fmt.Sprintf("Decoding:          %d ms", delta)
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Decoded:          %d", sum)
+	msg = fmt.Sprintf("Input size:        %d", cis.GetRead())
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Troughput (KB/s): %d", ((sum*uint64(1000))>>10)/uint64(delta))
+	msg = fmt.Sprintf("Output size:       %d", read)
 	printOut(msg, !this.silent)
+	
+	if delta > 0 {
+		msg = fmt.Sprintf("Throughput (KB/s): %d", ((read*uint64(1000))>>10)/uint64(delta))
+		printOut(msg, !this.silent)
+	}
+	
 	printOut("", !this.silent)
-	return 0, ibs.Read()
+	return 0, cis.GetRead()
 }
 
 func printOut(msg string, print bool) {

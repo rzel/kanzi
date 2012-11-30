@@ -53,7 +53,7 @@ const (
 	NO_RLT_MASK           = 0x20
 	NO_ZLT_MASK           = 0x40
 	MAX_BLOCK_HEADER_SIZE = 7
-	MAX_BLOCK_SIZE        = 0xFFFFFF // 16 MB (24 bits)
+	MAX_BLOCK_SIZE        = 16*1024*1024 - MAX_BLOCK_HEADER_SIZE // 16 MB (24 bits)
 )
 
 type BlockCodec struct {

@@ -18,44 +18,26 @@ package main
 import (
 	"flag"
 	"fmt"
-	"kanzi"
-	"kanzi/bitstream"
-	"kanzi/entropy"
 	"kanzi/function"
+	"kanzi/io"
 	"os"
 	"strings"
 	"time"
 )
 
 const (
-	BITSTREAM_TYPE           = 0x4B4E5A // "KNZ"
-	BITSTREAM_FORMAT_VERSION = 0
-	MAX_BLOCK_HEADER_SIZE    = function.MAX_BLOCK_HEADER_SIZE
-	ERR_MISSING_FILENAME     = -1
-	ERR_BLOCK_SIZE           = -2
-	ERR_INVALID_CODEC        = -3
-	ERR_CREATE_COMPRESSOR    = -4
-	ERR_OUTPUT_IS_DIR        = -5
-	ERR_OVERWRITE_FILE       = -6
-	ERR_CREATE_FILE          = -7
-	ERR_CREATE_BITSTREAM     = -8
-	ERR_OPEN_FILE            = -9
-	ERR_READ_FILE            = -10
-	ERR_WRITE_FILE           = -11
-	ERR_PROCESS_BLOCK        = -12
-	ERR_CREATE_CODEC         = -13
-	WARN_EMPTY_INPUT         = -128
+	DEFAULT_BUFFER_SIZE = 32768
+	WARN_EMPTY_INPUT    = -128
 )
 
 type BlockCompressor struct {
-	debug       bool
-	silent      bool
-	overwrite   bool
-	entropyType byte
-	inputName   string
-	outputName  string
-	blockCodec  *function.BlockCodec
-	blockSize   int
+	debug        bool
+	silent       bool
+	overwrite    bool
+	inputName    string
+	outputName   string
+	entropyCodec string
+	blockSize    uint
 }
 
 func NewBlockCompressor() (*BlockCompressor, error) {
@@ -93,43 +75,11 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 
 	if len(*inputName) == 0 {
 		fmt.Printf("Missing input file name, exiting ...\n")
-		os.Exit(ERR_MISSING_FILENAME)
+		os.Exit(io.ERR_MISSING_FILENAME)
 	}
 
 	if len(*outputName) == 0 {
 		*outputName = *inputName + ".knz"
-	}
-
-	if *blockSize < 256 {
-		fmt.Printf("The minimum block size is 256, the provided value is %d\n", *blockSize)
-		os.Exit(ERR_BLOCK_SIZE)
-	} else if *blockSize > 16*1024*1024-7 {
-		fmt.Printf("The maximum block size is 16777209, the provided value is  %d\n", *blockSize)
-		os.Exit(ERR_BLOCK_SIZE)
-	}
-
-	*entropy = strings.ToUpper(*entropy)
-
-	switch *entropy {
-
-	case "NONE":
-		this.entropyType = 'N'
-
-	case "HUFFMAN":
-		this.entropyType = 'H'
-
-	case "RANGE":
-		this.entropyType = 'R'
-
-	case "FPAQ":
-		this.entropyType = 'F'
-
-	case "PAQ":
-		this.entropyType = 'P'
-
-	default:
-		fmt.Printf("Invalid entropy codec provided: %s\n", *entropy)
-		os.Exit(ERR_INVALID_CODEC)
 	}
 
 	this.debug = *debug
@@ -137,10 +87,9 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	this.overwrite = *overwrite
 	this.inputName = *inputName
 	this.outputName = *outputName
-	this.blockSize = *blockSize
-	var err error
-	this.blockCodec, err = function.NewBlockCodec(uint(this.blockSize))
-	return this, err
+	this.blockSize = uint(*blockSize)
+	this.entropyCodec = strings.ToUpper(*entropy)
+	return this, nil
 }
 
 func main() {
@@ -148,7 +97,7 @@ func main() {
 
 	if err != nil {
 		fmt.Printf("Failed to create block compressor: %v\n", err)
-		os.Exit(ERR_CREATE_COMPRESSOR)
+		os.Exit(io.ERR_CREATE_COMPRESSOR)
 	}
 
 	code, _ := bc.call()
@@ -164,11 +113,18 @@ func (this *BlockCompressor) call() (int, uint64) {
 	printOut(msg, this.debug)
 	msg = fmt.Sprintf("Debug set to %t", this.debug)
 	printOut(msg, this.debug)
-	msg = fmt.Sprintf("Ouput file overwrite set to %t", this.overwrite)
+	msg = fmt.Sprintf("Overwrite set to %t", this.overwrite)
 	printOut(msg, this.debug)
+	ecodec := "no"
 
-	output, err := os.OpenFile(this.outputName, os.O_RDWR, 666)
+	if this.entropyCodec != "NONE" {
+		ecodec = this.entropyCodec
+	}
+
+	msg = fmt.Sprintf("Using %s entropy codec", ecodec)
+	printOut(msg, this.debug)
 	written := uint64(0)
+	output, err := os.OpenFile(this.outputName, os.O_RDWR, 666)
 
 	if err == nil {
 		// File exists
@@ -176,7 +132,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 			fmt.Print("The output file exists and the 'overwrite' command ")
 			fmt.Println("line option has not been provided")
 			output.Close()
-			return ERR_OVERWRITE_FILE, written
+			return io.ERR_OVERWRITE_FILE, written
 		}
 	} else {
 		// File does not exist, create
@@ -184,158 +140,100 @@ func (this *BlockCompressor) call() (int, uint64) {
 
 		if err != nil {
 			fmt.Printf("Cannot open output file '%v' for writing: %v\n", this.outputName, err)
-			return ERR_CREATE_FILE, written
+			return io.ERR_CREATE_FILE, written
 		}
 	}
 
 	defer output.Close()
+	debugWriter := os.Stdout
 
-	if this.entropyType == 'H' {
-		printOut("Using Huffman entropy codec", this.debug)
-	} else if this.entropyType == 'R' {
-		printOut("Using Range entropy codec", this.debug)
-	} else if this.entropyType == 'P' {
-		printOut("Using PAQ entropy codec", this.debug)
-	} else if this.entropyType == 'F' {
-		printOut("Using FPAQ entropy codec", this.debug)
-	} else {
-		printOut("Using no entropy codec", this.debug)
+	if this.debug == false {
+		debugWriter = nil
 	}
 
-	obs, err := bitstream.NewDefaultOutputBitStream(output)
+	cos, err := io.NewCompressedOutputStream(this.entropyCodec, output, this.blockSize, debugWriter)
 
 	if err != nil {
-		fmt.Printf("Cannot create output bit stream: %v\n", err)
-		return ERR_CREATE_BITSTREAM, written
+		if err.(*io.IOError) != nil {
+			fmt.Printf("%s\n", err.(*io.IOError).Message())
+			return err.(*io.IOError).ErrorCode(), written
+		} else {
+			fmt.Printf("Cannot create compressed stream: %v\n", err)
+			return io.ERR_CREATE_COMPRESSOR, written
+		}
 	}
 
-	// Encode
-	var entropyCoder kanzi.EntropyEncoder
+	defer cos.Close()
 	input, err := os.Open(this.inputName)
 
 	if err != nil {
 		fmt.Printf("Cannot open input file '%v': %v\n", this.inputName, err)
-		return ERR_OPEN_FILE, written
+		return io.ERR_OPEN_FILE, written
 	}
 
 	defer input.Close()
+
+	// Encode
 	delta := int64(0)
 	len := 0
 	read := int64(0)
-	step := 0
 	printOut("Encoding ...", !this.silent)
-
-	// Write header
-	_, err = obs.WriteBits(BITSTREAM_TYPE, 24)
-	
-	if err == nil {
- 		fmt.Printf("Cannot write header to output file '%v': %v\n", this.outputName, err)
-		return ERR_WRITE_FILE, written	
-	} else {
-	   // Assume success for other calls once the first value has been written
-	   obs.WriteBits(BITSTREAM_FORMAT_VERSION, 8)
-	   obs.WriteBits(uint64(this.entropyType), 8)
-	   obs.WriteBits(uint64(this.blockSize), 24)
-	}
-	
-	written = obs.Written()
-
-	// If the compression ratio is greater than one for this block,
-	// the compression will fail (unless up to MAX_BLOCK_HEADER_SIZE bytes are reserved
-	// in the block for header data)
-	buffer := make([]byte, this.blockSize+MAX_BLOCK_HEADER_SIZE)
-	len, err = input.Read(buffer[0:this.blockSize])
+	written = cos.GetWritten()
+	buffer := make([]byte, DEFAULT_BUFFER_SIZE)
+	len, err = input.Read(buffer)
 
 	for len > 0 {
 		if err != nil {
 			fmt.Printf("Failed to read the next chunk of input file '%v': %v\n", this.inputName, err)
-			return ERR_READ_FILE, written
-		}
-
-		// Each block is encoded separately
-		// Rebuild the entropy encoder to reset block statistics
-		switch this.entropyType {
-		case 'H':
-			entropyCoder, err = entropy.NewHuffmanEncoder(obs)
-
-		case 'R':
-			entropyCoder, err = entropy.NewRangeEncoder(obs)
-
-		case 'P':
-			predictor, _ := entropy.NewPAQPredictor()
-			entropyCoder, err = entropy.NewBinaryEntropyEncoder(obs, predictor)
-
-		case 'F':
-			predictor, _ := entropy.NewFPAQPredictor()
-			entropyCoder, err = entropy.NewFPAQEntropyEncoder(obs, predictor)
-
-		case 'N':
-			if entropyCoder == nil {
-				entropyCoder, err = entropy.NewNullEntropyEncoder(obs)
-			}
-
-		default:
-			fmt.Printf("Invalid entropy encoder: %c\n", this.entropyType)
-			return ERR_INVALID_CODEC, written
-		}
-
-		if err != nil {
-			fmt.Printf("Failed to create entropy encoder: %v\n", err)
-			return ERR_CREATE_CODEC, written
+			return io.ERR_READ_FILE, written
 		}
 
 		read += int64(len)
 		before := time.Now()
-		this.blockCodec.SetSize(uint(len))
-		encoded, err := this.blockCodec.Encode(buffer, entropyCoder)
-		after := time.Now()
-		delta += after.Sub(before).Nanoseconds()
 
-		if encoded < 0 || err != nil {
-			if err != nil {
-				fmt.Printf("Error in block codec forward(): %v\n", err)
+		if _, err = cos.Write(buffer[0:len]); err != nil {
+			if ioerr, isIOErr := err.(*io.IOError); isIOErr == true {
+				fmt.Printf("%s\n", ioerr.Message())
+				return ioerr.ErrorCode(), written
 			} else {
-				fmt.Println("Error in block codec forward()")
+				fmt.Printf("Error in block codec forward(): %v\n", err)
+				return io.ERR_PROCESS_BLOCK, written
 			}
-
-			return ERR_PROCESS_BLOCK, written
 		}
 
-		// Display the block size before and after block transform + entropy coding
-		msg = fmt.Sprintf("Block %d: %d bytes (%d%%)", step, (obs.Written()-written)/8,
-			(obs.Written()-written)*100/uint64(len*8))
-		printOut(msg, this.debug)
-
-		written = obs.Written()
-		entropyCoder.Dispose()
-		step++
-		len, err = input.Read(buffer[0:this.blockSize])
+		after := time.Now()
+		delta += after.Sub(before).Nanoseconds()
+		len, err = input.Read(buffer)
 	}
-
-	// End block of size 0
-	// The 'real' value is BlockCodec.COPY_BLOCK_MASK | (0 & BlockCodec.COPY_LENGTH_MASK)
-	obs.WriteBits(0x80, 8)
-	obs.Close()
 
 	if read == 0 {
 		fmt.Println("Empty input file ... nothing to do")
 		return WARN_EMPTY_INPUT, written
 	}
 
+	// Close streams to ensure all data are flushed
+	// Deferred close is fallback for error paths
+	cos.Close()
+
 	delta /= 1000000 // convert to ms
+
 	printOut("", !this.silent)
-	msg = fmt.Sprintf("File size:        %d", read)
+	msg = fmt.Sprintf("Encoding:         %d ms", delta)
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Encoding took %d ms", delta)
+	msg = fmt.Sprintf("Input size:       %d", read)
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Ratio:            %f", float64(obs.Written())/float64(8*read))
+	msg = fmt.Sprintf("Output size:      %d", cos.GetWritten())
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Encoded:          %d", obs.Written()/8)
+	msg = fmt.Sprintf("Ratio:            %f", float64(cos.GetWritten())/float64(read))
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Troughput (KB/s): %d", ((read*int64(1000))>>10)/delta)
-	printOut(msg, !this.silent)
+
+	if delta > 0 {
+  		msg = fmt.Sprintf("Throughput (KB/s) %d", ((read*int64(1000))>>10)/delta)
+		printOut(msg, !this.silent)
+	}
+	
 	printOut("", !this.silent)
-	return 0, obs.Written()
+	return 0, cos.GetWritten()
 }
 
 func printOut(msg string, print bool) {

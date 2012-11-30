@@ -64,7 +64,7 @@ type OutputStream interface {
 
 	Close() error
 
-	Sync() (err error)
+	Sync() error
 }
 
 type OutputBitStream interface {
@@ -108,3 +108,4 @@ type EntropyDecoder interface {
 	// Must be called before getting rid of the entropy decoder
 	Dispose()
 }
+
