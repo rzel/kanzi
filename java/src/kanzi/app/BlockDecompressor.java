@@ -170,7 +170,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
          }
          catch (Exception e)
          {
-            System.err.println("Cannot create crompressed stream: "+e.getMessage());
+            System.err.println("Cannot create compressed stream: "+e.getMessage());
             return Error.ERR_CREATE_DECOMPRESSOR;    
          }
       }
