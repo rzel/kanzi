@@ -340,69 +340,80 @@ public class BlockCodec implements ByteFunction
       return true;
    }
 
-
+    
    // Return -1 if error, otherwise the number of encoded bytes 
    public int encode(IndexedByteArray data, EntropyEncoder ee)
-   {
-      if (ee == null)
+   {      
+      try
+      {
+         IndexedByteArray output = new IndexedByteArray(data.array, 0);
+
+         if (this.forward(data, output) == false)
+            return -1;
+
+         // Extract header info and write it to the bitstream directly
+         // (some entropy decoders need block data statistics before decoding a byte)
+         BWTBlockHeader header = new BWTBlockHeader(data.array, data.index);
+         final OutputBitStream bs = ee.getBitStream();
+         bs.writeBits(header.mode, 8);
+         bs.writeBits(header.blockLength, 8*header.dataSize);
+         bs.writeBits(header.primaryIndex, 8*header.dataSize);
+
+         // Entropy encode data block
+         return ee.encode(data.array, (2*header.dataSize)+1, header.blockLength);
+      } 
+      catch (Exception e)
+      {
          return -1;
-
-      IndexedByteArray output = new IndexedByteArray(data.array, 0);
-
-      if (this.forward(data, output) == false)
-         return -1;
-
-      // Extract header info and write it to the bitstream directly
-      // (some entropy decoders need block data statistics before decoding a byte)
-      BWTBlockHeader header = new BWTBlockHeader(data.array, data.index);
-      final OutputBitStream bs = ee.getBitStream();
-      bs.writeBits(header.mode, 8);
-      bs.writeBits(header.blockLength, 8*header.dataSize);
-      bs.writeBits(header.primaryIndex, 8*header.dataSize);
-
-      // Entropy encode data block
-      return ee.encode(data.array, (2*header.dataSize)+1, header.blockLength);
+      }
    }
+   
 
-
-   // Return -1 if error, otherwise the number of bytes read from the encoder
+  // Return -1 if error, otherwise the number of bytes read from the encoder
    public int decode(IndexedByteArray data, EntropyDecoder ed)
    {
-      // Extract header directly from bitstream
-      BWTBlockHeader header = new BWTBlockHeader(ed.getBitStream());
+      try
+      {
+         // Extract header directly from bitstream
+         BWTBlockHeader header = new BWTBlockHeader(ed.getBitStream());
 
-      if (header.blockLength == 0)
-         return 0;
+         if (header.blockLength == 0)
+            return 0;
 
-      if ((header.blockLength < 0) || (header.blockLength > MAX_BLOCK_SIZE))
+         if ((header.blockLength < 0) || (header.blockLength > BlockCodec.MAX_BLOCK_SIZE))
+            return -1;
+
+         int savedIdx = data.index;
+         data.array[data.index++] = header.mode;
+         int shift = (header.dataSize - 1) << 3;
+
+         for (int i=0; i<header.dataSize; i++, shift-=8)
+            data.array[data.index++] = (byte) ((header.blockLength >> shift) & 0xFF);
+
+         shift = (header.dataSize - 1) << 3;
+
+         for (int i=0; i<header.dataSize; i++, shift-=8)
+            data.array[data.index++] = (byte) ((header.primaryIndex >> shift) & 0xFF);     
+
+         // Block entropy decode 
+         final int decoded = ed.decode(data.array, data.index, header.blockLength);
+
+         if (decoded != header.blockLength)
+            return -1;
+
+         data.index = savedIdx;
+         this.setSize(header.blockLength);
+
+         if (this.inverse(new IndexedByteArray(data.array, data.index), data) == false)
+            return -1;
+
+         return data.index - savedIdx;
+      }
+      catch (Exception e)
+      {
          return -1;
-
-      int savedIdx = data.index;
-      data.array[data.index++] = header.mode;
-      int shift = (header.dataSize - 1) << 3;
-                    
-      for (int i=0; i<header.dataSize; i++, shift-=8)
-         data.array[data.index++] = (byte) ((header.blockLength >> shift) & 0xFF);
-         
-      shift = (header.dataSize - 1) << 3;
-                    
-      for (int i=0; i<header.dataSize; i++, shift-=8)
-         data.array[data.index++] = (byte) ((header.primaryIndex >> shift) & 0xFF);     
-      
-      // Block entropy decode 
-      final int decoded = ed.decode(data.array, data.index, header.blockLength);
-
-      if (decoded != header.blockLength)
-         return -1;
-
-      data.index = savedIdx;
-      this.setSize(header.blockLength);
-
-      if (this.inverse(new IndexedByteArray(data.array, data.index), data) == false)
-         return -1;
-
-      return data.index - savedIdx;
-   }
+      }
+   }   
    
    
    // Internal utility class to build a block header
