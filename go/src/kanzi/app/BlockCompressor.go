@@ -18,7 +18,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"kanzi/function"
 	"kanzi/io"
 	"os"
 	"strings"
