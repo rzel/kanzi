@@ -53,6 +53,26 @@ public class TestPipeline
 
     public static void main(String[] args)
     {
+       char c = 'R';
+       byte b = (byte) c;
+       
+       if (b == (byte) 'c')
+          System.out.println(b);
+      
+       switch((char) b) {
+          case 'a' : 
+             System.out.println("");
+             break;
+          case 'b' : 
+             System.out.println("");
+             break;
+          case 'c' : 
+             System.out.println("");
+             break;
+          case 'd' : 
+             System.out.println("");
+             break;
+       }
         try
         {
             int blockSize = 100000;
@@ -274,13 +294,13 @@ public class TestPipeline
         {
             int blkSize = (length < blockSize) ? length : blockSize;
             bc.setSize(blkSize);
-            int encoded = bc.encode(block, encoder);
-
-            if (encoded < 0)
-            {
-              System.out.println("Error during block encoding");
-              System.exit(1);
-            }
+//            int encoded = bc.encode(block, encoder);
+//
+//            if (encoded < 0)
+//            {
+//              System.out.println("Error during block encoding");
+//              System.exit(1);
+//            }
 
             length -= blkSize;
         }
@@ -335,13 +355,13 @@ public class TestPipeline
 
         do
         {
-           decoded = bd.decode(buffer, decoder);
-
-           if (decoded < 0)
-           {
-              System.out.println("Error during block decoding");
-              System.exit(1);
-           }
+//           decoded = bd.decode(buffer, decoder);
+//
+//           if (decoded < 0)
+//           {
+//              System.out.println("Error during block decoding");
+//              System.exit(1);
+//           }
         }
         while (decoded > 0);
 
