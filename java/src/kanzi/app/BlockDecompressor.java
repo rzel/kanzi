@@ -235,7 +235,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       printOut("Output size:      "+read, !this.silent);
       
       if (delta > 0)
-         printOut("Troughput (KB/s): "+(((read * 1000L) >> 10) / delta), !this.silent);
+         printOut("Throughput (KB/s): "+(((read * 1000L) >> 10) / delta), !this.silent);
       
       printOut("", !this.silent);
       return 0;
