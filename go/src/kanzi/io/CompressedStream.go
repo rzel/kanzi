@@ -232,34 +232,11 @@ func (this *CompressedOutputStream) encode() error {
 		return nil
 	}
 
-	var ee kanzi.EntropyEncoder
-	var err error
 	written := this.obs.Written()
 	
 	// Each block is encoded separately
 	// Rebuild the entropy encoder to reset block statistics
-	switch this.entropyType {
-	case 'H':
-		ee, err = entropy.NewHuffmanEncoder(this.obs)
-
-	case 'R':
-		ee, err = entropy.NewRangeEncoder(this.obs)
-
-	case 'P':
-		predictor, _ := entropy.NewPAQPredictor()
-		ee, err = entropy.NewBinaryEntropyEncoder(this.obs, predictor)
-
-	case 'F':
-		predictor, _ := entropy.NewFPAQPredictor()
-		ee, err = entropy.NewFPAQEntropyEncoder(this.obs, predictor)
-
-	case 'N':
-		ee, err = entropy.NewNullEntropyEncoder(this.obs)
-
-	default:
-		errMsg := fmt.Sprintf("Invalid entropy encoder: %c", this.entropyType)
-		return NewIOError(errMsg, ERR_INVALID_CODEC)
-	}
+	ee, err := entropy.NewEntropyEncoder(this.obs, this.entropyType)
 
 	if err != nil {
 		errMsg := fmt.Sprintf("Failed to create entropy encoder: %v", err)
@@ -466,33 +443,7 @@ func (this *CompressedInputStream) decode() (int, error) {
 		this.initialized = true
 	}
 
-	var ed kanzi.EntropyDecoder
-	var err error
-
-	switch this.entropyType {
-	// Each block is decoded separately
-	// Rebuild the entropy decoder to reset block statistics
-	case 'H':
-		ed, err = entropy.NewHuffmanDecoder(this.ibs)
-
-	case 'R':
-		ed, err = entropy.NewRangeDecoder(this.ibs)
-
-	case 'P':
-		predictor, _ := entropy.NewPAQPredictor()
-		ed, err = entropy.NewBinaryEntropyDecoder(this.ibs, predictor)
-
-	case 'F':
-		predictor, _ := entropy.NewFPAQPredictor()
-		ed, err = entropy.NewFPAQEntropyDecoder(this.ibs, predictor)
-
-	case 'N':
-		ed, err = entropy.NewNullEntropyDecoder(this.ibs)
-
-	default:
-		errMsg := fmt.Sprintf("Unsupported entropy codec type: '%c'", this.entropyType)
-		return 0, NewIOError(errMsg, ERR_INVALID_CODEC)
-	}
+    ed, err := entropy.NewEntropyDecoder(this.ibs, this.entropyType)
 
 	if err != nil {
 		errMsg := fmt.Sprintf("Failed to create entropy decoder: %v", err)

@@ -22,13 +22,7 @@ import kanzi.EntropyEncoder;
 import kanzi.IndexedByteArray;
 import kanzi.OutputBitStream;
 import kanzi.bitstream.DefaultOutputBitStream;
-import kanzi.entropy.BinaryEntropyEncoder;
-import kanzi.entropy.FPAQEntropyEncoder;
-import kanzi.entropy.FPAQPredictor;
-import kanzi.entropy.HuffmanEncoder;
-import kanzi.entropy.NullEntropyEncoder;
-import kanzi.entropy.PAQPredictor;
-import kanzi.entropy.RangeEncoder;
+import kanzi.entropy.EntropyCodecFactory;
 import kanzi.function.BlockCodec;
 
 
@@ -39,7 +33,6 @@ public class CompressedOutputStream extends OutputStream
    private static final int BITSTREAM_TYPE = 0x4B4E5A; // "KNZ"
    private static final int BITSTREAM_FORMAT_VERSION = 0;
    private static final int DEFAULT_BUFFER_SIZE = 32768;
-   private static final String[] CODECS = { "NONE", "HUFFMAN", "RANGE", "FPAQ", "PAQ" };
 
    private final int blockSize;
    private final BlockCodec bc;
@@ -73,21 +66,11 @@ public class CompressedOutputStream extends OutputStream
       if (blockSize > BlockCodec.MAX_BLOCK_SIZE)
          throw new IllegalArgumentException("Invalid buffer size parameter (must be at most " + BlockCodec.MAX_BLOCK_SIZE + ")");
 
-      String strVal = entropyCodec.toUpperCase();
-      char type = 0;
       this.obs = new DefaultOutputBitStream(os, DEFAULT_BUFFER_SIZE);
 
-      for (String str : CODECS)
-      {
-         if (str.equals(strVal) == false)
-            continue;
-
-         type = str.charAt(0);
-         break;
-      }
-
-      if (type == 0)
-         throw new IllegalArgumentException("Invalid entropy encoder type: '" + entropyCodec + "'");
+      // Check entropy type validity (throws if not valid)
+      char type = entropyCodec.toUpperCase().charAt(0);
+      new EntropyCodecFactory().newEncoder(this.obs, (byte) type);
 
       this.entropyType = type;
       this.blockSize = blockSize;
@@ -97,7 +80,7 @@ public class CompressedOutputStream extends OutputStream
    }
 
 
-   public void writeHeader() throws IOException
+   protected void writeHeader() throws IOException
    {
       if (this.initialized == true)
          return;
@@ -204,31 +187,12 @@ public class CompressedOutputStream extends OutputStream
       {
          // Each block is encoded separately
          // Rebuild the entropy encoder to reset block statistics
-         switch (this.entropyType)
-         {
-            case 'H':
-               ee = new HuffmanEncoder(this.obs);
-               break;
-            case 'R':
-               ee = new RangeEncoder(this.obs);
-               break;
-            case 'P':
-               ee = new BinaryEntropyEncoder(this.obs, new PAQPredictor());
-               break;
-            case 'F':
-               ee = new FPAQEntropyEncoder(this.obs, new FPAQPredictor());
-               break;
-            case 'N':
-               ee = new NullEntropyEncoder(this.obs);
-               break;
-            default :
-               throw new kanzi.io.IOException("Invalid entropy encoder: " + this.entropyType,
-                       Error.ERR_INVALID_CODEC);
-         }
+         ee = new EntropyCodecFactory().newEncoder(this.obs, (byte) this.entropyType);
       }
       catch (Exception e)
       {
-         throw new kanzi.io.IOException("Failed to create entropy encoder", Error.ERR_CREATE_CODEC);
+         throw new kanzi.io.IOException("Failed to create entropy encoder: " + e.getMessage(), 
+                 Error.ERR_CREATE_CODEC);
       }
 
       if (this.initialized == false)

@@ -23,13 +23,7 @@ import kanzi.EntropyDecoder;
 import kanzi.IndexedByteArray;
 import kanzi.InputBitStream;
 import kanzi.bitstream.DefaultInputBitStream;
-import kanzi.entropy.BinaryEntropyDecoder;
-import kanzi.entropy.FPAQEntropyDecoder;
-import kanzi.entropy.FPAQPredictor;
-import kanzi.entropy.HuffmanDecoder;
-import kanzi.entropy.NullEntropyDecoder;
-import kanzi.entropy.PAQPredictor;
-import kanzi.entropy.RangeDecoder;
+import kanzi.entropy.EntropyCodecFactory;
 import kanzi.function.BlockCodec;
 
 
@@ -70,7 +64,7 @@ public class CompressedInputStream extends InputStream
    }
 
 
-   public void readHeader() throws IOException
+   protected void readHeader() throws IOException
    {
       if (this.initialized == true)
          return;
@@ -179,32 +173,14 @@ public class CompressedInputStream extends InputStream
 
       try
       {
-         switch (this.entropyType)
-         {
-            // Each block is decoded separately
-            // Rebuild the entropy decoder to reset block statistics
-            case 'H':
-               ed = new HuffmanDecoder(this.ibs);
-               break;
-            case 'R':
-               ed = new RangeDecoder(this.ibs);
-               break;
-            case 'P':
-               ed = new BinaryEntropyDecoder(this.ibs, new PAQPredictor());
-               break;
-            case 'F':
-               ed = new FPAQEntropyDecoder(this.ibs, new FPAQPredictor());
-               break;
-            case 'N':
-               ed = new NullEntropyDecoder(this.ibs);
-               break;
-            default:
-               throw new kanzi.io.IOException("Unsupported entropy codec type: " + this.entropyType, Error.ERR_INVALID_CODEC);
-         }
+         // Each block is decoded separately
+         // Rebuild the entropy decoder to reset block statistics
+         ed = new EntropyCodecFactory().newDecoder(this.ibs, (byte) this.entropyType);
       }
       catch (Exception e)
       {
-         throw new kanzi.io.IOException("Failed to create entropy decoder", Error.ERR_CREATE_CODEC);
+         throw new kanzi.io.IOException("Failed to create entropy decoder: " + e.getMessage(), 
+                 Error.ERR_CREATE_CODEC);
       }
 
       try
