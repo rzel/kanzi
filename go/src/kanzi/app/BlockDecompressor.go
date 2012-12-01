@@ -133,7 +133,6 @@ func (this *BlockDecompressor) call() (int, uint64) {
 	}
 
 	defer output.Close()
-	delta := int64(0)
 	read := uint64(0)
 	printOut("Decoding ...", !this.silent)
 
@@ -166,10 +165,10 @@ func (this *BlockDecompressor) call() (int, uint64) {
 
 	buffer := make([]byte, DEFAULT_BUFFER_SIZE)
 	decoded := len(buffer)
+	before := time.Now()
 
 	// Decode next block
 	for decoded == len(buffer) {
-		before := time.Now()
 
 		if decoded, err = cis.Read(buffer); err != nil {
 			if ioerr, isIOErr := err.(*io.IOError); isIOErr == true {
@@ -181,8 +180,6 @@ func (this *BlockDecompressor) call() (int, uint64) {
 			}
 		}
 
-		after := time.Now()
-		delta += after.Sub(before).Nanoseconds()
 
 		if decoded > 0 {
 			_, err = output.Write(buffer[0:decoded])
@@ -200,7 +197,9 @@ func (this *BlockDecompressor) call() (int, uint64) {
 	// Deferred close is fallback for error paths
 	cis.Close()
 
-	delta /= 1000000 // convert to ms
+	after := time.Now()
+	delta := after.Sub(before).Nanoseconds() / 1000000 // convert to ms
+	
 	printOut("", !this.silent)
 	msg = fmt.Sprintf("Decoding:          %d ms", delta)
 	printOut(msg, !this.silent)

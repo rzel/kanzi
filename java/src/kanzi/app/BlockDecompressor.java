@@ -116,7 +116,6 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       printOut("Debug set to "+this.debug, this.debug);
       printOut("Overwrite set to "+this.overwrite, this.debug);
 
-      long delta = 0;
       long read = 0;
       printOut("Decoding ...", !this.silent);
       File output;
@@ -180,6 +179,8 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
          return Error.ERR_OPEN_FILE;
       }
 
+      long before = System.nanoTime();
+
       try
       {
          IndexedByteArray iba = new IndexedByteArray(new byte[DEFAULT_BUFFER_SIZE], 0);
@@ -188,10 +189,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
          // Decode next block
          do
          {
-            long before = System.nanoTime();
             decoded = this.cis.read(iba.array, 0, iba.array.length);
-            long after = System.nanoTime();
-            delta += (after - before);
 
             if (decoded < 0)
             {
@@ -228,7 +226,8 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       // Close streams to ensure all data are flushed
       this.closeAll();
 
-      delta /= 1000000L; // convert to ms
+      long after = System.nanoTime();
+      long delta = (after - before) / 1000000L; // convert to ms
       printOut("", !this.silent);
       printOut("Decoding:         "+delta+" ms", !this.silent);
       printOut("Input size:       "+this.cis.getRead(), !this.silent);

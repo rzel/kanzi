@@ -173,12 +173,12 @@ func (this *BlockCompressor) call() (int, uint64) {
 	defer input.Close()
 
 	// Encode
-	delta := int64(0)
 	len := 0
 	read := int64(0)
 	printOut("Encoding ...", !this.silent)
 	written = cos.GetWritten()
 	buffer := make([]byte, DEFAULT_BUFFER_SIZE)
+	before := time.Now()
 	len, err = input.Read(buffer)
 
 	for len > 0 {
@@ -188,7 +188,6 @@ func (this *BlockCompressor) call() (int, uint64) {
 		}
 
 		read += int64(len)
-		before := time.Now()
 
 		if _, err = cos.Write(buffer[0:len]); err != nil {
 			if ioerr, isIOErr := err.(*io.IOError); isIOErr == true {
@@ -200,8 +199,6 @@ func (this *BlockCompressor) call() (int, uint64) {
 			}
 		}
 
-		after := time.Now()
-		delta += after.Sub(before).Nanoseconds()
 		len, err = input.Read(buffer)
 	}
 
@@ -214,8 +211,9 @@ func (this *BlockCompressor) call() (int, uint64) {
 	// Deferred close is fallback for error paths
 	cos.Close()
 
-	delta /= 1000000 // convert to ms
-
+	after := time.Now()
+	delta := after.Sub(before).Nanoseconds() / 1000000 // convert to ms
+	
 	printOut("", !this.silent)
 	msg = fmt.Sprintf("Encoding:         %d ms", delta)
 	printOut(msg, !this.silent)

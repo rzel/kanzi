@@ -177,7 +177,6 @@ public class BlockCompressor implements Runnable, Callable<Integer>
 
       // Encode
       printOut("Encoding ...", !this.silent);
-      long delta = 0L;
       int read = 0;
 
       // If the compression ratio is greater than one for this block,
@@ -185,6 +184,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       // in the block for header data)
       IndexedByteArray iba = new IndexedByteArray(new byte[DEFAULT_BUFFER_SIZE], 0);
       int len;
+      long before = System.nanoTime();
 
       try
       {
@@ -194,10 +194,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
             {
                // Just write block to the compressed output stream !
                read += len;
-               long before = System.nanoTime();
                this.cos.write(iba.array, 0, len);
-               long after = System.nanoTime();
-               delta += (after - before);
             }
             catch (kanzi.io.IOException e)
             {
@@ -231,8 +228,9 @@ public class BlockCompressor implements Runnable, Callable<Integer>
 
        // Close streams to ensure all data are flushed
        this.closeAll();
-
-       delta /= 1000000L; // convert to ms
+       
+       long after = System.nanoTime();
+       long delta = (after - before) / 1000000L; // convert to ms
        printOut("", !this.silent);
        printOut("Encoding:          "+delta+" ms", !this.silent);
        printOut("Input size:        "+read, !this.silent);
