@@ -16,8 +16,8 @@ limitations under the License.
 package main
 
 import (
-	"kanzi/function"
 	"fmt"
+	"kanzi/function"
 	"math/rand"
 	"os"
 	"time"
@@ -135,11 +135,12 @@ func main() {
 	}
 
 	iter := 50000
+	size := 30000
 	fmt.Printf("\n\nSpeed test\n")
 	fmt.Printf("Iterations: %v\n", iter)
 
 	for jj := 0; jj < 3; jj++ {
-		input := make([]byte, 30000)
+		input := make([]byte, size)
 		output := make([]byte, len(input))
 		reverse := make([]byte, len(input))
 
@@ -166,7 +167,12 @@ func main() {
 		for ii := 0; ii < iter; ii++ {
 			rlt, _ := function.NewRLT(0, 3)
 			before := time.Now()
-			rlt.Forward(input, output)
+
+			if _, _, err := rlt.Forward(input, output); err != nil {
+				fmt.Printf("Encoding error%v\n", err)
+				os.Exit(1)
+			}
+
 			after := time.Now()
 			delta1 += after.Sub(before).Nanoseconds()
 		}
@@ -174,7 +180,12 @@ func main() {
 		for ii := 0; ii < iter; ii++ {
 			rlt, _ := function.NewRLT(0, 3)
 			before := time.Now()
-			rlt.Inverse(output, reverse)
+
+			if _, _, err := rlt.Inverse(output, reverse); err != nil {
+				fmt.Printf("Decoding error%v\n", err)
+				os.Exit(1)
+			}
+
 			after := time.Now()
 			delta2 += after.Sub(before).Nanoseconds()
 		}
@@ -195,6 +206,8 @@ func main() {
 		}
 
 		fmt.Printf("\nRLT encoding [ms]: %v", delta1/1000000)
+		fmt.Printf("\nThroughput [MB/s]: %d", (int64(iter*size))*1000000/delta1*1000/(1024*1024))
 		fmt.Printf("\nRLT decoding [ms]: %v", delta2/1000000)
+		fmt.Printf("\nThroughput [MB/s]: %d", (int64(iter*size))*1000000/delta2*1000/(1024*1024))
 	}
 }

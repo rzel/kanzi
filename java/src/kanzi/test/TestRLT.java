@@ -106,20 +106,19 @@ public class TestRLT
                   System.out.print((input[i] & 255) + " ");
                }
 
-               System.out.println("\nCoded: ");
-
                if (rlt.forward(iba1, iba2) == false)
                {
-                  System.out.println("Encoding error");
+                  System.out.println("\nEncoding error");
                   continue;
                }
 
                if (iba1.index != input.length)
                {
-                  System.out.println("No compression (ratio > 1.0), skip reverse");
+                  System.out.println("\nNo compression (ratio > 1.0), skip reverse");
                   continue;
                }
 
+               System.out.println("\nCoded: ");
                //java.util.Arrays.fill(input, (byte) 0);
 
                for (int i = 0; i < iba2.index; i++)
@@ -131,7 +130,13 @@ public class TestRLT
                iba1.index = 0;
                iba2.index = 0;
                iba3.index = 0;
-               rlt.inverse(iba2, iba3);
+               
+               if (rlt.inverse(iba2, iba3) == false)
+               {
+                  System.out.println("\nDecoding error");
+                  continue;
+               }
+
                System.out.println("\nDecoded: ");
 
                for (int i = 0; i < reverse.length; i++)
@@ -156,15 +161,16 @@ public class TestRLT
       }
 
       // Test speed
-      int iter = 50000;
+      final int iter = 50000;
+      final int size = 30000;
       System.out.println("\n\nSpeed test");
       System.out.println("Iterations: "+iter);
       
       for (int jj=0; jj<3; jj++)
       {
-         input = new byte[30000];
-         output = new byte[input.length];
-         reverse = new byte[input.length];
+         input = new byte[size];
+         output = new byte[size];
+         reverse = new byte[size];
          IndexedByteArray iba1 = new IndexedByteArray(input, 0);
          IndexedByteArray iba2 = new IndexedByteArray(output, 0);
          IndexedByteArray iba3 = new IndexedByteArray(reverse, 0);
@@ -193,7 +199,13 @@ public class TestRLT
             iba1.index = 0;
             iba2.index = 0;
             before = System.nanoTime();
-            rlt.forward(iba1, iba2);
+            
+            if (rlt.forward(iba1, iba2) == false)
+            {
+               System.out.println("Encoding error");
+               System.exit(1);
+            }
+               
             after = System.nanoTime();
             delta1 += (after - before);
          }
@@ -204,7 +216,13 @@ public class TestRLT
             iba3.index = 0;
             iba2.index = 0;
             before = System.nanoTime();
-            rlt.inverse(iba2, iba3);
+            
+            if (rlt.inverse(iba2, iba3) == false)
+            {
+               System.out.println("Decoding error");
+               System.exit(1);
+            }
+               
             after = System.nanoTime();
             delta2 += (after - before);
          }
@@ -224,8 +242,10 @@ public class TestRLT
          if (idx >= 0)
             System.out.println("Failure at index "+idx+" ("+iba1.array[idx]+"<->"+iba3.array[idx]+")");
          
-         System.out.println("RLT encoding [ms]: " + delta1 / 1000000);
-         System.out.println("RLT decoding [ms]: " + delta2 / 1000000);
+         System.out.println("RLT encoding [ms] : " + delta1 / 1000000);
+         System.out.println("Throughput [MB/s] : " + ((long) (iter*size)) * 1000000L / delta1 * 1000L / (1024*1024));
+         System.out.println("RLT decoding [ms] : " + delta2 / 1000000);
+         System.out.println("Throughput [MB/s] : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
       }
    }
 }
