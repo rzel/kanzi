@@ -146,7 +146,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
          }
 
          try
-         {   
+         {
             this.cos = new CompressedOutputStream(this.codec,
                  new FileOutputStream(output),
                  this.blockSize,
@@ -228,7 +228,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
 
        // Close streams to ensure all data are flushed
        this.closeAll();
-       
+
        long after = System.nanoTime();
        long delta = (after - before) / 1000000L; // convert to ms
        printOut("", !this.silent);
@@ -236,10 +236,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
        printOut("Input size:        "+read, !this.silent);
        printOut("Output size:       "+this.cos.getWritten(), !this.silent);
        printOut("Ratio:             "+this.cos.getWritten() / (float) read, !this.silent);
-       
+
        if (delta > 0)
           printOut("Throughput (KB/s): "+(((read * 1000L) >> 10) / delta), !this.silent);
-       
+
        printOut("", !this.silent);
        return 0;
     }
@@ -254,7 +254,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
         boolean overwrite = false;
         String inputName = null;
         String outputName = null;
-        String codec = null;
+        String codec = "HUFFMAN"; // default
 
         for (String arg : args)
         {
