@@ -159,8 +159,11 @@ func TestSpeed(filename string) {
 		defer iFile.Close()
 		delta1 := int64(0)
 		delta2 := int64(0)
-		values1 := make([]byte, 50000)
-		values2 := make([]byte, 50000)
+		
+		size := 50000
+		iter := 1000
+		values1 := make([]byte, size)
+		values2 := make([]byte, size)
 		predictor1, _ := entropy.NewFPAQPredictor()
 		obs, _ := bitstream.NewDefaultOutputBitStream(oFile)
 		rc, _ := entropy.NewFPAQEntropyEncoder(obs, predictor1)
@@ -168,7 +171,7 @@ func TestSpeed(filename string) {
 		ibs, _ := bitstream.NewDefaultInputBitStream(iFile)
 		rd, _ := entropy.NewFPAQEntropyDecoder(ibs, predictor2)
 
-		for ii := 0; ii < 1000; ii++ {
+		for ii := 0; ii < iter; ii++ {
 			idx := jj
 
 			for i := 0; i < len(values1); i++ {
@@ -203,7 +206,7 @@ func TestSpeed(filename string) {
 		rc.Dispose()
 		obs.Close()
 
-		for ii := 0; ii < 2000; ii++ {
+		for ii := 0; ii < iter; ii++ {
 			// Decode
 			before := time.Now()
 			_, err = rd.Decode(values2)
@@ -221,7 +224,9 @@ func TestSpeed(filename string) {
 		rd.Dispose()
 		ibs.Close()
 
-		fmt.Printf("Encode [ms]: %v\n", delta1/1000000)
-		fmt.Printf("Decode [ms]: %v\n", delta2/1000000)
+		fmt.Printf("Encode [ms]      : %d\n", delta1/1000000)
+		fmt.Printf("Throughput [KB/s]: %d\n", (int64(iter*size))*1000000/delta1*1000/1024)
+		fmt.Printf("Decode [ms]      : %d\n", delta2/1000000)
+		fmt.Printf("Throughput [KB/s]: %d\n", (int64(iter*size))*1000000/delta2*1000/1024)
 	}
 }

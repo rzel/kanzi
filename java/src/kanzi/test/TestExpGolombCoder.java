@@ -127,15 +127,17 @@ public class TestExpGolombCoder
         // Test speed
         System.out.println("\n\nSpeed Test");
         int[] repeats = { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3 };
+        final int size = 50000;
+        final int iter = 4000;
 
         for (int jj=0; jj<3; jj++)
         {
             System.out.println("\nTest "+(jj+1));
-            byte[] values1 = new byte[50000];
-            byte[] values2 = new byte[50000];
+            byte[] values1 = new byte[size];
+            byte[] values2 = new byte[size];
             long delta1 = 0, delta2 = 0;
 
-            for (int ii=0; ii<4000; ii++)
+            for (int ii=0; ii<iter; ii++)
             {
                 int idx = 0;
 
@@ -160,7 +162,13 @@ public class TestExpGolombCoder
                 OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
                 ExpGolombEncoder gc = new ExpGolombEncoder(bs, true);
                 long before1 = System.nanoTime();
-                gc.encode(values1, 0, values1.length);
+                
+                if (gc.encode(values1, 0, values1.length) < 0)
+                {
+                   System.out.println("Encoding error");
+                   System.exit(1);
+                }
+
                 long after1 = System.nanoTime();
                 delta1 += (after1 - before1);
                 gc.dispose();
@@ -171,7 +179,13 @@ public class TestExpGolombCoder
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
                 ExpGolombDecoder gd = new ExpGolombDecoder(bs2, true);
                 long before2 = System.nanoTime();
-                gd.decode(values2, 0, values2.length);
+                
+                if (gd.decode(values2, 0, values2.length) < 0)
+                {
+                   System.out.println("Decoding error");
+                   System.exit(1);
+                }
+
                 long after2 = System.nanoTime();
                 delta2 += (after2 - before2);
                 gd.dispose();
@@ -188,8 +202,10 @@ public class TestExpGolombCoder
                 }
             }
 
-            System.out.println("Encode [ms]: "+delta1/1000000);
-            System.out.println("Decode [ms]: "+delta2/1000000);
+            System.out.println("Encode [ms]       : " +delta1/1000000);
+            System.out.println("Throughput [KB/s] : " +((long) (iter*size)) * 1000000L / delta1 * 1000L / 1024L);
+            System.out.println("Decode [ms]       : " +delta2/1000000);
+            System.out.println("Throughput [KB/s] : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / 1024L);
         }
     }
 }

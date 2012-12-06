@@ -108,15 +108,17 @@ public class TestPAQEntropyCoder
         // Test speed
         System.out.println("\n\nSpeed Test");
         int[] repeats = { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3 };
+        final int size = 50000;
+        final int iter = 2000;
 
         for (int jj=0; jj<3; jj++)
         {
             System.out.println("\nTest "+(jj+1));
-            byte[] values1 = new byte[50000];
-            byte[] values2 = new byte[50000];
+            byte[] values1 = new byte[size];
+            byte[] values2 = new byte[size];
             long delta1 = 0, delta2 = 0;
 
-            for (int ii=0; ii<2000; ii++)
+            for (int ii=0; ii<iter; ii++)
             {
                 int idx = 0;
 
@@ -141,7 +143,13 @@ public class TestPAQEntropyCoder
                 OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
                 BinaryEntropyEncoder bec = new BinaryEntropyEncoder(bs, new PAQPredictor());
                 long before1 = System.nanoTime();
-                bec.encode(values1, 0, values1.length);
+                
+                if (bec.encode(values1, 0, values1.length) < 0)
+                {
+                   System.out.println("Encoding error");
+                   System.exit(1);
+                }
+
                 long after1 = System.nanoTime();
                 delta1 += (after1 - before1);
                 bec.dispose();
@@ -152,7 +160,13 @@ public class TestPAQEntropyCoder
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
                 BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new PAQPredictor());
                 long before2 = System.nanoTime();
-                bed.decode(values2, 0, values2.length);
+                
+                if (bed.decode(values2, 0, values2.length) < 0)
+                {
+                   System.out.println("Decoding error");
+                   System.exit(1);
+                }
+
                 long after2 = System.nanoTime();
                 delta2 += (after2 - before2);
                 bed.dispose();
@@ -169,8 +183,10 @@ public class TestPAQEntropyCoder
                 }
             }
 
-            System.out.println("Encode [ms]: "+delta1/1000000);
-            System.out.println("Decode [ms]: "+delta2/1000000);
+            System.out.println("Encode [ms]       : " +delta1/1000000);
+            System.out.println("Throughput [KB/s] : " +((long) (iter*size)) * 1000000L / delta1 * 1000L / 1024L);
+            System.out.println("Decode [ms]       : " +delta2/1000000);
+            System.out.println("Throughput [KB/s] : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / 1024L);
         }
     }
 }

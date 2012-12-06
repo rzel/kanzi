@@ -151,12 +151,12 @@ public class TestDistanceCoder
         System.out.println("\n\nSpeed test\n");
         input = DATA;
          
-        int length = input.length;
-        IndexedByteArray src = new IndexedByteArray(new byte[length], 0);
-        IndexedByteArray dst = new IndexedByteArray(new byte[Math.max(length, 256)], 0); // can be bigger than original !
-        IndexedByteArray inv = new IndexedByteArray(new byte[length], 0);
-        System.arraycopy(input, 0, src.array, 0, length);
-        DistanceCodec codec = new DistanceCodec(length);
+        final int size = input.length;
+        IndexedByteArray src = new IndexedByteArray(new byte[size], 0);
+        IndexedByteArray dst = new IndexedByteArray(new byte[Math.max(size, 256)], 0); // can be bigger than original !
+        IndexedByteArray inv = new IndexedByteArray(new byte[size], 0);
+        System.arraycopy(input, 0, src.array, 0, size);
+        DistanceCodec codec = new DistanceCodec(size);
         long before, after;
         int iter = 20000;
         long delta1 = 0;
@@ -167,22 +167,36 @@ public class TestDistanceCoder
             before = System.nanoTime();
             src.index = 0;
             dst.index = 0;
-            codec.setSize(length);
-            codec.forward(src, dst);
+            codec.setSize(size);
+            
+            if (codec.forward(src, dst) == false)
+            {
+               System.out.println("Encoding error");
+               System.exit(1);
+            }
+
             after = System.nanoTime();
             delta1 += (after-before);
             before = System.nanoTime();
             codec.setSize(dst.index);
             dst.index = 0;
             inv.index = 0;
-            codec.inverse(dst, inv);
+            
+            if (codec.inverse(dst, inv) == false)
+            {
+               System.out.println("Decoding error");
+               System.exit(1);
+            }
+
             after = System.nanoTime();
             delta2 += (after-before);
         }
         
 
         System.out.println("Iterations: "+iter);
-        System.out.println("Distance coding [ms]:   "+delta1/1000000L);
-        System.out.println("Distance decoding [ms]: "+delta2/1000000L);
+        System.out.println("Encode [ms]       : " +delta1/1000000L);
+        System.out.println("Throughput [KB/s] : " +((long) (iter*size)) * 1000000L / delta1 * 1000L / 1024L);
+        System.out.println("Decode [ms]       : " +delta2/1000000L);
+        System.out.println("Throughput [KB/s] : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / 1024L);
     }
 }
