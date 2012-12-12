@@ -218,9 +218,8 @@ public class SnappyCodec implements ByteFunction
      // Iterate over the source bytes
      int s = srcIdx; // The iterator position
      int lit = srcIdx; // The start position of any pending literal bytes
-     final int len = src.length;
 
-     while (s+3 < len)
+     while (s+3 < count)
      {
         // Update the hash table
         long hl = (src[s] & 0xFF) | ((src[s+1] & 0xFF) << 8) |
@@ -257,7 +256,7 @@ public class SnappyCodec implements ByteFunction
         s += 4;
         t += 4;
 
-        while ((s < len) && (src[s] == src[t]))
+        while ((s < count) && (src[s] == src[t]))
         {
            s++;
            t++;
@@ -270,11 +269,11 @@ public class SnappyCodec implements ByteFunction
      }
 
      // Emit any final pending literal bytes and return
-     if (lit != len)
+     if (lit != count)
      {
         iba1.index = lit;
         iba2.index = d;
-        d += emitLiteral(iba1, iba2, len-lit);
+        d += emitLiteral(iba1, iba2, count-lit);
      }
 
      source.index = srcIdx + count;
