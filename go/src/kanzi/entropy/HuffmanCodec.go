@@ -16,9 +16,9 @@ limitations under the License.
 package entropy
 
 import (
-	"kanzi"
 	"container/list"
 	"errors"
+	"kanzi"
 	"sort"
 )
 

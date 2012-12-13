@@ -16,8 +16,8 @@ limitations under the License.
 package entropy
 
 import (
-	"kanzi"
 	"errors"
+	"kanzi"
 )
 
 type Predictor interface {

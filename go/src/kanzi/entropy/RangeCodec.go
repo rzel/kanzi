@@ -16,9 +16,9 @@ limitations under the License.
 package entropy
 
 import (
-	"kanzi"
 	"errors"
 	"fmt"
+	"kanzi"
 )
 
 const (
