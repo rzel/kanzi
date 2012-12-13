@@ -67,6 +67,7 @@ func (this *RLT) Forward(src, dst []byte) (uint, uint, error) {
 		srcEnd = uint(len(src))
 	}
 
+	dstEnd := uint(len(dst))
 	run := 1
 	threshold := int(this.runThreshold)
 	srcIdx := uint(0)
@@ -75,7 +76,7 @@ func (this *RLT) Forward(src, dst []byte) (uint, uint, error) {
 	// Initialize with a value different from the first data
 	prev := ^src[srcIdx]
 
-	for srcIdx < srcEnd {
+	for srcIdx < srcEnd && dstIdx < dstEnd {
 		val := byte(src[srcIdx])
 		srcIdx++
 
@@ -136,12 +137,13 @@ func (this *RLT) Forward(src, dst []byte) (uint, uint, error) {
 }
 
 func (this *RLT) Inverse(src, dst []byte) (uint, uint, error) {
-	dstEnd := this.size
+	srcEnd := this.size
 
 	if this.size == 0 {
-		dstEnd = uint(len(dst))
+		srcEnd = uint(len(src))
 	}
 
+	dstEnd := uint(len(dst))
 	run := 0
 	threshold := int(this.runThreshold)
 	srcIdx := uint(0)
@@ -150,7 +152,7 @@ func (this *RLT) Inverse(src, dst []byte) (uint, uint, error) {
 	// Initialize with a value different from the first data
 	prev := ^src[srcIdx]
 
-	for dstIdx < dstEnd {
+	for srcIdx < srcEnd && dstIdx < dstEnd {
 		val := src[srcIdx]
 		srcIdx++
 

@@ -80,10 +80,6 @@ public class RLT implements ByteFunction
       final byte[] dst = destination.array;
       final int srcEnd = (this.size == 0) ? src.length : srcIdx + this.size;
       final int dstEnd = dst.length;
-      
-      if ((srcIdx >= srcEnd) || (dstIdx >= dstEnd))
-         return false;
-
       boolean res = true;
       int run = 0;
       final int threshold = this.runThreshold;
@@ -93,7 +89,7 @@ public class RLT implements ByteFunction
 
       try
       {
-         while (srcIdx < srcEnd)
+         while ((srcIdx < srcEnd) && (dstIdx < dstEnd))
          {
             final byte val = src[srcIdx++];
 
@@ -159,12 +155,8 @@ public class RLT implements ByteFunction
       int dstIdx = destination.index;
       final byte[] src = source.array;
       final byte[] dst = destination.array;
-      final int srcEnd = src.length;
-      final int dstEnd = (this.size == 0) ? dst.length : dstIdx + this.size;
-
-      if ((srcIdx >= srcEnd) || (dstIdx >= dstEnd))
-         return false;
-
+      final int srcEnd = (this.size == 0) ? src.length : srcIdx + this.size;
+      final int dstEnd = dst.length;
       int run = 0;
       final int threshold = this.runThreshold;
       boolean res = true;
@@ -174,7 +166,7 @@ public class RLT implements ByteFunction
 
       try
       {
-         while (dstIdx < dstEnd)
+         while ((srcIdx < srcEnd) && (dstIdx < dstEnd))
          { 
             final byte val = src[srcIdx++];
             

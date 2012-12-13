@@ -126,7 +126,7 @@ public class TestRLT
                   System.out.print((output[i] & 255) + " "); //+"("+Integer.toBinaryString(output[i] & 255)+") ");
                }
 
-               rlt = new RLT(iba1.index); // Required to reset internal attributes
+               rlt = new RLT(); // Required to reset internal attributes
                iba1.index = 0;
                iba2.index = 0;
                iba3.index = 0;
