@@ -76,4 +76,24 @@ public class EntropyCodecFactory
             throw new IllegalArgumentException("Invalid entropy encoder type: " + (char) entropyType);
       }
    }
+   
+   
+   public String getName(byte entropyType)
+   {
+      switch (entropyType)
+      {
+         case HUFFMAN_TYPE:
+            return "HUFFMAN";
+         case RANGE_TYPE:
+            return "RANGE";
+         case PAQ_TYPE:
+            return "PAQ";
+         case FPAQ_TYPE:
+            return "FPAQ";
+         case NONE_TYPE:
+            return "NONE";
+         default :
+            throw new IllegalArgumentException("Invalid entropy encoder type: " + (char) entropyType);
+      }
+   }
 }

@@ -84,3 +84,26 @@ func NewEntropyEncoder(obs kanzi.OutputBitStream, entropyType byte) (kanzi.Entro
 	errMsg := fmt.Sprintf("Unsupported entropy codec type: '%c'", entropyType)
 	return nil, errors.New(errMsg)
 }
+
+func GetEntropyCodecName(entropyType byte) (string, error) {
+	switch byte(entropyType) {
+	case HUFFMAN_TYPE:
+		return "HUFFMAN", nil
+
+	case RANGE_TYPE:
+		return "RANGE", nil
+
+	case PAQ_TYPE:
+		return "PAQ", nil
+
+	case FPAQ_TYPE:
+		return "FPAQ", nil
+
+	case NONE_TYPE:
+		return "NONE", nil
+
+	}
+
+	errMsg := fmt.Sprintf("Unsupported entropy codec type: '%c'", entropyType)
+	return errMsg, errors.New(errMsg)
+}
