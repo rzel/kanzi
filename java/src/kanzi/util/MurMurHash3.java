@@ -57,7 +57,7 @@ public class MurMurHash3
   public int hash(byte[] data, int offset, int len)
   {
      int h1 = this.seed; // aliasing
-     final int end4 = offset + (len & -3);
+     final int end4 = offset + (len & -4);
 
      // Body
      for (int i=offset; i<end4; i+=4)
@@ -79,15 +79,15 @@ public class MurMurHash3
      switch(len & 3)
      {
         case 3: 
-           k1 ^= ((data[end4+2] & 0xFF) << 16);
+           k1 = ((data[end4+2] & 0xFF) << 16);
            // Fallthrough
 
         case 2: 
-           k1 ^= ((data[end4+1] & 0xFF) << 8);
+           k1 |= ((data[end4+1] & 0xFF) << 8);
            // Fallthrough
 
         case 1: 
-           k1 ^= (data[end4] & 0xFF);
+           k1 |= (data[end4] & 0xFF);
            k1 *= C1;
            k1 = (k1 << 15) | (k1 >>> 17);
            k1 *= C2;
