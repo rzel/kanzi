@@ -44,7 +44,7 @@ func (this *MurMurHash3) SetSeed(seed uint) {
 
 func (this *MurMurHash3) Hash(data []byte) uint {
 	h1 := this.seed // aliasing
-	end4 := (len(data) & -3)
+	end4 := len(data) & -4
 
 	// Body
 	for i := 0; i < end4; i += 4 {
@@ -60,19 +60,24 @@ func (this *MurMurHash3) Hash(data []byte) uint {
 	}
 
 	// Tail
-	k1 := uint(0)
-	shift := uint(0)
+	var k1 uint
+	
+	switch len(data) & 3 {
+	  case 3:
+	    k1 ^= uint(data[end4+2]) << 16
+	    fallthrough
+	  case 2:
+	    k1 ^= uint(data[end4+1]) << 8
+	    fallthrough
+	  case 1:
+	    k1 ^= uint(data[end4])
 
-	for i := end4; i < len(data); i++ {
-		k1 ^= uint(data[i]) << shift
-		shift += 8
+		k1 *= C1
+		k1 = (k1 << 15) | (k1 >> 17)
+		k1 *= C2
+		h1 ^= k1
 	}
-
-	k1 *= C1
-	k1 = (k1 << 15) | (k1 >> 17)
-	k1 *= C2
-	h1 ^= k1
-
+	
 	// Finalization
 	h1 ^= uint(len(data))
 	h1 ^= (h1 >> 16)
