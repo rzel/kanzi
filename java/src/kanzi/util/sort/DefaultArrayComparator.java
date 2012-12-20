@@ -33,6 +33,7 @@ public final class DefaultArrayComparator implements ArrayComparator
     
     
     
+   @Override
     public int compare(int lidx, int ridx)
     {
         int res = this.array[lidx] - this.array[ridx];
