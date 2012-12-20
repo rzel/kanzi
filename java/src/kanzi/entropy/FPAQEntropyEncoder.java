@@ -14,12 +14,11 @@ limitations under the License.
  */
 package kanzi.entropy;
 
-import kanzi.EntropyEncoder;
 import kanzi.OutputBitStream;
 
 
 // Based on fpaq1 by Matt Mahoney - Stationary order 0 entropy encoder 
-public class FPAQEntropyEncoder extends BinaryEntropyEncoder implements EntropyEncoder
+public class FPAQEntropyEncoder extends BinaryEntropyEncoder
 {
    public FPAQEntropyEncoder(OutputBitStream obs, Predictor p)
    {

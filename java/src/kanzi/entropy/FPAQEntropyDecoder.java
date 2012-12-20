@@ -15,7 +15,6 @@ limitations under the License.
 package kanzi.entropy;
 
 import kanzi.BitStreamException;
-import kanzi.EntropyDecoder;
 import kanzi.InputBitStream;
 
 
@@ -30,7 +29,7 @@ import kanzi.InputBitStream;
 // dec = new FPAQEntropyDecoder(...)
 // while (dec.decode(array, 0, len) == len) { ... }
 // dec.dispose()
-public class FPAQEntropyDecoder extends BinaryEntropyDecoder implements EntropyDecoder
+public class FPAQEntropyDecoder extends BinaryEntropyDecoder
 {
    public FPAQEntropyDecoder(InputBitStream ibs, Predictor p)
    {
