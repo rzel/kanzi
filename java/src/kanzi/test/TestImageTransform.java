@@ -25,10 +25,11 @@ public class TestImageTransform
 {
   public static void main(String[] args)
   {
-        javax.swing.ImageIcon icon = new javax.swing.ImageIcon("C:\\temp\\lena.jpg");
+        String filename = (args.length > 0) ? args[0] : "C:\\temp\\lena.jpg";
+        javax.swing.ImageIcon icon = new javax.swing.ImageIcon(filename);
         java.awt.Image image = icon.getImage();
-        int w = 512; //image.getWidth(null) & 0xFFF8;
-        int h = 512; //image.getHeight(null) & 0xFFF8;
+        int w = image.getWidth(null) & 0xFFF8;
+        int h = image.getHeight(null) & 0xFFF8;
         java.awt.GraphicsDevice gs = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
         java.awt.GraphicsConfiguration gc = gs.getDefaultConfiguration();
         java.awt.image.BufferedImage img = gc.createCompatibleImage(w, h, java.awt.Transparency.OPAQUE);
@@ -40,8 +41,12 @@ public class TestImageTransform
         img.getRaster().getDataElements(0, 0, w, h, rgb);
 
         for (int i=0; i<rgb.length; i++)
-            rgb[i] &= 255;
-
+        {
+            final int grey = ((rgb[i] & 0xFF) + ((rgb[i] >> 8) & 0xFF) + 
+                    ((rgb[i] >> 16) & 0xFF)) / 3;
+            rgb[i] = (grey << 16) | (grey << 8) | grey;
+        }
+        
         img.getRaster().setDataElements(0, 0, w, h, rgb);
 
         javax.swing.JFrame frame = new javax.swing.JFrame("Original");
@@ -50,17 +55,28 @@ public class TestImageTransform
         frame.setVisible(true);
 
         DCT8 dct8 = new DCT8();
-        transform(dct8, w, h, rgb, 8, "Discrete Cosine Transform 8x8");
+        transform(dct8, w, h, rgb, 8, "Discrete Cosine Transform 8x8", 400, 200);
 
         WHT8 wht8 = new WHT8();
-        transform(wht8, w, h, rgb, 8, "Walsh-Hadamard Transform 8x8");
+        transform(wht8, w, h, rgb, 8, "Walsh-Hadamard Transform 8x8", 600, 300);
 
         WHT4 wht4 = new WHT4();
-        transform(wht4, w, h, rgb, 4, "Walsh-Hadamard Transform 4x4");
+        transform(wht4, w, h, rgb, 4, "Walsh-Hadamard Transform 4x4", 800, 400);
+        
+        try
+        {
+           Thread.sleep(25000);
+        }
+        catch (InterruptedException e)
+        {           
+        }
+        
+        System.exit(0);
   }
 
 
-  private static int[] transform(IntTransform transform, int w, int h, int[] rgb, int dim, String title)
+  private static int[] transform(IntTransform transform, int w, int h, int[] rgb, 
+          int dim, String title, int xx, int yy)
   {
     int len = w * h;
     int[] rgb2 = new int[len];
@@ -81,7 +97,7 @@ public class TestImageTransform
                  int offs = j * w;
 
                  for (int i=x; i<x+dim; i++)
-                     data[idx++] = rgb[offs+i];
+                     data[idx++] = rgb[offs+i] & 0xFF;
               }
 
               long before = System.nanoTime();
@@ -97,7 +113,10 @@ public class TestImageTransform
                  int offs = j * w;
 
                  for (int i=x; i<x+dim; i++)
-                     rgb2[offs+i] = data[idx++];
+                 {
+                     rgb2[offs+i] = (data[idx] << 16) | (data[idx] << 8) | (data[idx] & 0xFF);
+                     idx++;
+                 }
               }
            }
        }
@@ -109,17 +128,17 @@ public class TestImageTransform
     int ssim1024 = new ImageQualityMonitor(w, h).computeSSIM(rgb, rgb2);
     //System.out.println("PSNR: "+(float) psnr256 / 256);
     title += " - PSNR: ";
-    title += ((float) psnr1024 / 1024);
+    title += (psnr1024 < 1024) ? "Infinite" : ((float) psnr1024 / 1024);
     title += " - SSIM: ";
     title += ((float) ssim1024 / 1024);
-
+     System.out.println(ssim1024);
     java.awt.GraphicsDevice gs = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
     java.awt.GraphicsConfiguration gc = gs.getDefaultConfiguration();
     java.awt.image.BufferedImage img = gc.createCompatibleImage(w, h, java.awt.Transparency.OPAQUE);
     img.getRaster().setDataElements(0, 0, w, h, rgb2);
     javax.swing.ImageIcon icon = new javax.swing.ImageIcon(img);
     javax.swing.JFrame frame = new javax.swing.JFrame(title);
-    frame.setBounds(600, 100, w, h);
+    frame.setBounds(xx, yy, w, h);
     frame.add(new javax.swing.JLabel(icon));
     frame.setVisible(true);
 
