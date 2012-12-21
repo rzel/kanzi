@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import kanzi.IndexedByteArray;
-import kanzi.function.BlockCodec;
 import kanzi.io.CompressedOutputStream;
 import kanzi.io.Error;
 
@@ -37,9 +36,11 @@ public class BlockCompressor implements Runnable, Callable<Integer>
    private boolean debug;
    private boolean silent;
    private boolean overwrite;
+   private boolean checksum;
    private String inputName;
    private String outputName;
    private String codec;
+   private String transform;
    private int blockSize;
    private InputStream is;
    private CompressedOutputStream cos;
@@ -56,6 +57,8 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       this.outputName = (String) map.get("outputName");
       this.codec = (String) map.get("codec");
       this.blockSize = (Integer) map.get("blockSize");
+      this.transform = (String) map.get("transform");
+      this.checksum = (Boolean) map.get("checksum");
    }
 
 
@@ -122,8 +125,11 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       printOut("Block size set to "+this.blockSize, this.debug);
       printOut("Debug set to "+this.debug, this.debug);
       printOut("Overwrite set to "+this.overwrite, this.debug);
+      printOut("Checksum set to "+this.checksum, this.debug);
+      String etransform = ("NONE".equals(this.transform)) ? "no" : this.transform;
+      printOut("Using " + etransform + " transform (stage 1)", this.debug);
       String ecodec = ("NONE".equals(this.codec)) ? "no" : this.codec;
-      printOut("Using " + ecodec + " entropy codec", this.debug);
+      printOut("Using " + ecodec + " entropy codec (stage 2)", this.debug);
 
       try
       {
@@ -147,9 +153,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
 
          try
          {
-            this.cos = new CompressedOutputStream(this.codec,
+            this.cos = new CompressedOutputStream(this.codec, this.transform,
                  new FileOutputStream(output),
                  this.blockSize,
+                 this.checksum,
                  (this.debug == true) ? System.out : null);
          }
          catch (Exception e)
@@ -252,9 +259,11 @@ public class BlockCompressor implements Runnable, Callable<Integer>
         boolean debug = false;
         boolean silent = false;
         boolean overwrite = false;
+        boolean checksum = false;
         String inputName = null;
         String outputName = null;
         String codec = "HUFFMAN"; // default
+        String transform = "BLOCK"; // default
 
         for (String arg : args)
         {
@@ -268,8 +277,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
                printOut("-overwrite           : overwrite the output file if it already exists", true);
                printOut("-input=<inputName>   : mandatory name of the input file to encode", true);
                printOut("-output=<outputName> : optional name of the output file (defaults to <input.knz>)", true);
-               printOut("-block=<size>        : size of the block (max 16 MB / default 100 KB)", true);
-               printOut("-entropy=            : Entropy codec to use [None|Huffman|Range|PAQ|FPAQ]", true);
+               printOut("-block=<size>        : size of the blocks (max 16 MB / min 1KB / default 100 KB)", true);
+               printOut("-entropy=            : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true);
+               printOut("-transform=          : transform to use [None|Block*|Snappy|RLT]", true);
+               printOut("-checksum =          : enable block checksum", true);
                System.exit(0);
            }
            else if (arg.equals("-debug"))
@@ -284,6 +295,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
            {
                overwrite = true;
            }
+           else if (arg.equals("-checksum"))
+           {
+               checksum = true;
+           }
            else if (arg.startsWith("-input="))
            {
               inputName = arg.substring(7).trim();
@@ -295,6 +310,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
            else if (arg.startsWith("-entropy="))
            {
               codec = arg.substring(9).trim().toUpperCase();
+           }
+           else if (arg.startsWith("-transform="))
+           {
+              transform = arg.substring(11).trim().toUpperCase();
            }
            else if (arg.startsWith("-block="))
            {
@@ -338,6 +357,8 @@ public class BlockCompressor implements Runnable, Callable<Integer>
         map.put("inputName", inputName);
         map.put("outputName", outputName);
         map.put("codec", codec);
+        map.put("transform", transform);
+        map.put("checksum", checksum);
     }
 
 

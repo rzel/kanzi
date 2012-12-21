@@ -33,9 +33,11 @@ type BlockCompressor struct {
 	debug        bool
 	silent       bool
 	overwrite    bool
+	checksum     bool
 	inputName    string
 	outputName   string
 	entropyCodec string
+	transform    string
 	blockSize    uint
 }
 
@@ -49,8 +51,10 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
 	var inputName = flag.String("input", "", "mandatory name of the input file to encode")
 	var outputName = flag.String("output", "", "optional name of the output file (defaults to <input.knz>)")
-	var blockSize = flag.Int("block", 100000, "size of the block in bytes (max 16 MB / default 100 KB)")
-	var entropy = flag.String("entropy", "Huffman", "Entropy codec to use [None|Huffman|Range|PAQ|FPAQ]")
+	var blockSize = flag.Int("block", 100000, "size of the blocks (max 16 MB / min 1KB / default 100 KB)")
+	var entropy = flag.String("entropy", "Huffman", "entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]")
+	var function = flag.String("transform", "Block", "transform to use [None|Block*|Snappy|RLT]")
+	var cksum = flag.Bool("checksum", false, "enable block checksum")
 
 	// Parse
 	flag.Parse()
@@ -62,8 +66,10 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 		printOut("-overwrite         : overwrite the output file if it already exists", true)
 		printOut("-input=<filename>  : mandatory name of the input file to encode", true)
 		printOut("-output=<filename> : optional name of the output file (defaults to <input.knz>)", true)
-		printOut("-block=<size>      : size of the block (max 16 MB / default 100 KB)", true)
-		printOut("-entropy=          : Entropy codec to use [None|Huffman|Range|PAQ|FPAQ]", true)
+		printOut("-block=<size>      : size of the blocks (max 16 MB / min 1KB / default 100 KB)", true)
+		printOut("-entropy=          : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true)
+		printOut("-transform=        : transform to use [None|Block*|Snappy|RLT]", true)
+		printOut("-checksum =        : enable block checksum", true)
 		os.Exit(0)
 	}
 
@@ -88,6 +94,8 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	this.outputName = *outputName
 	this.blockSize = uint(*blockSize)
 	this.entropyCodec = strings.ToUpper(*entropy)
+	this.transform = strings.ToUpper(*function)
+	this.checksum = *cksum
 	return this, nil
 }
 
@@ -114,13 +122,23 @@ func (this *BlockCompressor) call() (int, uint64) {
 	printOut(msg, this.debug)
 	msg = fmt.Sprintf("Overwrite set to %t", this.overwrite)
 	printOut(msg, this.debug)
-	ecodec := "no"
+	msg = fmt.Sprintf("Checksum set to %t", this.checksum)
+	printOut(msg, this.debug)
+	w1 := "no"
 
-	if this.entropyCodec != "NONE" {
-		ecodec = this.entropyCodec
+	if this.transform != "NONE" {
+		w1 = this.transform
 	}
 
-	msg = fmt.Sprintf("Using %s entropy codec", ecodec)
+	msg = fmt.Sprintf("Using %s transform (stage 1)", w1)
+	printOut(msg, this.debug)
+	w2 := "no"
+
+	if this.entropyCodec != "NONE" {
+		w2 = this.entropyCodec
+	}
+
+	msg = fmt.Sprintf("Using %s entropy codec (stage 2)", w2)
 	printOut(msg, this.debug)
 	written := uint64(0)
 	output, err := os.OpenFile(this.outputName, os.O_RDWR, 666)
@@ -150,14 +168,15 @@ func (this *BlockCompressor) call() (int, uint64) {
 		debugWriter = nil
 	}
 
-	cos, err := io.NewCompressedOutputStream(this.entropyCodec, output, this.blockSize, debugWriter)
+	cos, err := io.NewCompressedOutputStream(this.entropyCodec, this.transform,
+		output, this.blockSize, this.checksum, debugWriter)
 
 	if err != nil {
-		if err.(*io.IOError) != nil {
-			fmt.Printf("%s\n", err.(*io.IOError).Message())
-			return err.(*io.IOError).ErrorCode(), written
+		if ioerr, isIOErr := err.(io.IOError); isIOErr == true {
+			fmt.Printf("%s\n", ioerr.Error())
+			return ioerr.ErrorCode(), written
 		} else {
-			fmt.Printf("Cannot create compressed stream: %v\n", err)
+			fmt.Printf("Cannot create compressed stream: %s\n", err.Error())
 			return io.ERR_CREATE_COMPRESSOR, written
 		}
 	}
@@ -190,11 +209,11 @@ func (this *BlockCompressor) call() (int, uint64) {
 		read += int64(len)
 
 		if _, err = cos.Write(buffer[0:len]); err != nil {
-			if ioerr, isIOErr := err.(*io.IOError); isIOErr == true {
-				fmt.Printf("%s\n", ioerr.Message())
+			if ioerr, isIOErr := err.(io.IOError); isIOErr == true {
+				fmt.Printf("%s\n", ioerr.Error())
 				return ioerr.ErrorCode(), written
 			} else {
-				fmt.Printf("Error in block codec forward(): %v\n", err)
+				fmt.Printf("Error in block codec forward(): %v\n", err.Error())
 				return io.ERR_PROCESS_BLOCK, written
 			}
 		}
@@ -213,7 +232,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 
 	after := time.Now()
 	delta := after.Sub(before).Nanoseconds() / 1000000 // convert to ms
-	
+
 	printOut("", !this.silent)
 	msg = fmt.Sprintf("Encoding:         %d ms", delta)
 	printOut(msg, !this.silent)
@@ -225,10 +244,10 @@ func (this *BlockCompressor) call() (int, uint64) {
 	printOut(msg, !this.silent)
 
 	if delta > 0 {
-  		msg = fmt.Sprintf("Throughput (KB/s) %d", ((read*int64(1000))>>10)/delta)
+		msg = fmt.Sprintf("Throughput (KB/s) %d", ((read*int64(1000))>>10)/delta)
 		printOut(msg, !this.silent)
 	}
-	
+
 	printOut("", !this.silent)
 	return 0, cos.GetWritten()
 }

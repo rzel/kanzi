@@ -23,12 +23,20 @@ import (
 	"kanzi/bitstream"
 	"kanzi/entropy"
 	"kanzi/function"
-	"strings"
+	"kanzi/util"
 )
 
 const (
-	BITSTREAM_TYPE           = 0x4B4E5A    // "KNZ"
-	BITSTREAM_FORMAT_VERSION = 0
+	DEFAULT_BLOCK_SIZE       = 1024 * 1024 // Default block size
+	BITSTREAM_TYPE           = 0x4B414E5A  // "KANZ"
+	BITSTREAM_FORMAT_VERSION = 1
+	DEFAULT_BUFFER_SIZE      = 32768
+	COPY_LENGTH_MASK         = 0x0F
+	SMALL_BLOCK_MASK         = 0x80
+	SKIP_FUNCTION_MASK       = 0x40
+	MIN_BLOCK_SIZE           = 1024
+	MAX_BLOCK_SIZE           = (16 * 1024 * 1024) - 4
+	SMALL_BLOCK_SIZE         = 15
 
 	ERR_MISSING_FILENAME    = -1
 	ERR_BLOCK_SIZE          = -2
@@ -62,83 +70,87 @@ func NewIOError(msg string, code int) *IOError {
 }
 
 // Implement error interface
-func (this *IOError) Error() string {
+func (this IOError) Error() string {
 	return fmt.Sprintf("%v: %v", this.msg, this.code)
 }
 
-func (this *IOError) Message() string {
+func (this IOError) Message() string {
 	return this.msg
 }
 
-func (this *IOError) ErrorCode() int {
+func (this IOError) ErrorCode() int {
 	return this.code
 }
 
 type CompressedOutputStream struct {
-	blockSize   uint
-	bc          *function.BlockCodec
-	buffer      []byte
-	entropyType byte
-	obs         kanzi.OutputBitStream
-	debugWriter io.Writer
-	initialized bool
-	closed      bool
-	blockId     int
-	curIdx      int
+	blockSize     uint
+	hasher        *util.MurMurHash3
+	buffer1       []byte
+	buffer2       []byte
+	entropyType   byte
+	transformType byte
+	obs           kanzi.OutputBitStream
+	debugWriter   io.Writer
+	initialized   bool
+	closed        bool
+	blockId       int
+	curIdx        int
 }
 
-func NewCompressedOutputStream(entropyCodec string, os kanzi.OutputStream, blockSize uint,
-	debugWriter io.Writer) (*CompressedOutputStream, error) {
+func NewCompressedOutputStream(entropyCodec string, functionType string, os kanzi.OutputStream, blockSize uint,
+	checksum bool, debugWriter io.Writer) (*CompressedOutputStream, error) {
 	if os == nil {
 		return nil, errors.New("Invalid null output stream parameter")
 	}
 
-	if blockSize < 256 {
-		return nil, errors.New("Invalid buffer size parameter (must be at least 256)")
-	}
-
-	if blockSize > function.MAX_BLOCK_SIZE {
-		errMsg := fmt.Sprintf("Invalid buffer size parameter (must be at most %d)", function.MAX_BLOCK_SIZE)
+	if blockSize > MAX_BLOCK_SIZE {
+		errMsg := fmt.Sprintf("The block size must be at most %d)", MAX_BLOCK_SIZE)
 		return nil, errors.New(errMsg)
 	}
 
-	eType := byte(0)
-
-	switch strings.ToUpper(entropyCodec) {
-
-	case "NONE":
-		eType = 'N'
-
-	case "HUFFMAN":
-		eType = 'H'
-
-	case "RANGE":
-		eType = 'R'
-
-	case "FPAQ":
-		eType = 'F'
-
-	case "PAQ":
-		eType = 'P'
-
-	default:
-		msg := fmt.Sprintf("Invalid  entropy encoder type: %s", entropyCodec)
-		return nil, NewIOError(msg, ERR_INVALID_CODEC)
+	if blockSize < MIN_BLOCK_SIZE {
+		errMsg := fmt.Sprintf("The block size must be at least %d)", MIN_BLOCK_SIZE)
+		return nil, errors.New(errMsg)
 	}
 
 	this := new(CompressedOutputStream)
-	this.entropyType = eType
-	this.blockSize = blockSize
-	this.buffer = make([]byte, blockSize)
-	this.debugWriter = debugWriter
 	var err error
 
 	if this.obs, err = bitstream.NewDefaultOutputBitStream(os); err != nil {
 		return this, err
 	}
 
-	this.bc, err = function.NewBlockCodec(blockSize)
-	return this, err
+	eType := entropyCodec[0]
+
+	// Check entropy type validity
+	if _, err = entropy.GetEntropyCodecName(eType); err != nil {
+		return this, NewIOError(err.Error(), ERR_CREATE_CODEC)
+	}
+
+	this.entropyType = eType
+
+	fType := functionType[0]
+
+	// Check transform type validity
+	if _, err = function.GetByteFunctionName(fType); err != nil {
+		return this, err
+	}
+
+	this.transformType = fType
+	this.blockSize = blockSize
+
+	if checksum == true {
+		this.hasher, err = util.NewMurMurHash3(BITSTREAM_TYPE)
+
+		if err != nil {
+			return this, err
+		}
+	}
+
+	this.buffer1 = make([]byte, blockSize)
+	this.buffer2 = make([]byte, 0)
+	this.debugWriter = debugWriter
+	return this, nil
 }
 
 func (this *CompressedOutputStream) WriteHeader() *IOError {
@@ -148,19 +160,33 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 
 	var err error
 
-	if _, err = this.obs.WriteBits(BITSTREAM_TYPE, 24); err != nil {
+	if _, err = this.obs.WriteBits(BITSTREAM_TYPE, 32); err != nil {
 		return NewIOError("Cannot write header", ERR_WRITE_FILE)
 	}
 
-	if _, err = this.obs.WriteBits(BITSTREAM_FORMAT_VERSION, 8); err != nil {
+	if _, err = this.obs.WriteBits(BITSTREAM_FORMAT_VERSION, 7); err != nil {
 		return NewIOError("Cannot write header", ERR_WRITE_FILE)
 	}
 
-	if _, err = this.obs.WriteBits(uint64(this.entropyType), 8); err != nil {
+	cksum := 0
+
+	if this.hasher != nil {
+		cksum = 1
+	}
+
+	if err = this.obs.WriteBit(cksum); err != nil {
 		return NewIOError("Cannot write header", ERR_WRITE_FILE)
 	}
 
-	if _, err = this.obs.WriteBits(uint64(this.blockSize), 24); err != nil {
+	if _, err = this.obs.WriteBits(uint64(this.entropyType&0x7F), 7); err != nil {
+		return NewIOError("Cannot write header", ERR_WRITE_FILE)
+	}
+
+	if _, err = this.obs.WriteBits(uint64(this.transformType&0x7F), 7); err != nil {
+		return NewIOError("Cannot write header", ERR_WRITE_FILE)
+	}
+
+	if _, err = this.obs.WriteBits(uint64(this.blockSize), 26); err != nil {
 		return NewIOError("Cannot write header", ERR_WRITE_FILE)
 	}
 
@@ -172,28 +198,28 @@ func (this *CompressedOutputStream) Write(array []byte) (int, error) {
 	startChunk := 0
 	lenChunk := len(array) - startChunk
 
-	if lenChunk+this.curIdx >= len(this.buffer) {
-		// Limit to number of available bytes in buffer
-		lenChunk = len(this.buffer) - this.curIdx
+	if lenChunk+this.curIdx >= int(this.blockSize) {
+		// Limit to number of available bytes
+		lenChunk = int(this.blockSize) - this.curIdx
 	}
 
 	for lenChunk > 0 {
-		copy(this.buffer[this.curIdx:], array[startChunk:startChunk+lenChunk])
+		copy(this.buffer1[this.curIdx:], array[startChunk:startChunk+lenChunk])
 		this.curIdx += lenChunk
 		startChunk += lenChunk
 
-		if this.curIdx >= len(this.buffer) {
+		if this.curIdx >= int(this.blockSize) {
 			// Buffer full, time to encode
-			if err := this.encode(); err != nil {
+			if err := this.processBlock(); err != nil {
 				return startChunk, err
 			}
 		}
 
 		lenChunk = len(array) - startChunk
 
-		if lenChunk+this.curIdx >= len(this.buffer) {
-			// Limit to number of available bytes in buffer
-			lenChunk = len(this.buffer) - this.curIdx
+		if lenChunk+this.curIdx >= int(this.blockSize) {
+			// Limit to number of available bytes
+			lenChunk = int(this.blockSize) - this.curIdx
 		}
 	}
 
@@ -215,32 +241,20 @@ func (this *CompressedOutputStream) Close() error {
 	this.closed = true
 
 	if this.curIdx > 0 {
-		if err := this.encode(); err != nil {
+		if err := this.processBlock(); err != nil {
 			return err
 		}
 	}
 
 	// End block of size 0
-	// The 'real' value is BlockCodec.COPY_BLOCK_MASK | (0 & BlockCodec.COPY_LENGTH_MASK)
-	this.obs.WriteBits(0x80, 8)
+	this.obs.WriteBits(SMALL_BLOCK_MASK, 8)
 	this.obs.Close()
 	return nil
 }
 
-func (this *CompressedOutputStream) encode() error {
+func (this *CompressedOutputStream) processBlock() error {
 	if this.curIdx == 0 {
 		return nil
-	}
-
-	written := this.obs.Written()
-	
-	// Each block is encoded separately
-	// Rebuild the entropy encoder to reset block statistics
-	ee, err := entropy.NewEntropyEncoder(this.obs, this.entropyType)
-
-	if err != nil {
-		errMsg := fmt.Sprintf("Failed to create entropy encoder: %v", err)
-		return NewIOError(errMsg, ERR_CREATE_CODEC)
 	}
 
 	if this.initialized == false {
@@ -251,30 +265,11 @@ func (this *CompressedOutputStream) encode() error {
 		this.initialized = true
 	}
 
-	if len(this.buffer) < int(this.blockSize) {
-		this.buffer = make([]byte, this.blockSize)
-	}
-
-	this.bc.SetSize(uint(this.curIdx))
-
-	if encoded, err := this.bc.Encode(this.buffer, ee); encoded < 0 || err != nil {
-		if err != nil {
-			errMsg := fmt.Sprintf("Error in block codec forward(): %v", err)
-			return NewIOError(errMsg, ERR_PROCESS_BLOCK)
-		} else {
-			return NewIOError("Error in block codec forward()", ERR_PROCESS_BLOCK)
-		}
-	}
-
-	if this.debugWriter != nil {
-		// Display the block size before and after block transform + entropy coding
-		fmt.Fprintf(this.debugWriter, "Block %d: %d bytes (%d%%)\n",
-			this.blockId, (this.obs.Written()-written)/8,
-			(this.obs.Written()-written)*100/uint64(this.bc.Size()*8))
+	if err := this.encode(this.buffer1[0:this.curIdx]); err != nil {
+		return err
 	}
 
 	this.curIdx = 0
-	ee.Dispose()
 	this.blockId++
 	return nil
 }
@@ -283,18 +278,123 @@ func (this *CompressedOutputStream) GetWritten() uint64 {
 	return (this.obs.Written() + 7) >> 3
 }
 
+func (this *CompressedOutputStream) encode(data []byte) error {
+    blockLength := uint(len(data))
+    
+	if len(this.buffer2) < int(blockLength*5/4) {
+		this.buffer2 = make([]byte, blockLength*5/4)
+	}
+
+	transform, err := function.NewByteFunction(blockLength, this.transformType)
+
+	if err != nil {
+		return NewIOError(err.Error(), ERR_CREATE_CODEC)
+	}
+
+	mode := byte(0)
+	dataSize := uint(0)
+	compressedLength := blockLength
+	checksum := uint(0)
+	iIdx := uint(0)
+	oIdx := uint(0)
+
+	if blockLength <= SMALL_BLOCK_SIZE {
+		// Just copy
+		copy(this.buffer2, data[0:blockLength])
+		iIdx += blockLength
+		oIdx += blockLength
+		mode = byte(SMALL_BLOCK_SIZE | (blockLength & COPY_LENGTH_MASK))
+	} else {
+		// Compute block checksum
+		if this.hasher != nil {
+			checksum = this.hasher.Hash(data[0:blockLength])
+		}
+
+		iIdx, oIdx, err = transform.Forward(data, this.buffer2)
+
+		if err != nil || iIdx < blockLength {
+			// Transform failed or did not compress, skip and copy
+			copy(this.buffer2, data)
+			iIdx = blockLength
+			oIdx = blockLength
+			mode |= SKIP_FUNCTION_MASK
+		}
+
+		compressedLength = oIdx
+		dataSize++
+
+		for i := uint(0xFF); i < compressedLength; i <<= 8 {
+			dataSize++
+		}
+
+		// Record size of 'block size' in bytes
+		mode |= byte(dataSize & 0x03)
+	}
+
+	// Each block is encoded separately
+	// Rebuild the entropy encoder to reset block statistics
+	ee, err := entropy.NewEntropyEncoder(this.obs, this.entropyType)
+
+	if err != nil {
+		return NewIOError(err.Error(), ERR_CREATE_CODEC)
+	}
+
+	defer ee.Dispose()
+
+	// Write block 'header' (mode + compressed length)
+	bs := ee.BitStream()
+	written := bs.Written()
+	bs.WriteBits(uint64(mode), 8)
+
+	if dataSize > 0 {
+		if _, err = bs.WriteBits(uint64(compressedLength), 8*dataSize); err != nil {
+			return NewIOError(err.Error(), ERR_WRITE_FILE)
+		}
+	}
+
+	// Write checksum (unless small block)
+	if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
+		if _, err = bs.WriteBits(uint64(checksum), 32); err != nil {
+			return NewIOError(err.Error(), ERR_WRITE_FILE)
+		}
+	}
+
+	// Entropy encode block
+	encoded, err := ee.Encode(this.buffer2[0:compressedLength])
+
+	if err != nil {
+		return NewIOError(err.Error(), ERR_PROCESS_BLOCK)
+	}
+
+	if this.debugWriter != nil {
+		fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d (%d%%)", this.blockId,
+			blockLength, encoded, (bs.Written()-written)/8,
+			(bs.Written()-written)*100/uint64(blockLength*8))
+
+		if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
+			fmt.Fprintf(this.debugWriter, "  [%x]", checksum)
+		}
+
+		fmt.Fprintln(this.debugWriter, "")
+	}
+
+	return nil
+}
+
 type CompressedInputStream struct {
-	blockSize   uint
-	bc          *function.BlockCodec
-	buffer      []byte
-	entropyType byte
-	ibs         kanzi.InputBitStream
-	debugWriter io.Writer
-	initialized bool
-	closed      bool
-	blockId     int
-	curIdx      int
-	maxIdx      int
+	blockSize     uint
+	hasher        *util.MurMurHash3
+	buffer1       []byte
+	buffer2       []byte
+	entropyType   byte
+	transformType byte
+	ibs           kanzi.InputBitStream
+	debugWriter   io.Writer
+	initialized   bool
+	closed        bool
+	blockId       int
+	maxIdx        int
+	curIdx        int
 }
 
 func NewCompressedInputStream(is kanzi.InputStream,
@@ -304,7 +404,8 @@ func NewCompressedInputStream(is kanzi.InputStream,
 	}
 
 	this := new(CompressedInputStream)
-	this.buffer = make([]byte, 0)
+	this.buffer1 = make([]byte, 0)
+	this.buffer2 = make([]byte, 0)
 	this.debugWriter = debugWriter
 	var err error
 
@@ -313,7 +414,6 @@ func NewCompressedInputStream(is kanzi.InputStream,
 		return nil, NewIOError(errMsg, ERR_CREATE_BITSTREAM)
 	}
 
-	this.bc, err = function.NewBlockCodec(0)
 	return this, err
 }
 
@@ -322,29 +422,29 @@ func (this *CompressedInputStream) ReadHeader() error {
 		return nil
 	}
 
-	// Read stream type
 	fileType := uint64(0)
 	var err error
 
-	if fileType, err = this.ibs.ReadBits(24); err != nil {
+	// Read stream type
+	if fileType, err = this.ibs.ReadBits(32); err != nil {
 		errMsg := fmt.Sprintf("Error reading header from input file: %v", err)
 		return NewIOError(errMsg, ERR_READ_FILE)
 	}
 
 	// Sanity check
 	if fileType != BITSTREAM_TYPE {
-		errMsg := fmt.Sprintf("Invalid stream type: expected %#X, got %#X", BITSTREAM_TYPE, fileType)
+		errMsg := fmt.Sprintf("Invalid stream type: expected %#x, got %#x", BITSTREAM_TYPE, fileType)
 		return NewIOError(errMsg, ERR_INVALID_FILE)
 	}
 
 	header := uint64(0)
 
-	if header, err = this.ibs.ReadBits(40); err != nil {
+	if header, err = this.ibs.ReadBits(48); err != nil {
 		errMsg := fmt.Sprintf("Error reading input file: %v", err)
 		return NewIOError(errMsg, ERR_READ_FILE)
 	}
 
-	version := int((header >> 32) & 0xFF)
+	version := int((header >> 41) & 0x7F)
 
 	// Sanity check
 	if version < BITSTREAM_FORMAT_VERSION {
@@ -352,8 +452,23 @@ func (this *CompressedInputStream) ReadHeader() error {
 		return NewIOError(errMsg, ERR_STREAM_VERSION)
 	}
 
-	this.entropyType = byte((header >> 24) & 0xFF)
-	this.blockSize = uint(header & 0xFFFFFF)
+	// Read block checksum
+	checksum := (header >> 40) & 1
+
+	if checksum == 1 {
+		if this.hasher, err = util.NewMurMurHash3(BITSTREAM_TYPE); err != nil {
+			return err
+		}
+	}
+
+	// Read entropy codec
+	this.entropyType = byte((header >> 33) & 0x7F)
+
+	// Read transform
+	this.transformType = byte((header >> 26) & 0x7F)
+
+	// Read block size
+	this.blockSize = uint(header & uint64(0x03FFFFFF))
 
 	if this.blockSize > uint(function.MAX_BLOCK_SIZE) {
 		errMsg := fmt.Sprintf("Invalid block size read from file: %d", this.blockSize)
@@ -361,19 +476,32 @@ func (this *CompressedInputStream) ReadHeader() error {
 	}
 
 	if this.debugWriter != nil {
+		fmt.Fprintf(this.debugWriter, "Checksum set to %v\n", (this.hasher != nil))
 		fmt.Fprintf(this.debugWriter, "Block size set to %d\n", this.blockSize)
+		w1, err := function.GetByteFunctionName(this.transformType)
 
-		if this.entropyType == 'H' {
-			fmt.Fprintln(this.debugWriter, "Using HUFFMAN entropy codec")
-		} else if this.entropyType == 'R' {
-			fmt.Fprintln(this.debugWriter, "Using RANGE entropy codec")
-		} else if this.entropyType == 'P' {
-			fmt.Fprintln(this.debugWriter, "Using PAQ entropy codec")
-		} else if this.entropyType == 'F' {
-			fmt.Fprintln(this.debugWriter, "Using FPAQ entropy codec")
-		} else if this.entropyType == 'N' {
-			fmt.Fprintln(this.debugWriter, "Using no entropy codec")
+		if err != nil {
+			errMsg := fmt.Sprintf("Invalid transform type: %d", this.blockSize)
+			return NewIOError(errMsg, ERR_INVALID_CODEC)
 		}
+
+		if w1 == "NONE" {
+			w1 = "no"
+		}
+
+		fmt.Fprintf(this.debugWriter, "Using %v transform (stage 1)\n", w1)
+		w2, err := entropy.GetEntropyCodecName(this.entropyType)
+
+		if w2 == "NONE" {
+			w2 = "no"
+		}
+
+		if err != nil {
+			errMsg := fmt.Sprintf("Invalid entropy codec type: %d", this.blockSize)
+			return NewIOError(errMsg, ERR_INVALID_CODEC)
+		}
+
+		fmt.Fprintf(this.debugWriter, "Using %v entropy codec (stage 2)\n", w2)
 	}
 
 	return nil
@@ -391,7 +519,9 @@ func (this *CompressedInputStream) Close() error {
 		return err
 	}
 
-	this.buffer = make([]byte, 0)
+	// Release resources
+	this.buffer1 = make([]byte, 0)
+	this.buffer2 = make([]byte, 0)
 	this.maxIdx = 0
 	return nil
 }
@@ -405,11 +535,11 @@ func (this *CompressedInputStream) Read(array []byte) (int, error) {
 			var err error
 
 			// Buffer empty, time to decode
-			if this.maxIdx, err = this.decode(); err != nil {
+			if this.maxIdx, err = this.processBlock(); err != nil {
 				return startChunk, err
 			}
 
-			if this.maxIdx == 0 {			
+			if this.maxIdx == 0 {
 				// Reached end of stream
 				return startChunk, nil
 			}
@@ -426,7 +556,7 @@ func (this *CompressedInputStream) Read(array []byte) (int, error) {
 			break
 		}
 
-		copy(array[startChunk:], this.buffer[this.curIdx:this.curIdx+lenChunk])
+		copy(array[startChunk:], this.buffer1[this.curIdx:this.curIdx+lenChunk])
 		this.curIdx += lenChunk
 		startChunk += lenChunk
 	}
@@ -434,8 +564,8 @@ func (this *CompressedInputStream) Read(array []byte) (int, error) {
 	return len(array), nil
 }
 
-func (this *CompressedInputStream) decode() (int, error) {
-	if this.initialized == false {	
+func (this *CompressedInputStream) processBlock() (int, error) {
+	if this.initialized == false {
 		if err := this.ReadHeader(); err != nil {
 			return 0, err
 		}
@@ -443,38 +573,137 @@ func (this *CompressedInputStream) decode() (int, error) {
 		this.initialized = true
 	}
 
-    ed, err := entropy.NewEntropyDecoder(this.ibs, this.entropyType)
+	if len(this.buffer1) < int(this.blockSize) {
+		this.buffer1 = make([]byte, this.blockSize)
+	}
+
+	decoded, err := this.decode(this.buffer1)
 
 	if err != nil {
-		errMsg := fmt.Sprintf("Failed to create entropy decoder: %v", err)
-		return 0, NewIOError(errMsg, ERR_CREATE_CODEC)
-	}
-
-	if len(this.buffer) < int(this.blockSize) {
-		this.buffer = make([]byte, this.blockSize)
-	}
-
-	decoded, err := this.bc.Decode(this.buffer, ed)
-
-	if err != nil {
-		errMsg := fmt.Sprintf("Error in block codec inverse(): %v", err)
-		return 0, NewIOError(errMsg, ERR_PROCESS_BLOCK)
-	} else if decoded < 0 {
-		errMsg := fmt.Sprintf("Error in block codec inverse()")
-		return 0, NewIOError(errMsg, ERR_PROCESS_BLOCK)
-	}
-
-	if this.debugWriter != nil {
-		// Display block size after entropy decoding + block transform
-		fmt.Fprintf(this.debugWriter, "Block %d: %d byte(s)\n", this.blockId, decoded)
+		return decoded, err
 	}
 
 	this.curIdx = 0
 	this.blockId++
-	ed.Dispose()
 	return decoded, nil
 }
 
 func (this *CompressedInputStream) GetRead() uint64 {
 	return (this.ibs.Read() + 7) >> 3
+}
+
+func (this *CompressedInputStream) decode(data []byte) (int, error) {
+	// Each block is decoded separately
+	// Rebuild the entropy decoder to reset block statistics
+	ed, err := entropy.NewEntropyDecoder(this.ibs, this.entropyType)
+
+	if err != nil {
+		return 0, NewIOError(err.Error(), ERR_INVALID_CODEC)
+	}
+
+	defer ed.Dispose()
+
+	// Extract header directly from bitstream
+	bs := ed.BitStream()
+	read := bs.Read()
+	r, err := bs.ReadBits(8)
+
+	if err != nil {
+		return 0, NewIOError(err.Error(), ERR_READ_FILE)
+	}
+
+	mode := byte(r)
+	var compressedLength uint
+	checksum1 := uint(0)
+
+	if (mode & SMALL_BLOCK_MASK) != 0 {
+		compressedLength = uint(mode & COPY_LENGTH_MASK)
+	} else {
+		dataSize := uint(mode & 0x03)
+		length := dataSize << 3
+		mask := uint64(1<<length) - 1
+
+		if r, err = bs.ReadBits(length); err != nil {
+			return 0, NewIOError(err.Error(), ERR_READ_FILE)
+		}
+
+		compressedLength = uint(r & mask)
+	}
+
+	if compressedLength == 0 {
+		return 0, nil
+	}
+
+	if compressedLength > MAX_BLOCK_SIZE {
+		errMsg := fmt.Sprintf("Invalid compressed block length: %d", compressedLength)
+		return 0, NewIOError(errMsg, ERR_BLOCK_SIZE)
+	}
+
+	// Extract checksum from bit stream (if any)
+	if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK) == 0 {
+		if r, err = bs.ReadBits(32); err != nil {
+			return 0, NewIOError(err.Error(), ERR_READ_FILE)
+		}
+
+		checksum1 = uint(r)
+	}
+
+	if len(this.buffer2) < int(this.blockSize) {
+		this.buffer2 = make([]byte, this.blockSize)
+	}
+
+	// Block entropy decode
+	_, err = ed.Decode(this.buffer2[0:compressedLength])
+
+	if err != nil {
+		return 0, NewIOError(err.Error(), ERR_PROCESS_BLOCK)
+	}
+
+	var decoded int
+
+	if ((mode & SMALL_BLOCK_MASK) != 0) || ((mode & SKIP_FUNCTION_MASK) != 0) {
+		copy(data, this.buffer2[0:compressedLength])
+		decoded = int(compressedLength)
+	} else {
+		// Each block is decoded separately
+		// Rebuild the entropy decoder to reset block statistics
+		transform, err := function.NewByteFunction(compressedLength, this.transformType)
+
+		if err != nil {
+			return 0, NewIOError(err.Error(), ERR_INVALID_CODEC)
+		}
+
+		var oIdx uint
+
+		// Inverse transform
+		if _, oIdx, err = transform.Inverse(this.buffer2, data); err != nil {
+			return 0, NewIOError(err.Error(), ERR_PROCESS_BLOCK)
+		}
+
+		decoded = int(oIdx)
+
+		if this.debugWriter != nil {
+			fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d", this.blockId,
+				(bs.Read()-read)/8, compressedLength, decoded)
+
+			if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
+				fmt.Fprintf(this.debugWriter, "  [%x]", checksum1)
+			}
+
+			fmt.Fprintln(this.debugWriter, "")
+		}
+
+		// Verify checksum (unless small block)
+		if (this.hasher != nil) && ((mode & SMALL_BLOCK_MASK) == 0) {
+			checksum2 := this.hasher.Hash(data[0:decoded])
+
+			if checksum2 != checksum1 {
+				errMsg := fmt.Sprintf("Invalid checksum: expected %x, found %x", checksum1, checksum2)
+				return decoded, NewIOError(errMsg, ERR_PROCESS_BLOCK)
+			}
+		}
+
+	}
+
+	return decoded, nil
 }

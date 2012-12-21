@@ -184,7 +184,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       try
       {
          IndexedByteArray iba = new IndexedByteArray(new byte[DEFAULT_BUFFER_SIZE], 0);
-         int decoded = 0;
+         int decoded;
 
          // Decode next block
          do

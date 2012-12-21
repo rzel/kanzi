@@ -398,8 +398,8 @@ public class SnappyCodec implements ByteFunction
      final int count = (this.size > 0) ? this.size : src.length - srcIdx;
      int s = source.index;
      int d = dstIdx;
-     int offset = 0;
-     int length = 0;
+     int offset;
+     int length;
 
      while (s < count) 
      {       
@@ -493,6 +493,9 @@ public class SnappyCodec implements ByteFunction
               offset = (src[s-2] & 0xFF) | ((src[s-1] & 0xFF) << 8);
               break;
            }
+              
+           default:
+              return false;
         }
           
         final int end = d + length;

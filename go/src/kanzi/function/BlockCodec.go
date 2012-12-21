@@ -18,7 +18,6 @@ package function
 import (
 	"errors"
 	"fmt"
-	"kanzi"
 	"kanzi/transform"
 )
 
@@ -26,33 +25,20 @@ import (
 // Fast reversible block coder/decoder based on a pipeline of transformations:
 // Forward: Burrows-Wheeler -> Move to Front -> Zero Length
 // Inverse: Zero Length -> Move to Front -> Burrows-Wheeler
-// The block size determine the balance between speed and compression ratio
-// The max block size is around 250 KB and provides the best compression ratio.
-// The default block size provides a good balance.
+// The block size determines the balance between speed and compression ratio
 
 // Stream format: Header (m bytes) Data (n bytes)
-// Header: mode (4 bits) + header data size (4 bits) + compressed data length (8, 16 or 24 bits)
-//         + BWT primary index (8, 16 or 24 bits)
-//         or mode (1 bit) + block size (7 bits)
-// * If mode & 0x80 != 0 then the block is not compressed, just copied.
-//   and the block length is contained in the 7 lower digits
-//   Hence a 0 byte block (use to mark end of stream) is 0x80
-// * Else, the first 4 Most Significant Bits are used to encode extra information.
-//   The next 4 bits encode the size (in bytes) of the compressed data length 
-//   (the same size is used for the BWT primary index)
+// Header: mode (8 bits) + BWT primary index (8, 16 or 24 bits)
+// mode: bit 7 is unused for now
+//       bits 6-4 (contains the size in bits of the primary index - 1) / 4
+//       bits 3-0 4 highest bits of primary index
+// primary index: remaining bits (up to 3 bytes)       
 //
-// EG: Mode=0x85 block copy, length = 5 bytes followed by block data
-//     Mode=0x03 regular transform followed by 24 bit compressed length, 24 bit BWT index, block data
-//     Mode=0x02 regular transform followed by 16 bit compressed length, 16 bit BWT index, block data
-//     Mode & 0x2? != 0 no RLE
-//     Mode & 0x4? != 0 no ZLE
+// EG: Mode=0bx.100.xxxx primary index is (4+1)*4=20 bits long
+//     Mode=0bx.000.xxxx primary index is (0+1)*4=4 bits long
 
 const (
-	COPY_LENGTH_MASK      = 0x7F
-	COPY_BLOCK_MASK       = 0x80
-	NO_RLT_MASK           = 0x20
-	NO_ZLT_MASK           = 0x40
-	MAX_BLOCK_HEADER_SIZE = 7
+	MAX_BLOCK_HEADER_SIZE = 3
 	MAX_BLOCK_SIZE        = 16*1024*1024 - MAX_BLOCK_HEADER_SIZE // 16 MB (24 bits)
 )
 
@@ -103,15 +89,15 @@ func (this *BlockCodec) SetSize(sz uint) bool {
 
 func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 	if src == nil {
-		return 0, 0, errors.New("Input block cannot be null")
+		return 0, 0, errors.New("Input buffer cannot be null")
 	}
 
 	if dst == nil {
-		return 0, 0, errors.New("Output block cannot be null")
+		return 0, 0, errors.New("Output buffer cannot be null")
 	}
 
 	if &src == &dst {
-		return 0, 0, errors.New("Input and dst blocks cannot be equal")
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
 	}
 
 	blockSize := this.size
@@ -121,57 +107,38 @@ func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 	}
 
 	if blockSize > MAX_BLOCK_SIZE {
-		errMsg := fmt.Sprintf("Block length is %v, max value is %v", blockSize, MAX_BLOCK_SIZE)
+		errMsg := fmt.Sprintf("Block size is %v, max value is %v", blockSize, MAX_BLOCK_SIZE)
 		return 0, 0, errors.New(errMsg)
 	}
 
 	if blockSize > uint(len(src)) {
-		errMsg := fmt.Sprintf("Block length is %v, max value is %v", blockSize, len(src))
+		errMsg := fmt.Sprintf("Block size is %v, input buffer length is %v", blockSize, len(src))
 		return 0, 0, errors.New(errMsg)
 	}
 
-	if blockSize < 16 {
-		// Since processing the block data will hardly overcome the data added
-		// due to the header, use a short header and simply copy the block
-		if uint(len(dst)) < blockSize+1 {
-			errMsg := fmt.Sprintf("Output block length: %v, required: %v", len(dst), blockSize+1)
-			return 0, 0, errors.New(errMsg)
-		}
-
-		// Add 'mode' byte
-		dst[0] = byte(COPY_BLOCK_MASK | int(blockSize))
-
-		// Copy block   
-		if blockSize != 0 {
-			copy(dst[1:], src[0:blockSize])
-		}
-
-		return blockSize, blockSize + 1, nil
+	if blockSize > uint(len(this.buffer)) {
+		this.buffer = make([]byte, blockSize)
 	}
 
-	mode := byte(NO_RLT_MASK)
+	// Use a buffer to preserve input data
+	copy(this.buffer, src[0:blockSize])
 
 	// Apply Burrows-Wheeler Transform
 	this.bwt.SetSize(blockSize)
-	this.bwt.Forward(src)
+	this.bwt.Forward(this.buffer)
 	primaryIndex := this.bwt.PrimaryIndex()
 
 	// Apply Move-To-Front Transform
 	this.mtft.SetSize(blockSize)
-	this.mtft.Forward(src)
+	this.mtft.Forward(this.buffer)
 
-	headerDataSize := uint(1) // in bytes
+	pIndexSizeBits := uint(4)
 
-	if blockSize > 0xFF {
-		headerDataSize++
+	for 1<<pIndexSizeBits <= primaryIndex {
+		pIndexSizeBits += 4
 	}
 
-	if blockSize > 0xFFFF {
-		headerDataSize++
-	}
-
-	headerSize := 1 + headerDataSize + headerDataSize
-	mode |= byte(headerDataSize)
+	headerSizeBytes := (4 + pIndexSizeBits + 7) >> 3
 	zlt, err := NewZLT(blockSize)
 
 	if err != nil {
@@ -179,353 +146,106 @@ func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 	}
 
 	// Apply Zero Length Encoding 
-	iIdx, oIdx, err := zlt.Forward(src, dst[headerSize:])
-
-	compressedLength := oIdx
-	oIdx += headerSize
+	iIdx, oIdx, err := zlt.Forward(this.buffer, dst[headerSizeBytes:])
 
 	if err != nil {
-		return iIdx, oIdx, err
+		return 0, 0, err
+	}
+	
+	oIdx += headerSizeBytes
+
+	if (oIdx > uint(len(dst))) || (oIdx > blockSize) {
+		return 0, 0, errors.New("ZLT failed: output buffer too small")
 	}
 
-	// If the ZLE did not compress (it can expand in some pathological cases)
-	// then revert
-	if iIdx < blockSize || oIdx > blockSize {
-		// Not enough room in dst buffer => return error
-		if uint(len(dst)) < headerSize+blockSize {
-			errMsg := fmt.Sprint("Output block length: %v, required: %v", len(dst), headerSize+blockSize)
-			return iIdx, oIdx, errors.New(errMsg)
-		}
-
-		copy(dst[headerSize:], src[0:blockSize])
-		mode |= byte(NO_ZLT_MASK)
+	if iIdx < blockSize {
+		return 0, 0, errors.New("ZLT failed: input buffer too small")
 	}
 
-	// Write block header
+	// Write block header (mode + primary index)
+	// 'mode' contains size of primaryIndex in bits (bits 6 to 4)
+	// the size is divided by 4 and decreased by one
+	mode := byte(((pIndexSizeBits >> 2) - 1) << 4)
+	shift := pIndexSizeBits
+
+	if (shift & 7) == 4 {
+		shift -= 4
+		mode |= byte((primaryIndex >> shift) & 0x0F)
+	}
+
 	dst[0] = mode
-	shift := uint(headerDataSize-1) << 3
-	idx := uint(1)
 
-	for i := uint(0); i < headerDataSize; i++ {
-		dst[idx] = byte((compressedLength >> shift) & 0xFF)
-		dst[headerDataSize+idx] = byte((primaryIndex >> shift) & 0xFF)
+	for i := uint(1); i < headerSizeBytes; i++ {
 		shift -= 8
-		idx++
+		dst[i] = byte((primaryIndex >> shift) & 0xFF)
 	}
 
 	return iIdx, oIdx, nil
 }
 
 func (this *BlockCodec) Inverse(src, dst []byte) (uint, uint, error) {
+	compressedLength := this.size
+
+	if compressedLength == 0 {
+		return 0, 0, nil
+	}
+
+	// Read block header (mode + primary index)
+	// 'mode' contains size of primaryIndex in bits (bits 6 to 4)
+	// the size is divided by 4 and decreased by one
 	mode := src[0]
+	pIndexSizeBits := uint(((mode&0x70)>>4)+1) << 2
+	headerSizeBytes := (4 + pIndexSizeBits + 7) >> 3
+	compressedLength -= headerSizeBytes
+	shift := pIndexSizeBits
+	primaryIndex := uint(0)
 
-	if mode&COPY_BLOCK_MASK != 0 {
-		// Extract block length
-		length := int(mode & COPY_LENGTH_MASK)
+	if (shift & 7) == 4 {
+		shift -= 4
+		primaryIndex |= uint(mode & 0x0F) << shift
+	}	
 
-		if len(dst) < length {
-			errMsg := fmt.Sprintf("Output block length: %d, required: %d", len(dst), length)
-			return 0, 0, errors.New(errMsg)
-		}
-
-		// Just copy (small) block
-		copy(dst, src[1:length+1])
-		return uint(length + 1), uint(length), nil
+	// Extract BWT primary index
+	for i := uint(1); i < headerSizeBytes; i++ {
+		shift -= 8
+		primaryIndex |= uint(src[i]) << shift
 	}
 
-	// Extract compressed length
-	headerDataSize := uint(mode & 0x0F)
-	compressedLength := uint(src[1])
-	iIdx := uint(2)
+	// Apply Zero Length Decoding 
+	zlt, err := NewZLT(compressedLength)
 
-	if headerDataSize > 1 {
-		compressedLength = (compressedLength << 8) | uint(src[iIdx])
-		iIdx++
+	if err != nil {
+		return 0, 0, err
 	}
 
-	if headerDataSize > 2 {
-		compressedLength = (compressedLength << 8) | uint(src[iIdx])
-		iIdx++
+	iIdx, oIdx, err := zlt.Inverse(src[headerSizeBytes:], dst)   
+   iIdx += headerSizeBytes
+   
+	if err != nil {
+		return iIdx, oIdx, err
 	}
 
-	// Extract BWT primary index 
-	primaryIndex := uint(src[iIdx]) & 0xFF
-	iIdx++
-
-	if headerDataSize > 1 {
-		primaryIndex = (primaryIndex << 8) | uint(src[iIdx])
-		iIdx++
+	// If buffer is too small, return error 
+	if iIdx < compressedLength {
+		errMsg := fmt.Sprintf("ZLT failed: input buffer length: %d, required: %d", iIdx, compressedLength)
+		return iIdx, oIdx, errors.New(errMsg)
 	}
 
-	if headerDataSize > 2 {
-		primaryIndex = (primaryIndex << 8) | uint(src[iIdx])
-		iIdx++
+	blockSize := oIdx
+	
+	if blockSize > uint(len(dst)) {
+		errMsg := fmt.Sprintf("ZLT failed: output buffer length: %d, required: %d", len(dst), blockSize)
+		return iIdx, oIdx, errors.New(errMsg)
 	}
-
-	headerSize := 1 + headerDataSize + headerDataSize
-	boIdx := uint(0)
-
-	if mode&NO_ZLT_MASK == 0 {
-		// Apply Zero Length Decoding 
-		zlt, err := NewZLT(compressedLength)
-
-		if err != nil {
-			return iIdx, 0, err
-		}
-
-		// The size after decompression is not known, let us assume that the output
-		// is big enough, otherwise return an error after decompression
-		// To be safe the size of the output should be set to the max size allowed
-		if len(this.buffer) < len(dst) {
-			this.buffer = make([]byte, len(dst))
-		}
-
-		iIdx, boIdx, err = zlt.Inverse(src[headerSize:], this.buffer)
-
-		if err != nil {
-			return iIdx, boIdx, err
-		}
-
-		// If buffer is too small, return error 
-		if iIdx < compressedLength {
-			errMsg := fmt.Sprintf("Input block processed: %d, required: %d", iIdx, compressedLength)
-			return iIdx, boIdx, errors.New(errMsg)
-		}
-	} else {
-		if len(this.buffer) < int(compressedLength) {
-			this.buffer = make([]byte, compressedLength)
-		}
-
-		copy(this.buffer, src[headerSize:headerSize+compressedLength])
-		boIdx = compressedLength
-	}
-
-	blockSize := boIdx
 
 	// Apply Move-To-Front Inverse Transform
 	this.mtft.SetSize(blockSize)
-	this.mtft.Inverse(this.buffer)
+	this.mtft.Inverse(dst)
 
 	// Apply Burrows-Wheeler Inverse Transform
 	this.bwt.SetPrimaryIndex(primaryIndex)
 	this.bwt.SetSize(blockSize)
-	this.bwt.Inverse(this.buffer)
-
-	oIdx := uint(0)
-
-	if mode&NO_RLT_MASK == 0 {
-		// Apply Run Length Decoding
-		rlt, err := NewRLT(blockSize, DEFAULT_RLE_THRESHOLD)
-
-		if err == nil {
-			_, oIdx, err = rlt.Inverse(this.buffer, dst)
-		}
-
-		if err != nil {
-			return iIdx, oIdx, err
-		}
-
-		// If output is too small, return error
-		if oIdx < blockSize {
-			errMsg := fmt.Sprintf("Output block processed: %d, required: %d", oIdx, blockSize)
-			return iIdx, oIdx, errors.New(errMsg)
-		}
-	} else {
-		if len(dst) < int(oIdx+blockSize) {
-			errMsg := fmt.Sprintf("Output block processed: %d, required: %d", len(dst), oIdx+blockSize)
-			return iIdx, oIdx, errors.New(errMsg)
-		}
-
-		copy(dst, this.buffer[0:blockSize])
-		oIdx = blockSize
-	}
+	this.bwt.Inverse(dst)
 
 	return iIdx, oIdx, nil
-}
-
-// Return -1 if error, otherwise the number of bytes written to the encoder
-func (this *BlockCodec) Encode(data []byte, ee kanzi.EntropyEncoder) (int, error) {
-	if ee == nil {
-		err := errors.New("Invalid null entropy encoder\n")
-		return -1, err
-	}
-
-	output := make([]byte, len(data)+MAX_BLOCK_HEADER_SIZE)
-	_, _, err := this.Forward(data, output)
-
-	if err != nil {
-		return -1, err
-	}
-
-	// Extract header info and write it to the bitstream directly
-	// (some entropy decoders need block data statistics before decoding a byte)
-	header, err := createBlockHeaderFromArray(output)
-
-	if err != nil {
-		return -1, err
-	}
-
-	bs := ee.BitStream()
-	bs.WriteBits(uint64(header.mode), 8)
-	bs.WriteBits(uint64(header.blockLength), 8*header.dataSize)
-	bs.WriteBits(uint64(header.primaryIndex), 8*header.dataSize)
-
-	// Entropy encode data block
-	start := (2 * header.dataSize) + 1
-	end := start + header.blockLength
-	encoded := 0
-	encoded, err = ee.Encode(output[start:end])
-
-	if err != nil {
-		return -1, err
-	}
-
-	return encoded, nil
-}
-
-// Return -1 if error, otherwise the number of bytes read from the encoder
-func (this *BlockCodec) Decode(data []byte, ed kanzi.EntropyDecoder) (int, error) {
-	// Extract header directly from bitstream
-	header, err := createBlockHeaderFromStream(ed.BitStream())
-
-	if header.blockLength == 0 {
-		return 0, nil
-	}
-
-	if header.blockLength > MAX_BLOCK_SIZE || err != nil {
-		if err == nil {
-			errMsg := fmt.Sprintf("Invalid block size: %f\n", header.blockLength)
-			err = errors.New(errMsg)
-		}
-
-		return -1, err
-	}
-
-	data[0] = byte(header.mode)
-	shift := uint((header.dataSize - 1) << 3)
-	idx := uint(1)
-
-	for i := uint(0); i < header.dataSize; i++ {
-		data[idx] = byte((header.blockLength >> shift) & 0xFF)
-		idx++
-		shift -= 8
-	}
-
-	shift = uint((header.dataSize - 1) << 3)
-
-	for i := uint(0); i < header.dataSize; i++ {
-		data[idx] = byte((header.primaryIndex >> shift) & 0xFF)
-		idx++
-		shift -= 8
-	}
-
-	// Block entropy decode 
-	start := idx
-	end := start + header.blockLength
-	_, err = ed.Decode(data[start:end])
-
-	if err != nil {
-		return -1, err
-	}
-
-	idx = uint(0)
-	this.SetSize(header.blockLength)
-	_, idx, err = this.Inverse(data, data)
-
-	if err != nil {
-		return -1, err
-	}
-
-	return int(idx), nil
-}
-
-type BWTBlockHeader struct {
-	mode         uint
-	blockLength  uint
-	primaryIndex uint
-	dataSize     uint
-}
-
-func createBlockHeaderFromArray(array []byte) (*BWTBlockHeader, error) {
-	idx := 0
-	this := new(BWTBlockHeader)
-	this.blockLength = 0
-	this.mode = uint(array[idx])
-	idx++
-
-	if this.mode&COPY_BLOCK_MASK != 0 {
-		this.blockLength = this.mode & COPY_LENGTH_MASK
-		this.dataSize = 0
-	} else {
-		this.dataSize = this.mode & 0x0F
-		val := uint(array[idx])
-		idx++
-		this.blockLength = val
-
-		if this.dataSize > 1 {
-			val = uint(array[idx])
-			idx++
-			this.blockLength = (this.blockLength << 8) | val
-		}
-
-		if this.dataSize > 2 {
-			val = uint(array[idx])
-			idx++
-			this.blockLength = (this.blockLength << 8) | val
-		}
-
-		val = uint(array[idx])
-		idx++
-		this.primaryIndex = val
-
-		if this.dataSize > 1 {
-			val = uint(array[idx])
-			idx++
-			this.primaryIndex = (this.primaryIndex << 8) | val
-		}
-
-		if this.dataSize > 2 {
-			val = uint(array[idx])
-			idx++
-			this.primaryIndex = (this.primaryIndex << 8) | val
-		}
-	}
-
-	return this, nil
-}
-
-func createBlockHeaderFromStream(bs kanzi.InputBitStream) (*BWTBlockHeader, error) {
-	this := new(BWTBlockHeader)
-	read, err := bs.ReadBits(8)
-
-	if err != nil {
-		return this, err
-	}
-
-	this.mode = uint(read & 0xFF)
-	this.blockLength = 0
-
-	if this.mode&COPY_BLOCK_MASK != 0 {
-		this.blockLength = this.mode & COPY_LENGTH_MASK
-	} else {
-		this.dataSize = this.mode & 0x0F
-		length := uint(8 * this.dataSize)
-		mask := uint64((1 << uint(length)) - 1)
-		read, err := bs.ReadBits(length)
-
-		if err != nil {
-			return this, err
-		}
-
-		this.blockLength = uint(read & mask)
-		read, err = bs.ReadBits(length)
-
-		if err != nil {
-			return this, err
-		}
-
-		this.primaryIndex = uint(read & mask)
-	}
-
-	return this, nil
 }

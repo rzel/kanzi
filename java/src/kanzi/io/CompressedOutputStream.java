@@ -18,26 +18,40 @@ package kanzi.io;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import kanzi.ByteFunction;
 import kanzi.EntropyEncoder;
 import kanzi.IndexedByteArray;
 import kanzi.OutputBitStream;
 import kanzi.bitstream.DefaultOutputBitStream;
 import kanzi.entropy.EntropyCodecFactory;
-import kanzi.function.BlockCodec;
+import kanzi.function.FunctionFactory;
+import kanzi.util.MurMurHash3;
 
 
 
+// Implementation of a java.io.OutputStream that encodes a stream
+// using a 2 step process:
+// - step 1: a ByteFunction is used to reduce the size ogf the input data
+// - step 2: an EntropyEncoder is used to entropy code the results of step 1
 public class CompressedOutputStream extends OutputStream
 {
-   private static final int DEFAULT_BLOCK_SIZE = 1024 * 1024; // Default block size
-   private static final int BITSTREAM_TYPE = 0x4B4E5A; // "KNZ"
-   private static final int BITSTREAM_FORMAT_VERSION = 0;
-   private static final int DEFAULT_BUFFER_SIZE = 32768;
+   private static final int DEFAULT_BLOCK_SIZE       = 1024 * 1024; // Default block size
+   private static final int BITSTREAM_TYPE           = 0x4B414E5A; // "KANZ"
+   private static final int BITSTREAM_FORMAT_VERSION = 1;
+   private static final int DEFAULT_BUFFER_SIZE      = 32768;
+   private static final int COPY_LENGTH_MASK         = 0x0F;
+   private static final int SMALL_BLOCK_MASK         = 0x80;
+   private static final int SKIP_FUNCTION_MASK       = 0x40;
+   private static final int MIN_BLOCK_SIZE           = 1024;
+   private static final int MAX_BLOCK_SIZE           = (16*1024*1024) - 4;
+   private static final int SMALL_BLOCK_SIZE         = 15;
 
    private final int blockSize;
-   private final BlockCodec bc;
-   private final IndexedByteArray iba;
+   private final MurMurHash3 hasher;
+   private final IndexedByteArray iba1;
+   private final IndexedByteArray iba2;
    private final char entropyType;
+   private final char transformType;
    private final OutputBitStream  obs;
    private final PrintStream ds;
    private boolean initialized;
@@ -45,14 +59,15 @@ public class CompressedOutputStream extends OutputStream
    private int blockId;
 
 
-   public CompressedOutputStream(String entropyCodec, OutputStream os)
+   public CompressedOutputStream(String entropyCodec, String functionType, OutputStream os)
    {
-      this(entropyCodec, os, DEFAULT_BLOCK_SIZE, null);
+      this(entropyCodec, functionType, os, DEFAULT_BLOCK_SIZE, false, null);
    }
 
 
    // debug print stream is optional (may be null)
-   public CompressedOutputStream(String entropyCodec, OutputStream os, int blockSize, PrintStream debug)
+   public CompressedOutputStream(String entropyCodec, String functionType,
+               OutputStream os, int blockSize, boolean checksum, PrintStream debug)
    {
       if (entropyCodec == null)
          throw new NullPointerException("Invalid null entropy encoder type parameter");
@@ -60,22 +75,35 @@ public class CompressedOutputStream extends OutputStream
       if (os == null)
          throw new NullPointerException("Invalid null output stream parameter");
 
-      if (blockSize < 256)
-         throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 256)");
+      if (blockSize > MAX_BLOCK_SIZE)
+           throw new IllegalArgumentException("The block size must be at most "+MAX_BLOCK_SIZE);
 
-      if (blockSize > BlockCodec.MAX_BLOCK_SIZE)
-         throw new IllegalArgumentException("Invalid buffer size parameter (must be at most " + BlockCodec.MAX_BLOCK_SIZE + ")");
+      if (blockSize < MIN_BLOCK_SIZE)
+         throw new IllegalArgumentException("The block size must be at least "+MIN_BLOCK_SIZE);
 
       this.obs = new DefaultOutputBitStream(os, DEFAULT_BUFFER_SIZE);
 
       // Check entropy type validity (throws if not valid)
       char type = entropyCodec.toUpperCase().charAt(0);
-      new EntropyCodecFactory().newEncoder(this.obs, (byte) type);
+      String name = new EntropyCodecFactory().getName((byte) type);
+
+      if (entropyCodec.equalsIgnoreCase(name) == false)
+         throw new IllegalArgumentException("Unsupported entropy type: " + entropyCodec);
 
       this.entropyType = type;
+
+      // Check transform type validity (throws if not valid)
+      type = functionType.toUpperCase().charAt(0);
+      name = new FunctionFactory().getName((byte) type);
+
+      if (functionType.equalsIgnoreCase(name) == false)
+         throw new IllegalArgumentException("Unsupported function type: " + functionType);
+
+      this.transformType = type;
       this.blockSize = blockSize;
-      this.bc = new BlockCodec(blockSize);
-      this.iba = new IndexedByteArray(new byte[blockSize], 0);
+      this.hasher = (checksum == true) ? new MurMurHash3(BITSTREAM_TYPE) : null;
+      this.iba1 = new IndexedByteArray(new byte[blockSize], 0);
+      this.iba2 = new IndexedByteArray(new byte[0], 0);
       this.ds = debug;
    }
 
@@ -85,16 +113,22 @@ public class CompressedOutputStream extends OutputStream
       if (this.initialized == true)
          return;
 
-      if (this.obs.writeBits(BITSTREAM_TYPE, 24) != 24)
+      if (this.obs.writeBits(BITSTREAM_TYPE, 32) != 32)
          throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
 
-      if (this.obs.writeBits(BITSTREAM_FORMAT_VERSION, 8) != 8)
+      if (this.obs.writeBits(BITSTREAM_FORMAT_VERSION, 7) != 7)
          throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
 
-      if (this.obs.writeBits(this.entropyType, 8) != 8)
+      if (this.obs.writeBit((this.hasher != null) ? 1 : 0) == false)
          throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
 
-      if (this.obs.writeBits(this.blockSize, 24) != 24)
+      if (this.obs.writeBits(this.entropyType & 0x7F, 7) != 7)
+         throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
+
+      if (this.obs.writeBits(this.transformType & 0x7F, 7) != 7)
+         throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
+
+      if (this.obs.writeBits(this.blockSize, 26) != 26)
          throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
    }
 
@@ -114,11 +148,11 @@ public class CompressedOutputStream extends OutputStream
    @Override
    public void write(int b) throws IOException
    {
-      this.iba.array[this.iba.index++] = (byte) (b & 0xFF);
+      this.iba1.array[this.iba1.index++] = (byte) (b & 0xFF);
 
       // If the buffer is full, time to encode
-      if (this.iba.index >= this.iba.array.length)
-         this.encode();
+      if (this.iba1.index >= this.iba1.array.length)
+         this.processBlock();
    }
 
 
@@ -163,37 +197,21 @@ public class CompressedOutputStream extends OutputStream
 
       this.closed = true;
 
-      if (this.iba.index > 0)
-         this.encode();
+      if (this.iba1.index > 0)
+         this.processBlock();
 
       // End block of size 0
-      // The 'real' value is BlockCodec.COPY_BLOCK_MASK | (0 & BlockCodec.COPY_LENGTH_MASK)
-      this.obs.writeBits(0x80, 8);
+      this.obs.writeBits(SMALL_BLOCK_MASK, 8);
       this.obs.close();
-      this.iba.array = new byte[0];
+      this.iba1.array = new byte[0];
       super.close();
    }
 
 
-   private synchronized void encode() throws IOException
+   private void processBlock() throws IOException
    {
-      if (this.iba.index == 0)
+      if (this.iba1.index == 0)
          return;
-
-      EntropyEncoder ee;
-      long written = this.obs.written();
-
-      try
-      {
-         // Each block is encoded separately
-         // Rebuild the entropy encoder to reset block statistics
-         ee = new EntropyCodecFactory().newEncoder(this.obs, (byte) this.entropyType);
-      }
-      catch (Exception e)
-      {
-         throw new kanzi.io.IOException("Failed to create entropy encoder: " + e.getMessage(), 
-                 Error.ERR_CREATE_CODEC);
-      }
 
       if (this.initialized == false)
       {
@@ -203,24 +221,14 @@ public class CompressedOutputStream extends OutputStream
 
       try
       {
-         if (this.iba.array.length < this.blockSize)
-            this.iba.array = new byte[this.blockSize];
+         final int sz = this.iba1.index;
+         this.iba1.index = 0;
+         final int encoded = this.encode(this.iba1, sz);
 
-         this.bc.setSize(this.iba.index);
-         this.iba.index = 0;
+         if (encoded < 0)
+            throw new kanzi.io.IOException("Error in transform forward()", Error.ERR_PROCESS_BLOCK);
 
-         if (this.bc.encode(this.iba, ee) < 0)
-            throw new kanzi.io.IOException("Error in block codec forward()", Error.ERR_PROCESS_BLOCK);
-
-         if (this.ds != null)
-         {
-            this.ds.println("Block: "+this.blockId+": "+
-                  ((this.obs.written()-written)/8)+" bytes ("+
-                  ((this.obs.written()-written)*100/(this.bc.size()*8))+"%)");
-         }
-
-         this.iba.index = 0;
-         ee.dispose();
+         this.iba1.index = 0;
          this.blockId++;
       }
       catch (Exception e)
@@ -234,4 +242,108 @@ public class CompressedOutputStream extends OutputStream
    {
       return (this.obs.written() + 7) >> 3;
    }
+
+
+   // Return -1 if error, otherwise the number of encoded bytes
+   private int encode(IndexedByteArray data, int blockLength)
+   {
+      EntropyEncoder ee = null;
+
+      try
+      {
+         if (this.iba2.array.length < blockLength*5/4)
+             this.iba2.array = new byte[blockLength*5/4];
+
+         ByteFunction transform = new FunctionFactory().newFunction(blockLength,
+                 (byte) this.transformType);
+
+         this.iba2.index = 0;
+         byte mode = 0;
+         int dataSize = 0;
+         int compressedLength = blockLength;
+         int checksum = 0;
+
+         if (blockLength <= SMALL_BLOCK_SIZE)
+         {
+            // Just copy
+            System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
+            data.index += blockLength;
+            this.iba2.index = blockLength;
+            mode = (byte) (SMALL_BLOCK_MASK | (blockLength & COPY_LENGTH_MASK));
+         }
+         else
+         {
+            // Compute block checksum
+            if (this.hasher != null)
+               checksum = this.hasher.hash(data.array, data.index, blockLength);
+
+            final int savedIdx = data.index;
+
+            // Forward transform
+            if ((transform.forward(data, this.iba2) == false) || (this.iba2.index >= blockLength))
+            {
+               // Transform failed or did not compress, skip and copy block
+               data.index = savedIdx;
+               System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
+               data.index += blockLength;
+               this.iba2.index = blockLength;
+               mode |= SKIP_FUNCTION_MASK;
+            }
+
+            compressedLength = this.iba2.index;
+            dataSize++;
+
+            for (int i=0xFF; i<compressedLength; i<<=8)
+               dataSize++;
+
+            // Record size of 'block size' in bytes
+            mode |= (dataSize & 0x03);
+         }
+
+         // Each block is encoded separately
+         // Rebuild the entropy encoder to reset block statistics
+         ee = new EntropyCodecFactory().newEncoder(this.obs, (byte) this.entropyType);
+
+         // Write block 'header' (mode + compressed length)
+         final OutputBitStream bs = ee.getBitStream();
+         final long written = bs.written();
+         bs.writeBits(mode, 8);
+
+         if (dataSize > 0)
+            bs.writeBits(compressedLength, 8*dataSize);
+
+         // Write checksum (unless small block)
+         if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
+            bs.writeBits(checksum, 32);
+
+         // Entropy encode block
+         final int encoded = ee.encode(this.iba2.array, 0, compressedLength);
+
+         if (this.ds != null)
+         {
+            this.ds.print("Block "+this.blockId+": "+
+                   blockLength + " => " + encoded + " => " +
+                  ((bs.written()-written)/8L)+" ("+
+                  ((bs.written()-written)*100L/(long)(blockLength*8))+"%)");
+
+            if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
+               this.ds.print("  [" + Integer.toHexString(checksum) + "]");
+
+            this.ds.println();
+         }
+
+         return encoded;
+      }
+      catch (Exception e)
+      {
+         return -1;
+      }
+      finally
+      {
+         if (ee != null)
+           ee.dispose();
+      }
+   }
+
+
 }
