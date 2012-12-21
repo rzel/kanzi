@@ -131,7 +131,7 @@ public class TestImageTransform
     title += (psnr1024 < 1024) ? "Infinite" : ((float) psnr1024 / 1024);
     title += " - SSIM: ";
     title += ((float) ssim1024 / 1024);
-     System.out.println(ssim1024);
+
     java.awt.GraphicsDevice gs = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
     java.awt.GraphicsConfiguration gc = gs.getDefaultConfiguration();
     java.awt.image.BufferedImage img = gc.createCompatibleImage(w, h, java.awt.Transparency.OPAQUE);
