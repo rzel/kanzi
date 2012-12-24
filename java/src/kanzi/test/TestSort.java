@@ -19,12 +19,12 @@ import java.util.Arrays;
 import java.util.concurrent.ForkJoinPool;
 import kanzi.util.sort.BitonicSort;
 import kanzi.util.sort.BucketSort;
+import kanzi.util.sort.FlashSort;
 import kanzi.util.sort.HeapSort;
 import kanzi.util.sort.InsertionSort;
+import kanzi.util.sort.MergeSort;
 import kanzi.util.sort.QuickSort;
 import kanzi.util.sort.RadixSort;
-import kanzi.util.sort.FlashSort;
-import kanzi.util.sort.MergeSort;
 
 
 public class TestSort
@@ -59,15 +59,16 @@ public class TestSort
        long sum8  = 0;
        long sum9  = 0;
        long sum10 = 0;
-       int max = 20;
-       int iter = 1000;
+       int max = 200;
+       int iter = 100;
 
         for (int k=0; k<max; k++)
         {
-            System.out.println("Iteration "+k+" of "+max);
+            if (k % 10 == 0)
+               System.out.println("Iteration "+k+" of "+max);
             
             for (int i=0; i<rnd.length; i++)
-                rnd[i] = Math.abs(random.nextInt()) & 0xFF;
+                rnd[i] = random.nextInt() & 0xFF;
 
             System.arraycopy(rnd, 0, copy, 0, rnd.length);
 
@@ -94,7 +95,7 @@ public class TestSort
                 System.arraycopy(copy, 0, array, 0, array.length);
                 flashSort.sort(array, 0);
                 check("Flash Sort", array);
-                System.arraycopy(copy, 0, array, 0, array.length);
+                System.arraycopy(copy, 0, array, 0, array.length);                
                 bitonicSort.sort(array, 0);
                 check("Bitonic Sort", array);
                 System.arraycopy(copy, 0, array, 0, array.length);
@@ -117,7 +118,6 @@ public class TestSort
                 heapSort.sort(array, 0);
                 after = System.nanoTime();
                 sum1 += (after - before);
-                before = System.nanoTime();
                 System.arraycopy(copy, 0, array, 0, array.length);
                 before = System.nanoTime();
                 radix4Sort.sort(array, 0);
@@ -178,11 +178,7 @@ public class TestSort
        System.out.println("ParallelSort    Elapsed [ms]: " + (sum8  / 1000000));
        System.out.println("");
 
-       sum0 = 0;
-       sum1 = 0;
-//       sum2 = 0;
        sum3 = 0;
-       sum4 = 0;
        sum5 = 0;
        sum6 = 0;
        sum7 = 0;
@@ -194,7 +190,8 @@ public class TestSort
 
         for (int k=0; k<max; k++)
         {
-             System.out.println("Iteration "+k+" of "+max);
+            if (k % 10 == 0)
+               System.out.println("Iteration "+k+" of "+max);
 
              for (int i=0; i<rnd.length; i++)
                  rnd[i] = random.nextInt(Integer.MAX_VALUE) & -2;
@@ -271,7 +268,7 @@ public class TestSort
        System.out.println("QuickSort       Elapsed [ms]: " + (sum5  / 1000000));
        System.out.println("Arrays.sort     Elapsed [ms]: " + (sum6  / 1000000));
        System.out.println("FlashSort       Elapsed [ms]: " + (sum7  / 1000000));
-       System.out.println("Bitonic         Elapsed [ms]: " + (sum10 / 1000000));
+       System.out.println("TimSort         Elapsed [ms]: " + (sum10 / 1000000));
        System.out.println("MergeSort       Elapsed [ms]: " + (sum9  / 1000000));
        System.out.println("ParallelSort    Elapsed [ms]: " + (sum8  / 1000000));
    }
