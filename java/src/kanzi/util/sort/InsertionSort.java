@@ -55,20 +55,20 @@ public class InsertionSort implements IntSorter
         final int sz = (this.size == 0) ? input.length - blkptr : this.size;
         
         if (this.cmp == null)
-            this.sortNoComparator(input, blkptr, blkptr+sz);
+            sortNoComparator(input, blkptr, blkptr+sz);
         else
-            this.sortWithComparator(input, blkptr, blkptr+sz);
+            sortWithComparator(input, blkptr, blkptr+sz, this.cmp);
     }
     
     
-    private void sortWithComparator(int[] array, int blkptr, int end)
+    private static void sortWithComparator(int[] array, int blkptr, int end, ArrayComparator comp)
     {
         // Shortcut for 2 element-sub-array
         if (end == blkptr + 1)
         {
-            if (this.cmp.compare(array[blkptr], array[end]) > 0)
+            if (comp.compare(array[blkptr], array[end]) > 0)
             {
-                int tmp = array[blkptr];
+                final int tmp = array[blkptr];
                 array[blkptr] = array[end];
                 array[end] = tmp;
             }
@@ -79,16 +79,16 @@ public class InsertionSort implements IntSorter
         // Shortcut for 3 element-sub-array
         if (end == blkptr + 2)
         {
-            int a1 = array[blkptr];
-            int a2 = array[blkptr+1];
-            int a3 = array[end];
+            final int a1 = array[blkptr];
+            final int a2 = array[blkptr+1];
+            final int a3 = array[end];
 
-            if (this.cmp.compare(a1, a2) <= 0)
+            if (comp.compare(a1, a2) <= 0)
             {
-                if (this.cmp.compare(a2, a3) <= 0)
+                if (comp.compare(a2, a3) <= 0)
                     return;
 
-                if (this.cmp.compare(a3, a1) <= 0)
+                if (comp.compare(a3, a1) <= 0)
                 {
                     array[blkptr]   = a3;
                     array[blkptr+1] = a1;
@@ -101,14 +101,14 @@ public class InsertionSort implements IntSorter
             }
             else
             {
-                if (this.cmp.compare(a1, a3) <= 0)
+                if (comp.compare(a1, a3) <= 0)
                 {
                     array[blkptr]   = a2;
                     array[blkptr+1] = a1;
                     return;
                 }
 
-                if (this.cmp.compare(a3, a2) <= 0)
+                if (comp.compare(a3, a2) <= 0)
                 {
                     array[blkptr] = a3;
                     array[end]    = a1;
@@ -128,7 +128,7 @@ public class InsertionSort implements IntSorter
             final int val = array[i];
             int j = i;
             
-            while ((j > blkptr) && (this.cmp.compare(array[j-1], val) > 0))
+            while ((j > blkptr) && (comp.compare(array[j-1], val) > 0))
             {
                 array[j] = array[j-1];
                 j--;
@@ -139,14 +139,14 @@ public class InsertionSort implements IntSorter
     }
     
     
-    private void sortNoComparator(int[] array, int blkptr, int end)
+    private static void sortNoComparator(int[] array, int blkptr, int end)
     {
         // Shortcut for 2 element-sub-array
         if (end == blkptr + 1)
         {
             if (array[blkptr] > array[end])
             {
-                int tmp = array[blkptr];
+                final int tmp = array[blkptr];
                 array[blkptr] = array[end];
                 array[end] = tmp;
             }
@@ -157,9 +157,9 @@ public class InsertionSort implements IntSorter
         // Shortcut for 3 element-sub-array
         if (end == blkptr + 2)
         {
-            int a1 = array[blkptr];
-            int a2 = array[blkptr+1];
-            int a3 = array[end];
+            final int a1 = array[blkptr];
+            final int a2 = array[blkptr+1];
+            final int a3 = array[end];
 
             if (a1 <= a2)
             {
@@ -197,6 +197,7 @@ public class InsertionSort implements IntSorter
                 array[blkptr+1] = a3;
                 array[end]      = a1;
             }
+            
             return;
         }
 

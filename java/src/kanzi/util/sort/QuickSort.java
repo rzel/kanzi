@@ -15,18 +15,20 @@ limitations under the License.
 
 package kanzi.util.sort;
 
-// One implementation of the most famous sorting algorithm
-
 import kanzi.ArrayComparator;
 import kanzi.IntSorter;
 
 
 
+// One implementation of the most famous sorting algorithm
 // There is a lot of litterature about quicksort
 // A great reference is http://users.aims.ac.za/~mackay/sorting/sorting.html
+// And of course: [Engineering a sort function] by Bentley and McIlroy
 
 public class QuickSort implements IntSorter
 {
+    private static final int SMALL_ARRAY_THRESHOLD = 8;
+    
     private final ArrayComparator cmp;
     private final int size;
 
@@ -65,12 +67,6 @@ public class QuickSort implements IntSorter
     }
 
 
-    protected int getThreshold()
-    {
-        return 2;
-    }
-
-
     @Override
     public void sort(int[] input, int blkptr)
     {
@@ -80,18 +76,18 @@ public class QuickSort implements IntSorter
             return;
 
         if (this.cmp != null)
-            this.sortWithComparator(input, blkptr, blkptr+sz-1);
+            sortWithComparator(input, blkptr, blkptr+sz-1, this.cmp);
         else
-            this.sortNoComparator(input, blkptr, blkptr+sz-1);
+            sortNoComparator(input, blkptr, blkptr+sz-1);
     }
 
 
     // Ternary partitioning
-    protected void sortNoComparator(int[] array, int low, int high)
+    private static void sortNoComparator(int[] array, int low, int high)
     {
-        if (high <= low + this.getThreshold())
+        if (high <= low + SMALL_ARRAY_THRESHOLD)
         {
-            this.sortSmallArrayNoComparator(array, low, high);
+            sortSmallArrayNoComparator(array, low, high);
             return;
         }
 
@@ -99,8 +95,8 @@ public class QuickSort implements IntSorter
         // Choose a pivot: this THE most important step of the algorithm since
         // a bad pivot can really ruin the performance (quadratic). Some research
         // papers show that picking a random index in the [low+1 .. high-1] range
-        // is a good choice (on average).
-        int mid = low + ((high - low) >> 1);
+        // is a good choice (on average). Here, a median is used
+        final int mid = low + ((high - low) >> 1);
         int pivIdx;
 
         if (high - low < 40)
@@ -111,15 +107,15 @@ public class QuickSort implements IntSorter
         }
         else
         {
-            int s = (high - low) >> 3;
+            final int s = (high - low) >> 3;
 
-            int l = (array[low] < array[low+s] ?
+            final int l = (array[low] < array[low+s] ?
             (array[low+s] < array[low+s+s] ? low+s : array[low] < array[low+s+s] ? low+s+s : low) :
             (array[low+s] > array[low+s+s] ? low+s : array[low] > array[low+s+s] ? low+s+s : low));
-            int m = (array[mid-s] < array[mid] ?
+            final int m = (array[mid-s] < array[mid] ?
             (array[mid] < array[mid+s] ? mid : array[mid-s] < array[mid+s] ? mid+s : mid-s) :
             (array[mid] > array[mid+s] ? mid : array[mid-s] > array[mid+s] ? mid+s : mid-s));
-            int h = (array[high-s-s] < array[high-s] ?
+            final int h = (array[high-s-s] < array[high-s] ?
             (array[high-s] < array[high] ? high-s : array[high-s-s] < array[high] ? high : high-s-s) :
             (array[high-s] > array[high] ? high-s : array[high-s-s] > array[high] ? high : high-s-s));
 
@@ -134,21 +130,20 @@ public class QuickSort implements IntSorter
         int j = high;
         int mj = high;
 
+        // Use center partition of values equal to pivot
         while (i <= j)
         {
             // Move up
-            while (i <= j)
+            while ((i <= j) && (array[i] <= pivot))
             {
-                final int tmp = array[i];
-
-                if (tmp > pivot)
-                   break;
-
-                if (tmp == pivot)
+                if (array[i] == pivot)
                 {
                     // Move the pivot value to the low end.
+                    // The idea is to accumulate all pivots at the beginning
+                    // and move them to the center partition later
+                    // Yet, it is not necessary to swap array values (just keep
+                    // track of the number of pivots accumulated): skip array[mi] = pivot
                     array[i] = array[mi];
-                    array[mi] = tmp;
                     mi++;
                 }
 
@@ -156,18 +151,16 @@ public class QuickSort implements IntSorter
             }
 
             // Move down
-            while (i <= j)
+            while ((i <= j) && (pivot <= array[j]))
             {
-                final int tmp = array[j];
-
-                if (pivot > tmp)
-                   break;
-
-                if (tmp == pivot)
+                if (array[j] == pivot)
                 {
                     // Move the pivot value to the high end.
+                    // The idea is to accumulate all pivots at the end
+                    // and move them to the center partition later
+                    // Yet, it is not necessary to swap array values (just keep
+                    // track of the number of pivots accumulated): skip array[mj] = pivot
                     array[j] = array[mj];
-                    array[mj] = tmp;
                     mj--;
                 }
 
@@ -184,15 +177,16 @@ public class QuickSort implements IntSorter
             }
         }
 
-        // Move the pivot values to the middle
+        // Move the pivot values from the ends to the middle
+        // The values have not been updated (see optimization above),
+        // they are all equal to the pivot
         mi--;
         i--;
 
         for (; mi>=low; mi--, i--)
         {
-            int tmp = array[i];
-            array[i] = array[mi];
-            array[mi] = tmp;
+            array[mi] = array[i];
+            array[i] = pivot;
         }
 
         mj++;
@@ -200,27 +194,26 @@ public class QuickSort implements IntSorter
 
         for (; mj<=high; mj++, j++)
         {
-            int tmp = array[j];
-            array[j] = array[mj];
-            array[mj] = tmp;
+            array[mj] = array[j];
+            array[j] = pivot;
         }
 
         // Sort the low and high sub-arrays
-        if (i - low >= 1)
-           this.sortNoComparator(array, low, i);
+        if (i > low)
+           sortNoComparator(array, low, i);
 
-        if (high - j >= 1)
-           this.sortNoComparator(array, j, high);
+        if (high > j)
+           sortNoComparator(array, j, high);
     }
 
 
-    // Ternary partitioning: the performance may be seriously degraded due to the
-    // numerous calls to the array comparator.
-    protected void sortWithComparator(int[] array, int low, int high)
+    // Ternary partitioning (the performance may be seriously degraded due to the
+    // numerous calls to the array comparator interface).
+    private static void sortWithComparator(int[] array, int low, int high, ArrayComparator comp)
     {
-        if (high <= low + this.getThreshold())
+        if (high <= low + SMALL_ARRAY_THRESHOLD)
         {
-            this.sortSmallArrayWithComparator(array, low, high);
+            sortSmallArrayWithComparator(array, low, high, comp);
             return;
         }
 
@@ -228,9 +221,8 @@ public class QuickSort implements IntSorter
         // Choose a pivot: this THE most important step of the algorithm since
         // a bad pivot can really ruin the performance (quadratic). Some research
         // papers show that picking a random index in the [low+1 .. high-1] range
-        // is a good choice (on average). Practically however, there is no gain
-        // because of the time it takes to 'compute' a (pseudo) random value.
-        int mid = low + ((high - low) >> 1);
+        // is a good choice (on average). Here, a median is used
+        final int mid = low + ((high - low) >> 1);
         int pivIdx;
 
         if (high - low < 40)
@@ -241,17 +233,17 @@ public class QuickSort implements IntSorter
         }
         else
         {
-            int s = (high - low) >> 3;
-            int lows = low + s;
-            int highs = high - s;
+            final int s = (high - low) >> 3;
+            final int lows = low + s;
+            final int highs = high - s;
 
-            int l = (array[low] < array[low+s] ?
+            final int l = (array[low] < array[low+s] ?
             (array[lows] < array[lows+s] ? lows : array[low] < array[lows+s] ? lows+s : low) :
             (array[lows] > array[lows+s] ? lows : array[low] > array[lows+s] ? lows+s : low));
-            int m = (array[mid-s] < array[mid] ?
+            final int m = (array[mid-s] < array[mid] ?
             (array[mid] < array[mid+s] ? mid : array[mid-s] < array[mid+s] ? mid+s : mid-s) :
             (array[mid] > array[mid+s] ? mid : array[mid-s] > array[mid+s] ? mid+s : mid-s));
-            int h = (array[highs-s] < array[highs] ?
+            final int h = (array[highs-s] < array[highs] ?
             (array[highs] < array[high] ? highs : array[highs-s] < array[high] ? high : highs-s) :
             (array[highs] > array[high] ? highs : array[highs-s] > array[high] ? high : highs-s));
 
@@ -260,23 +252,26 @@ public class QuickSort implements IntSorter
             (array[m] > array[h] ? m : array[l] > array[h] ? h : l));
         }
 
-        int pivot = array[pivIdx];
+        final int pivot = array[pivIdx];
         int i = low;
         int mi = low;
         int j = high;
         int mj = high;
 
+        // Use center partition of values equal to pivot
         while (i <= j)
         {
             // Move up
-            while ((i <= j) && (this.cmp.compare(array[i], pivot) <= 0))
+            while ((i <= j) && (comp.compare(array[i], pivot) <= 0))
             {
                 if (array[i] == pivot)
                 {
                     // Move the pivot value to the low end.
-                    int tmp = array[i];
+                    // The idea is to accumulate all pivots at the beginning
+                    // and move them to the center partition later
+                    // Yet, it is not necessary to swap array values (just keep
+                    // track of the number of pivots accumulated): skip array[mi] = pivot
                     array[i] = array[mi];
-                    array[mi] = tmp;
                     mi++;
                 }
 
@@ -284,14 +279,16 @@ public class QuickSort implements IntSorter
             }
 
             // Move down
-            while ((i <= j) && (this.cmp.compare(pivot, array[j]) <= 0))
+            while ((i <= j) && (comp.compare(pivot, array[j]) <= 0))
             {
                 if (array[j] == pivot)
                 {
                     // Move the pivot value to the high end.
-                    int tmp = array[j];
+                    // The idea is to accumulate all pivots at the end
+                    // and move them to the center partition later
+                    // Yet, it is not necessary to swap array values (just keep
+                    // track of the number of pivots accumulated): skip array[mj] = pivot
                     array[j] = array[mj];
-                    array[mj] = tmp;
                     mj--;
                 }
 
@@ -308,15 +305,16 @@ public class QuickSort implements IntSorter
             }
         }
 
-        // Move the pivot values to the middle
+        // Move the pivot values from the ends to the middle
+        // The values have not been updated (see optimization above),
+        // they are all equal to the pivot
         mi--;
         i--;
 
         for (; mi>=low; mi--, i--)
         {
-            int tmp = array[i];
-            array[i] = array[mi];
-            array[mi] = tmp;
+            array[mi] = array[i];
+            array[i] = pivot;
         }
 
         mj++;
@@ -324,28 +322,27 @@ public class QuickSort implements IntSorter
 
         for (; mj<=high; mj++, j++)
         {
-            int tmp = array[j];
-            array[j] = array[mj];
-            array[mj] = tmp;
+            array[mj] = array[j];
+            array[j] = pivot;
         }
 
         // Sort the low and high sub-arrays
-        if (i - low >= 1)
-           this.sortWithComparator(array, low, i);
+        if (i > low)
+           sortWithComparator(array, low, i, comp);
 
-        if (high - j >= 1)
-           this.sortWithComparator(array, j, high);
+        if (high > j)
+           sortWithComparator(array, j, high, comp);
     }
 
 
-    protected void sortSmallArrayWithComparator(int[] array, int low, int high)
+    private static void sortSmallArrayWithComparator(int[] array, int low, int high, ArrayComparator comp)
     {
         // Shortcut for 2 element-sub-array
         if (high == low + 1)
         {
-            if (this.cmp.compare(array[low], array[high]) > 0)
+            if (comp.compare(array[low], array[high]) > 0)
             {
-                int tmp = array[low];
+                final int tmp = array[low];
                 array[low] = array[high];
                 array[high] = tmp;
             }
@@ -353,119 +350,140 @@ public class QuickSort implements IntSorter
             return;
         }
 
-        // Shortcut for 3 element-sub-array
         if (high == low + 2)
         {
-            int a1 = array[low];
-            int a2 = array[low+1];
-            int a3 = array[high];
+           // Shortcut for 3 element-sub-array
+           final int a1 = array[low];
+           final int a2 = array[low+1];
+           final int a3 = array[high];
 
-            if (this.cmp.compare(a1, a2) <= 0)
-            {
-                if (this.cmp.compare(a2, a3) <= 0)
-                    return;
+           if (comp.compare(a1, a2) <= 0)
+           {
+              if (comp.compare(a2, a3) <= 0)
+                return;
 
-                if (this.cmp.compare(a3, a1) <= 0)
-                {
-                    array[low]   = a3;
-                    array[low+1] = a1;
-                    array[high]  = a2;
-                    return;
-                }
+              if (comp.compare(a3, a1) <= 0)
+              { 
+                 array[low]   = a3;
+                 array[low+1] = a1;
+                 array[high]  = a2;
+                 return;
+              }
 
-                array[low+1] = a3;
-                array[high]  = a2;
-            }
-            else
-            {
-                if (this.cmp.compare(a1, a3) <= 0)
-                {
-                    array[low]   = a2;
-                    array[low+1] = a1;
-                    return;
-                }
-
-                if (this.cmp.compare(a3, a2) <= 0)
-                {
-                    array[low]  = a3;
-                    array[high] = a1;
-                    return;
-                }
-
+              array[low+1] = a3;
+              array[high]  = a2;
+          }
+          else
+          {
+             if (comp.compare(a1, a3) <= 0)
+             {
                 array[low]   = a2;
-                array[low+1] = a3;
-                array[high]  = a1;
-            }
+                array[low+1] = a1;
+                return;
+             }
 
-            return;
-        }
+             if (comp.compare(a3, a2) <= 0)
+             {
+                array[low]  = a3;
+                array[high] = a1;
+                return;
+             }
 
-        throw new IllegalArgumentException("Invalid small array size: "+(high-low+1));
+             array[low]   = a2;
+             array[low+1] = a3;
+             array[high]  = a1;
+          }
+
+          return;
+       }
+ 
+       // Switch to insertion sort to avoid recursion
+       for (int i=low+1; i<=high; i++)  
+       {
+          final int tmp = array[i];
+          int j = i - 1;
+
+          for ( ; ((j >= low) && (comp.compare(array[j], tmp) > 0)); j--) 
+             array[j+1] = array[j];
+
+          array[j+1] = tmp;
+       }   
     }
 
 
-    protected void sortSmallArrayNoComparator(int[] array, int low, int high)
+    private static void sortSmallArrayNoComparator(int[] array, int low, int high)
     {
-        // Shortcut for 2 element-sub-array
-        if (high == low + 1)
-        {
-            if (array[low] > array[high])
-            {
-                int tmp = array[low];
-                array[low] = array[high];
-                array[high] = tmp;
-            }
+       // Shortcut for 2 element-sub-array
+       if (high == low + 1) 
+       {
+          if (array[low] > array[high]) 
+          {
+             final int tmp = array[low];
+             array[low] = array[high];
+             array[high] = tmp;
+          }
 
-            return;
-        }
+          return;
+       }
 
-        // Shortcut for 3 element-sub-array
-        if (high == low + 2)
-        {
-            int a1 = array[low];
-            int a2 = array[low+1];
-            int a3 = array[high];
+       if (high == low + 2) 
+       {        
+          // Shortcut for 3 element-sub-array
+          final int a1 = array[low];
+          final int a2 = array[low+1];
+          final int a3 = array[high];
 
-            if (a1 <= a2)
-            {
-                if (a2 <= a3)
-                    return;
+          if (a1 <= a2) 
+          {
+             if (a2 <= a3) 
+                return;
 
-                if (a3 <= a1)
-                {
-                    array[low]   = a3;
-                    array[low+1] = a1;
-                    array[high]  = a2;
-                    return;
-                }
+             if (a3 <= a1)
+             {
+                array[low] = a3;
+                array[low+1] = a1;
+                array[high] = a2;
+                return;
+             }
 
-                array[low+1] = a3;
-                array[high]  = a2;
-            }
-            else
-            {
-                if (a1 <= a3)
-                {
-                    array[low]   = a2;
-                    array[low+1] = a1;
-                    return;
-                }
+             array[low+1] = a3;
+             array[high] = a2;
+          } 
+          else 
+          {
+             if (a1 <= a3) 
+             {
+                array[low] = a2;
+                array[low+1] = a1;
+                return;
+             }
 
-                if (a3 <= a2)
-                {
-                    array[low]  = a3;
-                    array[high] = a1;
-                    return;
-                }
+             if (a3 <= a2) 
+             {
+                array[low] = a3;
+                array[high] = a1;
+                return;
+             }
 
-                array[low]   = a2;
-                array[low+1] = a3;
-                array[high]  = a1;
-            }
-            return;
-        }
+             array[low] = a2;
+             array[low + 1] = a3;
+             array[high] = a1;
+          }
 
-        throw new IllegalArgumentException("Invalid small array size: "+(high-low+1));
+          return;
+       }
+
+       // Switch to insertion sort to avoid recursion
+       for (int i=low+1; i<=high; i++) 
+       {
+          final int tmp = array[i];
+          int j = i - 1;
+
+          for ( ; ((j >= low) && (array[j] > tmp)); j--) 
+             array[j+1] = array[j];
+
+          array[j+1] = tmp;
+       }
     }
 
 }
