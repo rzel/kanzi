@@ -46,10 +46,10 @@ public class HuffmanDecoder extends AbstractDecoder
     public boolean readLengths() throws BitStreamException
     {
         final int[] buf = this.buffer;
-        int maxSize = 0;
-        buf[0] = (int) this.bitstream.readBits(5);
+        int maxSize = 1;
         ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
-       
+        buf[0] = maxSize + egdec.decodeByte();       
+        
         // Read lengths
         for (int i=1; i<buf.length; i++)
         {

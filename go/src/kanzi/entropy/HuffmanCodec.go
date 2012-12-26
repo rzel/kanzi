@@ -455,22 +455,16 @@ func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 		return err
 	}
 
-	prevSize := this.tree.Size(0)
-	_, err = this.bitstream.WriteBits(uint64(prevSize), 5)
+	prevSize := uint(1)
+	egenc, err := NewExpGolombEncoder(this.bitstream, true)
 
 	if err != nil {
 		return err
 	}
 
-	egenc, err2 := NewExpGolombEncoder(this.bitstream, true)
-
-	if err2 != nil {
-		return err2
-	}
-
 	// Transmit code lengths only, frequencies and code do not matter
 	// Unary encode the length difference
-	for i := 1; i < len(frequencies); i++ {
+	for i := 0; i < len(frequencies); i++ {
 		nextSize := this.tree.Size(i)
 
 		// Encode delta as byte (unsigned) but the encoder is sign aware
@@ -544,19 +538,21 @@ func NewHuffmanDecoder(bs kanzi.InputBitStream) (*HuffmanDecoder, error) {
 
 func (this *HuffmanDecoder) ReadLengths() error {
 	buf := this.buffer // alias
-	maxSize := uint(0)
-	r, err := this.bitstream.ReadBits(5)
+	maxSize := uint(1)
+
+	egdec, err := NewExpGolombDecoder(this.bitstream, true)
 
 	if err != nil {
 		return err
 	}
 
-	buf[0] = uint(r)
-	egdec, err2 := NewExpGolombDecoder(this.bitstream, true)
+	szDelta, err := egdec.DecodeByte()
 
-	if err2 != nil {
-		return err2
+	if err != nil {
+		return err
 	}
+
+	buf[0] = uint(int8(maxSize) + int8(szDelta))
 
 	// Read lengths
 	for i := 1; i < len(buf); i++ {

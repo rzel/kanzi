@@ -48,13 +48,12 @@ public class HuffmanEncoder extends AbstractEncoder
            return false;
 
          this.tree = new HuffmanTree(frequencies);
-         int prevSize = this.tree.getSize(0);
-         this.bitstream.writeBits(prevSize, 5);
+         int prevSize = 1;
          ExpGolombEncoder egenc = new ExpGolombEncoder(this.bitstream, true);
        
          // Transmit code lengths only, frequencies and code do not matter
          // Unary encode the length difference
-         for (int i=1; i<frequencies.length; i++)
+         for (int i=0; i<frequencies.length; i++)
          {
             final int nextSize = this.tree.getSize(i);
             egenc.encodeByte((byte) (nextSize - prevSize));
