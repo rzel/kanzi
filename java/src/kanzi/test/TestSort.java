@@ -268,7 +268,7 @@ public class TestSort
        System.out.println("QuickSort       Elapsed [ms]: " + (sum5  / 1000000));
        System.out.println("Arrays.sort     Elapsed [ms]: " + (sum6  / 1000000));
        System.out.println("FlashSort       Elapsed [ms]: " + (sum7  / 1000000));
-       System.out.println("TimSort         Elapsed [ms]: " + (sum10 / 1000000));
+       System.out.println("BitonicSort     Elapsed [ms]: " + (sum10 / 1000000));
        System.out.println("MergeSort       Elapsed [ms]: " + (sum9  / 1000000));
        System.out.println("ParallelSort    Elapsed [ms]: " + (sum8  / 1000000));
    }
