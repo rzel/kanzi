@@ -165,7 +165,7 @@ public class TestColorModel
         frame2.add(new JLabel(newIcon));
         frame2.setVisible(true);
         System.out.println("Speed test");
-nn = 0;
+
         if (y420)
         {
            for (int i=0; i<nn; i++)
