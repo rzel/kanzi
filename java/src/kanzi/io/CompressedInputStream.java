@@ -356,7 +356,7 @@ public class CompressedInputStream extends InputStream
          {
             this.ds.print("Block "+this.blockId+": "+
                    ((bs.read()-read)/8) + " => " +
-                    compressedLength + " => " + decoded + " byte(s)");
+                    compressedLength + " => " + decoded);
 
             if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
                this.ds.print("  [" + Integer.toHexString(checksum1) + "]");
