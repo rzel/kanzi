@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
+import java.util.Comparator;
 import kanzi.ArrayComparator;
 import kanzi.util.sort.DefaultArrayComparator;
 import kanzi.util.sort.QuickSort;
@@ -22,6 +23,7 @@ import java.util.LinkedList;
 import java.util.TreeMap;
 import kanzi.InputBitStream;
 import kanzi.OutputBitStream;
+
 
 // Tree utility class for a canonical implementation of Huffman codec
 /*package*/ class HuffmanTree
@@ -38,7 +40,6 @@ import kanzi.OutputBitStream;
     // Used by encoder
     /*package*/ HuffmanTree(int[] frequencies)
     {
-       this.codes = new int[256];
        this.sizes = new int[256];
        this.decodingCache = null;
        this.current = null;
@@ -46,32 +47,28 @@ import kanzi.OutputBitStream;
        // Create tree from frequencies
        this.root = this.createTreeFromFrequencies(frequencies);
 
-       // Create sizes and codes from tree
-       this.fillTree(this.root, 0, 0);
-
        // Create canonical codes
-       this.generateCanonicalCodes();
+       this.codes = generateCanonicalCodes(this.sizes);
     }
 
 
     // Used by decoder
     /*package*/ HuffmanTree(int[] sizes, int maxSize)
     {
-       this.codes = new int[256];
        this.sizes = new int[256];
        System.arraycopy(sizes, 0, this.sizes, 0, sizes.length);
 
        // Create canonical codes
-       this.generateCanonicalCodes();
+       this.codes = generateCanonicalCodes(this.sizes);
 
        // Create tree from code sizes
-       this.root = this.createTreeFromCodes(maxSize);
-       this.decodingCache = this.createDecodingCache();
+       this.root = createTreeFromSizes(maxSize, this.sizes, this.codes);
+       this.decodingCache = createDecodingCache(this.root);
        this.current = new CacheData(this.root); // point to root
     }
 
 
-    private CacheData[] createDecodingCache()
+    private static CacheData[] createDecodingCache(Node rootNode)
     {
        LinkedList<CacheData> nodes = new LinkedList<CacheData>();
        final int end = 1 << DECODING_BATCH_SIZE;
@@ -86,7 +83,7 @@ import kanzi.OutputBitStream;
           while (shift >= 0)
           {
              // Start from root
-             Node currentNode = this.root;
+             Node currentNode = rootNode;
 
              // Process next bit
              while ((shift >= 0) && ((currentNode.left != null) || (currentNode.right != null)))
@@ -111,7 +108,7 @@ import kanzi.OutputBitStream;
              }
           }
 
-          previousData.next = new CacheData(this.root);
+          previousData.next = new CacheData(rootNode);
           previousData = previousData.next;
        }
 
@@ -122,12 +119,16 @@ import kanzi.OutputBitStream;
     private Node createTreeFromFrequencies(int[] frequencies)
     {
        int[] array = new int[256];
+       int n = 0;
 
        for (int i=0; i<array.length; i++)
-          array[i] = i;
-
+       {
+          if (frequencies[i] > 0)
+             array[n++] = i;
+       }
+       
        // Sort by frequency
-       QuickSort sorter = new QuickSort(array.length, new DefaultArrayComparator(frequencies));
+       QuickSort sorter = new QuickSort(n, new DefaultArrayComparator(frequencies));
        sorter.sort(array, 0);
 
        // Create Huffman tree of (present) symbols
@@ -135,12 +136,10 @@ import kanzi.OutputBitStream;
        LinkedList<Node> queue2 = new LinkedList<Node>();
        Node[] nodes = new Node[2];
 
-       for (int i=array.length-1; i>=0; i--)
+       for (int i=n-1; i>=0; i--)
        {
           final int val = array[i];
-
-          if (frequencies[val] != 0)
-             queue1.addFirst(new Node((byte) val, frequencies[val]));
+          queue1.addFirst(new Node((byte) val, frequencies[val]));
        }
 
        while (queue1.size() + queue2.size() > 1)
@@ -173,44 +172,44 @@ import kanzi.OutputBitStream;
           queue2.addLast(merged);
        }
 
-       return ((queue1.isEmpty()) ? queue2.removeFirst() : queue1.removeFirst());
+       final Node rootNode = ((queue1.isEmpty()) ? queue2.removeFirst() : queue1.removeFirst());
+       this.fillTree(rootNode, 0);
+       return rootNode;
     }
 
 
     // Fill size and code arrays
-    private void fillTree(Node node, int value, int depth)
+    private void fillTree(Node node, int depth)
     {
        if ((node.left == null) && (node.right == null))
        {
           this.sizes[node.symbol & 0xFF] = depth;
-          this.codes[node.symbol & 0xFF] = value;
+          return;
        }
-       else
-       {
-          if (node.left != null)
-             this.fillTree(node.left, value << 1, depth + 1);
 
-          if (node.right != null)
-             this.fillTree(node.right, (value << 1) | 1, depth + 1);
-       }
+       if (node.left != null)
+          this.fillTree(node.left, depth + 1);
+
+       if (node.right != null)
+          this.fillTree(node.right, depth + 1);
     }
+    
 
-
-    private Node createTreeFromCodes(int maxSize)
+    private static Node createTreeFromSizes(int maxSize, int[] lengths, int[] codes_)
     {
-       TreeMap<Key, Node> codeMap = new TreeMap<Key, Node>();
+       TreeMap<Key, Node> codeMap = new TreeMap<Key, Node>(new KeyComparator());
        final int sum = 1 << maxSize;
        codeMap.put(new Key(0, 0), new Node((byte) 0, sum));
 
        // Create node for each (present) symbol and add to map
-       for (int i=0; i<this.sizes.length; i++)
+       for (int i=lengths.length-1; i>=0; i--)
        {
-          final int size = this.sizes[i];
+          final int size = lengths[i];
 
           if (size <= 0)
              continue;
 
-          final Key key = new Key(size, this.codes[i]);
+          final Key key = new Key(size, codes_[i]);
           final Node value = new Node((byte) i, sum >> size);
           codeMap.put(key, value);
        }
@@ -242,31 +241,29 @@ import kanzi.OutputBitStream;
     }
 
 
-    private int[] generateCanonicalCodes()
+    private static int[] generateCanonicalCodes(int[] lengths)
     {
-       final int[] array = new int[this.sizes.length];
-
-       for (int i=0; i<array.length; i++)
-          array[i] = i;
-
-       // Sort by decreasing size (first key) and increasing value (second key)
-       QuickSort sorter = new QuickSort(array.length, new HuffmanArrayComparator(this.sizes));
-       sorter.sort(array, 0);
-
-       for (int i=this.codes.length-1; i>=0; i--)
-          this.codes[i] = 0;
-        
-       int code = 0;
-       int len = this.sizes[array[0]];
+       final int[] array = new int[lengths.length];
+       int n = 0;
 
        for (int i=0; i<array.length; i++)
        {
-          final int idx = array[i];
-          final int currentSize = this.sizes[idx];
+          if (lengths[i] > 0)
+             array[n++] = i;
+       }
+       
+       // Sort by decreasing size (first key) and increasing value (second key)
+       QuickSort sorter = new QuickSort(n, new HuffmanArrayComparator(lengths));
+       sorter.sort(array, 0);
 
-          // Since the sizes are decreasing, exit on the first occurence of 0
-          if (currentSize == 0)
-             break;
+       final int[] codes_ = new int[256];
+       int code = 0;
+       int len = lengths[array[0]];
+
+       for (int i=0; i<n; i++)
+       {
+          final int idx = array[i];
+          final int currentSize = lengths[idx];
 
           while (len > currentSize)
           {
@@ -274,14 +271,14 @@ import kanzi.OutputBitStream;
              len--;
           }
 
-          this.codes[idx] = code;
+          codes_[idx] = code;
           code++;
        }
 
-       return this.codes;
+       return codes_;
     }
-
-
+    
+    
     /*package*/ int getCode(int val)
     {
        return this.codes[val];
@@ -371,83 +368,48 @@ import kanzi.OutputBitStream;
 
 
     // Class used to build the tree in canonical Huffman
-    private static class Key implements Comparable<Key>
+    private static class Key
     {
-       protected final int length;
-       protected final int code;
+       final int length;
+       final int code;
 
        Key(int length, int code)
        {
           this.code = code;
           this.length = length;
        }
-
-       
-       @Override
-       public int compareTo(Key key)
-       {
-           try
-           {
-             if (this == key)
-                 return 0;
-
-             int len = this.length - key.length;
-
-             if (len != 0)
-                return len;
-
-             return this.code - key.code;
-           }
-           catch (NullPointerException e)
-           {
-               return 1;
-           }
-           catch (ClassCastException e)
-           {
-               return 1;
-           }
-       }
-
-
-       @Override
-       public boolean equals(Object obj)
-       {
-           try
-           {
-              if (this == obj)
-                 return true;
-
-              Key key = (Key) obj;
-
-              if (this.length != key.length)
-                 return false;
-
-              return (this.code == key.code);
-           }
-           catch (NullPointerException e)
-           {
-               return false;
-           }
-           catch (ClassCastException e)
-           {
-               return false;
-           }
-       }
-
-
-       @Override
-       public int hashCode()
-       {
-           return this.length | (this.code << 16);
-       }
     }
 
+    
+    private static class KeyComparator implements Comparator<Key>
+    {
+       @Override
+       public int compare(Key k1, Key k2) 
+       {
+          if (k1 == k2)
+             return 0;
+          
+          if (k1 == null)
+             return -1;
+          
+          if (k2 == null)
+             return 1;
+          
+          final int len = k1.length - k2.length;
 
+          if (len != 0)
+             return len;
+
+          return k1.code - k2.code;          
+       }       
+    }
+
+    
     // Array comparator used to sort keys and values to generate canonical codes
     private static class HuffmanArrayComparator implements ArrayComparator
     {
         private final int[] array;
-
+        
 
         public HuffmanArrayComparator(int[] array)
         {
@@ -462,8 +424,10 @@ import kanzi.OutputBitStream;
         public int compare(int lidx, int ridx)
         {
             // Check sizes (reverse order) as first key
-            if (this.array[ridx] != this.array[lidx])
-                return this.array[ridx] - this.array[lidx];
+            final int res = this.array[ridx] - this.array[lidx];
+            
+            if (res != 0)
+               return res;
 
             // Check value (natural order) as second key
             return lidx - ridx;

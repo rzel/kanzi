@@ -92,38 +92,33 @@ type HuffmanTree struct {
 // Used by encoder
 func newHuffmanTreeFromFrequencies(frequencies []uint) (*HuffmanTree, error) {
 	this := new(HuffmanTree)
-	this.codes = make([]uint, 256)
 	this.sizes = make([]uint, 256)
 
 	// Create tree from frequencies
 	this.root = this.createTreeFromFrequencies(frequencies)
 
-	// Create sizes and codes from tree
-	this.fillTree(this.root, 0, 0)
-
 	// Create canonical codes
-	this.generateCanonicalCodes()
+	this.codes = generateCanonicalCodes(this.sizes)
 	return this, nil
 }
 
 // Used by decoder
 func newHuffmanTreeFromSizes(sz []uint, maxSize uint) (*HuffmanTree, error) {
 	this := new(HuffmanTree)
-	this.codes = make([]uint, 256)
 	this.sizes = make([]uint, 256)
 	copy(this.sizes, sz)
 
 	// Create canonical codes
-	this.generateCanonicalCodes()
+	this.codes = generateCanonicalCodes(this.sizes)
 
 	// Create tree from code sizes
-	this.root = this.createTreeFromCodes(maxSize)
-	this.decodingCache = this.createDecodingCache()
+	this.root = createTreeFromSizes(maxSize, this.sizes, this.codes)
+	this.decodingCache = createDecodingCache(this.root)
 	this.current = &HuffmanCacheData{value: this.root} // point to root
 	return this, nil
 }
 
-func (this *HuffmanTree) createDecodingCache() []*HuffmanCacheData {
+func createDecodingCache(rootNode *HuffmanNode) []*HuffmanCacheData {
 	nodes := list.New()
 	end := 1 << DECODING_BATCH_SIZE
 	var previousData *HuffmanCacheData
@@ -135,8 +130,8 @@ func (this *HuffmanTree) createDecodingCache() []*HuffmanCacheData {
 
 		for shift >= 0 {
 			// Start from root
-			currentNode := this.root
-
+			currentNode := rootNode
+			
 			// Process next bit
 			for shift >= 0 && (currentNode.left != nil || currentNode.right != nil) {
 
@@ -165,7 +160,7 @@ func (this *HuffmanTree) createDecodingCache() []*HuffmanCacheData {
 			}
 		}
 
-		previousData.next = &HuffmanCacheData{value: this.root}
+		previousData.next = &HuffmanCacheData{value: rootNode}
 		previousData = previousData.next
 	}
 
@@ -182,23 +177,25 @@ func (this *HuffmanTree) createDecodingCache() []*HuffmanCacheData {
 
 func (this *HuffmanTree) createTreeFromFrequencies(frequencies []uint) *HuffmanNode {
 	array := make(HuffmanNodeArray2, 256)
+	n := 0
 
 	for i := range array {
-		array[i] = &HuffmanNode{symbol: byte(i), weight: frequencies[i]}
+		if frequencies[i] > 0 {
+			array[n] = &HuffmanNode{symbol: byte(i), weight: frequencies[i]}
+			n++
+		}
 	}
 
 	// Sort by frequency
-	sort.Sort(array)
+	sort.Sort(array[0:n])
 
 	// Create Huffman tree of (present) symbols
 	queue1 := list.New()
 	queue2 := list.New()
 	nodes := make([]*HuffmanNode, 2)
 
-	for i := len(array) - 1; i >= 0; i-- {
-		if array[i].weight != 0 {
+	for i := n - 1; i >= 0; i-- {
 			queue1.PushFront(array[i])
-		}
 	}
 
 	for queue1.Len()+queue2.Len() > 1 {
@@ -232,47 +229,52 @@ func (this *HuffmanTree) createTreeFromFrequencies(frequencies []uint) *HuffmanN
 		queue2.PushBack(merged)
 	}
 
+    var rootNode *HuffmanNode
+    
 	if queue1.Len() == 0 {
-		return queue2.Front().Value.(*HuffmanNode)
-	}
-
-	return queue1.Front().Value.(*HuffmanNode)
+		rootNode = queue2.Front().Value.(*HuffmanNode)
+	} else {
+ 		rootNode = queue1.Front().Value.(*HuffmanNode)
+ 	}
+ 	
+	this.fillTree(rootNode, 0)
+	return rootNode
 }
 
 // Fill size and code arrays
-func (this *HuffmanTree) fillTree(node *HuffmanNode, value, depth uint) {
+func (this *HuffmanTree) fillTree(node *HuffmanNode, depth uint) {
 	if node.left == nil && node.right == nil {
 		idx := node.symbol
-		this.sizes[idx] = depth
-		this.codes[idx] = value
-	} else {
-		if node.left != nil {
-			this.fillTree(node.left, value<<1, depth+1)
-		}
+		this.sizes[idx] = depth	
+		return
+	}
 
-		if node.right != nil {
-			this.fillTree(node.right, (value<<1)|1, depth+1)
-		}
+	if node.left != nil {
+		this.fillTree(node.left, depth+1)
+	}
+
+	if node.right != nil {
+		this.fillTree(node.right, depth+1)
 	}
 }
 
-func (this *HuffmanTree) createTreeFromCodes(maxSize uint) *HuffmanNode {
+func createTreeFromSizes(maxSize uint, lengths []uint, codes []uint) *HuffmanNode {
 	codeMap := make(map[int]*HuffmanNode)
 	sum := uint(1 << maxSize)
-	keys := make([]int, len(this.sizes))
+	keys := make([]int, len(lengths))
 	tree := kanzi.IntBTree{} //use binary tree
 	codeMap[0] = &HuffmanNode{symbol: byte(0), weight: sum}
 	tree.Add(0) // add key(0,0)
 
 	// Create node for each (present) symbol and add to map
-	for i := range this.sizes {
-		if this.sizes[i] == 0 {
+	for i := range lengths {
+		if lengths[i] == 0 {
 			continue
 		}
 
-		key := int((this.sizes[i] << 16) | this.codes[i])
+		key := int((lengths[i] << 16) | codes[i])
 		tree.Add(key)
-		value := &HuffmanNode{symbol: byte(i), weight: sum >> this.sizes[i]}
+		value := &HuffmanNode{symbol: byte(i), weight: sum >> lengths[i]}
 		codeMap[key] = value
 	}
 
@@ -305,42 +307,37 @@ func (this *HuffmanTree) createTreeFromCodes(maxSize uint) *HuffmanNode {
 	return codeMap[keys[0]]
 }
 
-func (this *HuffmanTree) generateCanonicalCodes() []uint {
-	array := make(HuffmanNodeArray, len(this.sizes))
+func generateCanonicalCodes(lengths []uint) []uint {
+	array := make(HuffmanNodeArray, len(lengths))
+	n := 0
 
 	for i := range array {
-		array[i] = &HuffmanNode{symbol: byte(i), weight: this.sizes[i]}
+		if lengths[i] > 0 {
+			array[n] = &HuffmanNode{symbol: byte(i), weight: lengths[i]}
+			n++
+		}
 	}
 
 	// Sort by decreasing size and increasing value
-	sort.Sort(array)
-
-	for i := range this.codes {
-		this.codes[i] = 0
-	}
-
+	sort.Sort(array[0:n])
+	codes := make([]uint, 256)
 	code := uint(0)
-	length := this.sizes[array[0].symbol]
+	length := lengths[array[0].symbol]
 
-	for i := range array {
+	for i := 0; i<n; i++ {
 		idx := array[i].symbol
-		currentSize := this.sizes[idx]
-
-		// Since the sizes are decreasing, exit on the first occurence of 0
-		if currentSize == 0 {
-			break
-		}
+		currentSize := lengths[idx]
 
 		for length > currentSize {
 			code >>= 1
 			length--
 		}
 
-		this.codes[idx] = code
+		codes[idx] = code
 		code++
 	}
 
-	return this.codes
+	return codes
 }
 
 func (this *HuffmanTree) Code(val int) uint {
