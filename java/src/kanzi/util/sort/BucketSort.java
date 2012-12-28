@@ -149,26 +149,26 @@ public class BucketSort implements IntSorter, ByteSorter
         // Unroll loop
         for (int i=blkptr; i<end16; i+=16)
         {
-            c[input[i]]++;
-            c[input[i+1]]++;
-            c[input[i+2]]++;
-            c[input[i+3]]++;
-            c[input[i+4]]++;
-            c[input[i+5]]++;
-            c[input[i+6]]++;
-            c[input[i+7]]++;
-            c[input[i+8]]++;
-            c[input[i+9]]++;
-            c[input[i+10]]++;
-            c[input[i+11]]++;
-            c[input[i+12]]++;
-            c[input[i+13]]++;
-            c[input[i+14]]++;
-            c[input[i+15]]++;
+            c[input[i] & 0xFF]++;
+            c[input[i+1] & 0xFF]++;
+            c[input[i+2] & 0xFF]++;
+            c[input[i+3] & 0xFF]++;
+            c[input[i+4] & 0xFF]++;
+            c[input[i+5] & 0xFF]++;
+            c[input[i+6] & 0xFF]++;
+            c[input[i+7] & 0xFF]++;
+            c[input[i+8] & 0xFF]++;
+            c[input[i+9] & 0xFF]++;
+            c[input[i+10] & 0xFF]++;
+            c[input[i+11] & 0xFF]++;
+            c[input[i+12] & 0xFF]++;
+            c[input[i+13] & 0xFF]++;
+            c[input[i+14] & 0xFF]++;
+            c[input[i+15] & 0xFF]++;
         }
 
         for (int i=len16; i<sz; i++)
-            c[input[blkptr+i]]++;
+            c[input[blkptr+i] & 0xFF]++;
 
         for (int i=0, j=blkptr; i<len; i++)
         {
