@@ -46,7 +46,7 @@ public class TestQuickSort
                 System.out.print(array[i]+" ");
 
             System.out.println();
-            new QuickSort().sort(array, idx);
+            new QuickSort().sort(array, idx, array.length-idx);
 
             for (int i=idx; i<b.length; i++)
                 b[i] = (byte) (array[i] & 255);
@@ -74,7 +74,7 @@ public class TestQuickSort
             java.util.Random random = new java.util.Random();
             long before, after;
 
-            QuickSort sorter = new QuickSort(10000);
+            QuickSort sorter = new QuickSort();
 
             for (int k=0; k<5; k++)
             {
@@ -93,7 +93,7 @@ public class TestQuickSort
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
-                    sorter.sort(array, 0);
+                    sorter.sort(array, 0, array.length);
                     after = System.nanoTime();
                     sum += (after - before);
                     before = System.nanoTime();

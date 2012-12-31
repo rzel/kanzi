@@ -26,51 +26,42 @@ public class FlashSort implements IntSorter
 {
    private static final int SHIFT = 15;
 
-   private final int size;
    private int[] buffer;
 
 
     public FlashSort()
     {
-       this(0);
+       this.buffer = new int[0];
     }
 
 
-    public FlashSort(int size)
+    // Not thread safe 
+    @Override
+    public boolean sort(int[] input, int blkptr, int len)
     {
-       if (size < 0)
-          throw new IllegalArgumentException("Invalid size parameter (must be a least 0)");
+       if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+          return false;
 
-       // Keep the size of the buffer small enough (buffer.length << shiftL < Integer.MAX_VALUE)
-       if (size > 65536)
-          throw new IllegalArgumentException("Invalid size parameter (must be at most 65536)");
-
-       this.size = size;
-       int m = size / 5; // speed optimum m in [0.2n .. m=0.5n]
-       this.buffer = new int[(m < 32) ? 32 : (m + 7) & 0xFFFFFFF8];
-    }
-
-
-   @Override
-    public void sort(int[] input, int blkptr)
-    {
-       final int sz = (this.size == 0) ? input.length - blkptr : this.size;
-       final int m = sz / 5; // speed optimum m in [0.2n .. m=0.5n]
+        if (len == 1)
+           return true;
+        
+       final int m = len / 5; // speed optimum m in [0.2n .. m=0.5n]
 
        if (this.buffer.length < m)
-          this.buffer = new int[(m < 32) ? 32 : (m + 7) & 0xFFFFFFF8];
+          this.buffer = new int[(m < 32) ? 32 : (m + 7) & -8];
 
-       this.partialFlashSort(input, blkptr, sz);
-       new InsertionSort(sz).sort(input, blkptr);
+       this.partialFlashSort(input, blkptr, len);
+       new InsertionSort().sort(input, blkptr, len);
+       return true;
     }
 
 
-    private void partialFlashSort(int[] input, int blkptr, int sz)
+    private void partialFlashSort(int[] input, int blkptr, int len)
     {
         int min = input[blkptr];
         int max = min;
         int idxMax = blkptr;
-        int end = blkptr + sz;
+        final int end = blkptr + len;
 
         for (int i=blkptr+1; i<end; i++)
         {
@@ -90,14 +81,13 @@ public class FlashSort implements IntSorter
            return;
 
         // Aliasing for speed
-        final int minimum = min;
         final int[] buf = this.buffer;
-        final int len = buf.length;
-        final int delta = max - minimum;
-        final int delta1 = delta + 1;
+        final int len8 = buf.length;
+        final long delta = max - min;
+        final long delta1 = delta + 1;
 
         // Reset buckets buffer
-        for (int i=0; i<len; i+=8)
+        for (int i=0; i<len8; i+=8)
         {
            buf[i]   = 0;
            buf[i+1] = 0;
@@ -111,14 +101,14 @@ public class FlashSort implements IntSorter
 
         int shiftL = SHIFT;
         final int threshold = Integer.MAX_VALUE >> 1;
-        int c1 = 0;
-        int num = 0;
+        long c1 = 0;
+        long num = 0;
 
         // Find combinations, shiftL, shiftR and c1
         while ((c1 == 0) && (num < threshold))
         {
            shiftL++;
-           num = len << shiftL;
+           num = ((long) len8) << shiftL;
            c1 = num / delta1;
         }
 
@@ -126,7 +116,7 @@ public class FlashSort implements IntSorter
 
         while (c1 == 0)
         {
-           int denum = delta >> (shiftR - shiftL);
+           final long denum = delta >> (shiftR - shiftL);
            c1 = num / denum;
            shiftR++;
         }
@@ -134,26 +124,27 @@ public class FlashSort implements IntSorter
         // Create the buckets
         for (int i=blkptr; i<end; i++)
         {
-           int k = (c1 * (input[i] - minimum)) >> shiftR;
-           buf[k]++;
+           final long k = (c1 * (input[i] - min)) >> shiftR;
+           buf[(int) k]++;
         }
 
         // Create distribution
-        for (int i=1; i<len; i++)
+        for (int i=1; i<len8; i++)
            buf[i] += buf[i-1];
 
         input[idxMax] = input[blkptr];
         input[blkptr] = max;
         int j = 0;
-        int k = len - 1;
+        int k = len8 - 1;
         int nmove = 1;
 
-        while (nmove < sz)
+        while (nmove < len)
         {
             while (j >= buf[k])
             {
                 j++;
-                k = (c1 * (input[blkptr+j] - min) >> shiftR);
+                final long kl = (c1 * (input[blkptr+j] - min)) >> shiftR;
+                k = (int) kl;
             }
 
             int flash = input[blkptr+j];
@@ -161,7 +152,8 @@ public class FlashSort implements IntSorter
             // Speed critical section
             while (buf[k] != j)
             {
-                k = (c1 * (flash - minimum)) >> shiftR;
+                final long kl = (c1 * (flash - min)) >> shiftR;
+                k = (int) kl;
                 final int idx = blkptr + buf[k] - 1;
                 final int hold = input[idx];
                 input[idx] = flash;

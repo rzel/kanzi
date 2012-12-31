@@ -23,6 +23,7 @@ public class TestBucketSort
     public static void main(String[] args)
     {
         System.out.println("TestBucketSort");
+        
         // Test behavior
         for (int ii=1; ii<20; ii++)
         {
@@ -45,7 +46,7 @@ public class TestBucketSort
                 System.out.print(array[i]+" ");
 
             System.out.println();
-            new BucketSort().sort(array, idx);
+            new BucketSort().sort(array, idx, array.length-idx);
 
             for (int i=idx; i<b.length; i++)
                 b[i] = (byte) (array[i] & 255);
@@ -73,7 +74,7 @@ public class TestBucketSort
             java.util.Random random = new java.util.Random();
             long before, after;
             
-            BucketSort sorter = new BucketSort(10000, 16);
+            BucketSort sorter = new BucketSort(16);
             
             for (int k=0; k<5; k++)
             {
@@ -92,7 +93,7 @@ public class TestBucketSort
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
-                    sorter.sort(array, 0);
+                    sorter.sort(array, 0, array.length);
                     after = System.nanoTime();
                     sum += (after - before);
                     before = System.nanoTime();

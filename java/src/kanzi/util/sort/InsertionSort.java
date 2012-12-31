@@ -24,40 +24,41 @@ import kanzi.IntSorter;
 public class InsertionSort implements IntSorter
 {
     private final ArrayComparator cmp;
-    private final int size;
     
     
     public InsertionSort()
     {
-        this(0, null);
+        this(null);
     }
     
     
-    public InsertionSort(int size)
+    public InsertionSort(ArrayComparator cmp)
     {
-        this(size, null);
-    }
-    
-    
-    public InsertionSort(int size, ArrayComparator cmp)
-    {
-        if (size < 0)
-            throw new IllegalArgumentException("Invalid size parameter (must be a least 0)");
-        
-        this.size = size;
         this.cmp = cmp;
     }
     
+
+    protected ArrayComparator getComparator()
+    {
+        return this.cmp;
+    }
+
     
    @Override
-    public void sort(int[] input, int blkptr)
+    public boolean sort(int[] input, int blkptr, int len)
     {
-        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
+
+        if (len == 1)
+           return true;
         
         if (this.cmp == null)
-            sortNoComparator(input, blkptr, blkptr+sz);
+            sortNoComparator(input, blkptr, blkptr+len);
         else
-            sortWithComparator(input, blkptr, blkptr+sz, this.cmp);
+            sortWithComparator(input, blkptr, blkptr+len, this.cmp);
+        
+        return true;
     }
     
     

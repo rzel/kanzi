@@ -18,5 +18,5 @@ package kanzi;
 
 public interface ByteSorter
 {
-    public void sort(byte[] array, int idx);
+    public boolean sort(byte[] array, int idx, int len);
 }

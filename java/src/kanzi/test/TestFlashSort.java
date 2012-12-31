@@ -46,7 +46,7 @@ public class TestFlashSort
                 System.out.print(array[i]+" ");
 
             System.out.println();
-            new FlashSort().sort(array, idx);
+            new FlashSort().sort(array, idx, array.length-idx);
 
             for (int i=idx; i<b.length; i++)
                 b[i] = (byte) (array[i] & 255);
@@ -74,7 +74,7 @@ public class TestFlashSort
             java.util.Random random = new java.util.Random();
             long before, after;
 
-             FlashSort sorter = new FlashSort(10000);
+             FlashSort sorter = new FlashSort();
 
             for (int k=0; k<5; k++)
             {
@@ -93,7 +93,7 @@ public class TestFlashSort
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
-                    sorter.sort(array, 0);
+                    sorter.sort(array, 0, array.length);
                     after = System.nanoTime();
                     sum += (after - before);
                     before = System.nanoTime();

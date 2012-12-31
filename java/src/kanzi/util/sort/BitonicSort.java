@@ -31,33 +31,24 @@ public class BitonicSort implements IntSorter
        32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32
     };
 
-    private final int size;
-
 
     public BitonicSort()
     {
-        this.size = 0;
     }
 
-
-    public BitonicSort(int size)
-    {
-        if (size < 0)
-            throw new IllegalArgumentException("The size parameter must be at least 0");
-
-        this.size = size;
-    }
-
-
-    // Thread safe
+    
     // all input data must be smaller than 1 << logDataSize
     @Override
-    public void sort(int[] input, int blkptr)
+    public boolean sort(int[] input, int blkptr, int len)
     {
-        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
 
-        if (sz > 1)
-           sort(input, blkptr, sz, true);
+        if (len == 1)
+           return true;
+        
+        sort(input, blkptr, len, true);        
+        return true;
     }
 
 

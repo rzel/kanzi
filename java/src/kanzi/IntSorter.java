@@ -18,5 +18,5 @@ package kanzi;
 
 public interface IntSorter
 {
-    public void sort(int[] array, int idx);
+    public boolean sort(int[] array, int idx, int len);
 }

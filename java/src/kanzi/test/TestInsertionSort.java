@@ -46,7 +46,7 @@ public class TestInsertionSort
                 System.out.print(array[i]+" ");
 
             System.out.println();
-            new InsertionSort().sort(array, idx);
+            new InsertionSort().sort(array, idx, array.length-idx);
 
             for (int i=idx; i<b.length; i++)
                 b[i] = (byte) (array[i] & 255);
@@ -75,7 +75,7 @@ public class TestInsertionSort
             java.util.Random random = new java.util.Random();
             long before, after;
 
-            InsertionSort sorter = new InsertionSort(10000);
+            InsertionSort sorter = new InsertionSort();
 
             for (int k=0; k<5; k++)
             {
@@ -94,7 +94,7 @@ public class TestInsertionSort
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
-                    sorter.sort(array, 0);
+                    sorter.sort(array, 0, array.length);
                     after = System.nanoTime();
                     sum += (after - before);
                     before = System.nanoTime();

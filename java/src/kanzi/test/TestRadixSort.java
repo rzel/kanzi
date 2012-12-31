@@ -50,7 +50,7 @@ public class TestRadixSort
             // Alternate radix 1, 2, 4 & 8
             int radix = 1 << (ii & 3);
             System.out.println("Radix "+radix);
-            new RadixSort(radix).sort(array, idx);
+            new RadixSort(radix).sort(array, idx, array.length-idx);
 
             for (int i=idx; i<b.length; i++)
                 b[i] = (byte) (array[i] & 255);
@@ -97,7 +97,7 @@ public class TestRadixSort
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
-                    sorter.sort(array, 0);
+                    sorter.sort(array, 0, array.length);
                     after = System.nanoTime();
                     sum += (after - before);
                     before = System.nanoTime();
@@ -139,7 +139,7 @@ public class TestRadixSort
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
-                    sorter.sort(array, 0);
+                    sorter.sort(array, 0, array.length);
                     after = System.nanoTime();
                     sum += (after - before);
                     before = System.nanoTime();

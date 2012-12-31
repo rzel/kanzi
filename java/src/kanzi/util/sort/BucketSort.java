@@ -26,35 +26,24 @@ import kanzi.IntSorter;
 public class BucketSort implements IntSorter, ByteSorter
 {
     private final int[] count;
-    private final int size;
     
     
     public BucketSort()
     {
-        this.size = 0;
         this.count = new int[256];
     }
 
 
-    public BucketSort(int size)
-    {
-        this(size, 8);
-    }
-
     
     // Limit size to handle shorts
-    public BucketSort(int size, int logMaxValue)
+    public BucketSort(int logMaxValue)
     {
-        if (size < 0)
-            throw new IllegalArgumentException("The size parameter must be at least 0");
-
         if (logMaxValue < 2)
             throw new IllegalArgumentException("The log data size parameter must be at least 2");
         
         if (logMaxValue > 16)
             throw new IllegalArgumentException("The log data size parameter must be at most 16");
 
-        this.size = size;
         this.count = new int[1 << logMaxValue];
     }
     
@@ -62,13 +51,18 @@ public class BucketSort implements IntSorter, ByteSorter
     // Not thread safe
     // all input data must be smaller than 1 << logMaxValue
     @Override
-    public void sort(int[] input, int blkptr)
+    public boolean sort(int[] input, int blkptr, int len)
     {
-        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
-        final int len16 = sz & -16;
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
+
+        if (len == 1)
+           return true;
+        
+        final int len16 = len & -16;
         final int end16 = blkptr + len16;
         final int[] c = this.count;
-        int len = c.length;
+        final int length = c.length;
 
         // Unroll loop
         for (int i=blkptr; i<end16; i+=16)
@@ -91,10 +85,10 @@ public class BucketSort implements IntSorter, ByteSorter
             c[input[i+15]]++;
         }
 
-        for (int i=len16; i<sz; i++)
+        for (int i=len16; i<len; i++)
             c[input[blkptr+i]]++;
 
-        for (int i=0, j=blkptr; i<len; i++)
+        for (int i=0, j=blkptr; i<length; i++)
         {
             final int val = c[i];
 
@@ -133,18 +127,25 @@ public class BucketSort implements IntSorter, ByteSorter
                     System.arraycopy(input, j0, input, j, 16);
             }
         }
+        
+        return true;
     }
 
 
     // Not thread safe
     @Override
-    public void sort(byte[] input, int blkptr)
+    public boolean sort(byte[] input, int blkptr, int len)
     {
-        final int sz = (this.size == 0) ? input.length : this.size;
-        final int len16 = sz & -16;
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
+
+        if (len == 1)
+           return true;
+        
+        final int len16 = len & -16;
         final int end16 = blkptr + len16;
         final int[] c = this.count;
-        final int len = c.length;
+        final int length = c.length;
 
         // Unroll loop
         for (int i=blkptr; i<end16; i+=16)
@@ -167,10 +168,10 @@ public class BucketSort implements IntSorter, ByteSorter
             c[input[i+15] & 0xFF]++;
         }
 
-        for (int i=len16; i<sz; i++)
+        for (int i=len16; i<len; i++)
             c[input[blkptr+i] & 0xFF]++;
 
-        for (int i=0, j=blkptr; i<len; i++)
+        for (int i=0, j=blkptr; i<length; i++)
         {
             final int val = c[i];
 
@@ -209,6 +210,8 @@ public class BucketSort implements IntSorter, ByteSorter
                     System.arraycopy(input, j0, input, j, 16);
             }
         }
+        
+        return true;
     }
     
 }

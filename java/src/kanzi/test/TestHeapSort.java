@@ -46,7 +46,7 @@ public class TestHeapSort
                 System.out.print(array[i]+" ");
 
             System.out.println();
-            new HeapSort().sort(array, idx);
+            new HeapSort().sort(array, idx, array.length-idx);
 
             for (int i=idx; i<b.length; i++)
                 b[i] = (byte) (array[i] & 255);
@@ -92,7 +92,7 @@ public class TestHeapSort
                         array2[i] = rnd[i] & 255;
 
                     before = System.nanoTime();
-                    sorter.sort(array, 0);
+                    sorter.sort(array, 0, array.length);
                     after = System.nanoTime();
                     sum += (after - before);
                     before = System.nanoTime();

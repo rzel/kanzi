@@ -27,31 +27,20 @@ import kanzi.IntSorter;
 
 public class QuickSort implements IntSorter
 {
-    private static final int SMALL_ARRAY_THRESHOLD = 8;
+    private static final int SMALL_ARRAY_THRESHOLD = 32;
     
     private final ArrayComparator cmp;
-    private final int size;
 
 
     public QuickSort()
     {
-        this(0, null);
+        this(null);
     }
 
 
-    public QuickSort(int size)
+    public QuickSort(ArrayComparator cmp)
     {
-        this(size, null);
-    }
-
-
-    public QuickSort(int size, ArrayComparator cmp)
-    {
-        if (size < 0)
-            throw new IllegalArgumentException("Invalid size parameter (must be at least 0)");
-
         this.cmp = cmp;
-        this.size = size;
     }
 
 
@@ -61,24 +50,21 @@ public class QuickSort implements IntSorter
     }
 
 
-    protected int size()
-    {
-        return this.size;
-    }
-
-
     @Override
-    public void sort(int[] input, int blkptr)
+    public boolean sort(int[] input, int blkptr, int len)
     {
-        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
 
-        if (blkptr >= sz-1)
-            return;
-
+        if (len == 1)
+           return true;
+        
         if (this.cmp != null)
-            sortWithComparator(input, blkptr, blkptr+sz-1, this.cmp);
+            sortWithComparator(input, blkptr, blkptr+len-1, this.cmp);
         else
-            sortNoComparator(input, blkptr, blkptr+sz-1);
+            sortNoComparator(input, blkptr, blkptr+len-1);
+        
+        return true;
     }
 
 
@@ -97,32 +83,20 @@ public class QuickSort implements IntSorter
         // papers show that picking a random index in the [low+1 .. high-1] range
         // is a good choice (on average). Here, a median is used
         final int mid = low + ((high - low) >> 1);
-        int pivIdx;
-
-        if (high - low < 40)
-        {
-            pivIdx = (array[low] < array[mid] ?
-            (array[mid] < array[high] ? mid : array[low] < array[high] ? high : low) :
-            (array[mid] > array[high] ? mid : array[low] > array[high] ? high : low));
-        }
-        else
-        {
-            final int s = (high - low) >> 3;
-
-            final int l = (array[low] < array[low+s] ?
+        final int s = (high - low) >> 3;
+        
+        final int l = (array[low] < array[low+s] ?
             (array[low+s] < array[low+s+s] ? low+s : array[low] < array[low+s+s] ? low+s+s : low) :
             (array[low+s] > array[low+s+s] ? low+s : array[low] > array[low+s+s] ? low+s+s : low));
-            final int m = (array[mid-s] < array[mid] ?
+        final int m = (array[mid-s] < array[mid] ?
             (array[mid] < array[mid+s] ? mid : array[mid-s] < array[mid+s] ? mid+s : mid-s) :
             (array[mid] > array[mid+s] ? mid : array[mid-s] > array[mid+s] ? mid+s : mid-s));
-            final int h = (array[high-s-s] < array[high-s] ?
+        final int h = (array[high-s-s] < array[high-s] ?
             (array[high-s] < array[high] ? high-s : array[high-s-s] < array[high] ? high : high-s-s) :
             (array[high-s] > array[high] ? high-s : array[high-s-s] > array[high] ? high : high-s-s));
-
-            pivIdx = (array[l] < array[m] ?
+        final int pivIdx = (array[l] < array[m] ?
             (array[m] < array[h] ? m : array[l] < array[h] ? h : l) :
             (array[m] > array[h] ? m : array[l] > array[h] ? h : l));
-        }
 
         final int pivot = array[pivIdx];
         int i = low;
@@ -222,35 +196,23 @@ public class QuickSort implements IntSorter
         // a bad pivot can really ruin the performance (quadratic). Some research
         // papers show that picking a random index in the [low+1 .. high-1] range
         // is a good choice (on average). Here, a median is used
-        final int mid = low + ((high - low) >> 1);
-        int pivIdx;
+        final int mid = low + ((high - low) >> 1);        
+        final int s = (high - low) >> 3;
+        final int lows = low + s;
+        final int highs = high - s;
 
-        if (high - low < 40)
-        {
-            pivIdx = (array[low] < array[mid] ?
-            (array[mid] < array[high] ? mid : array[low] < array[high] ? high : low) :
-            (array[mid] > array[high] ? mid : array[low] > array[high] ? high : low));
-        }
-        else
-        {
-            final int s = (high - low) >> 3;
-            final int lows = low + s;
-            final int highs = high - s;
-
-            final int l = (array[low] < array[low+s] ?
-            (array[lows] < array[lows+s] ? lows : array[low] < array[lows+s] ? lows+s : low) :
-            (array[lows] > array[lows+s] ? lows : array[low] > array[lows+s] ? lows+s : low));
-            final int m = (array[mid-s] < array[mid] ?
-            (array[mid] < array[mid+s] ? mid : array[mid-s] < array[mid+s] ? mid+s : mid-s) :
-            (array[mid] > array[mid+s] ? mid : array[mid-s] > array[mid+s] ? mid+s : mid-s));
-            final int h = (array[highs-s] < array[highs] ?
-            (array[highs] < array[high] ? highs : array[highs-s] < array[high] ? high : highs-s) :
-            (array[highs] > array[high] ? highs : array[highs-s] > array[high] ? high : highs-s));
-
-            pivIdx = (array[l] < array[m] ?
+        final int l = (array[low] < array[low+s] ?
+           (array[lows] < array[lows+s] ? lows : array[low] < array[lows+s] ? lows+s : low) :
+           (array[lows] > array[lows+s] ? lows : array[low] > array[lows+s] ? lows+s : low));
+        final int m = (array[mid-s] < array[mid] ?
+           (array[mid] < array[mid+s] ? mid : array[mid-s] < array[mid+s] ? mid+s : mid-s) :
+           (array[mid] > array[mid+s] ? mid : array[mid-s] > array[mid+s] ? mid+s : mid-s));
+        final int h = (array[highs-s] < array[highs] ?
+           (array[highs] < array[high] ? highs : array[highs-s] < array[high] ? high : highs-s) :
+           (array[highs] > array[high] ? highs : array[highs-s] > array[high] ? high : highs-s));
+        final int pivIdx = (array[l] < array[m] ?
             (array[m] < array[h] ? m : array[l] < array[h] ? h : l) :
             (array[m] > array[h] ? m : array[l] > array[h] ? h : l));
-        }
 
         final int pivot = array[pivIdx];
         int i = low;

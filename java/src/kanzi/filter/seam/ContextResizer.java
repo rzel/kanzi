@@ -145,7 +145,7 @@ public class ContextResizer implements VideoEffect
             log++;
 
         // Used to sort coordinates of geodesics
-        this.sorter = (log < 12) ? new BucketSort(0, log) : new RadixSort(8, 0, log);
+        this.sorter = (log < 12) ? new BucketSort(log) : new RadixSort(8, log);
     }
 
 
@@ -353,7 +353,7 @@ public class ContextResizer implements VideoEffect
 
             // Sort the pixels by increasing position
             if (linePositions.length > 1)
-                this.sorter.sort(linePositions, 0);
+                this.sorter.sort(linePositions, 0, linePositions.length);
 
             int posIdx = 0;
             int pos = linePositions[posIdx];
@@ -544,7 +544,7 @@ public class ContextResizer implements VideoEffect
 
             // Sort the pixels by increasing position
             if (linePositions.length > 1)
-                this.sorter.sort(linePositions, 0);
+                this.sorter.sort(linePositions, 0, linePositions.length);
 
             int srcIdx = srcStart;
             int dstIdx = dstStart;

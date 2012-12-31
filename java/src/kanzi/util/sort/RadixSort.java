@@ -28,7 +28,6 @@ public final class RadixSort implements IntSorter, ByteSorter
 {
     private final LinkedQueue[] queues;
     private final int bufferSize;
-    private final int size;
     private final int logMaxValue;
     private final int bitsRadix;
     private final int maskRadix;
@@ -36,7 +35,6 @@ public final class RadixSort implements IntSorter, ByteSorter
 
     public RadixSort()
     {
-        this.size = 0;
         this.bufferSize = 64;
         this.logMaxValue = -1;
         this.bitsRadix = 4; // radix of 16
@@ -50,51 +48,22 @@ public final class RadixSort implements IntSorter, ByteSorter
 
     public RadixSort(int bitsRadix)
     {
-        this(bitsRadix, 0, -1);
-    }
-    
-
-    public RadixSort(int bitsRadix, int size)
-    {
-        this(bitsRadix, size, -1);
+        this(bitsRadix, -1);
     }
     
     
-    public RadixSort(int bitsRadix, int size, int logMaxValue)
+    public RadixSort(int bitsRadix, int logMaxValue)
     {
-        if (size < 0)
-            throw new IllegalArgumentException("Invalid size parameter (must be a least 0)");
-
         if ((logMaxValue != -1) && ((logMaxValue < 4) || (logMaxValue > 32)))
             throw new IllegalArgumentException("Invalid log data size parameter (must be in the [4, 32] range)");
 
         if ((bitsRadix != 1) && ((bitsRadix != 2) && (bitsRadix != 4) && (bitsRadix != 8)))
             throw new IllegalArgumentException("Invalid radix value (must be 1, 2, 4 or 8 bits)");
 
-        this.size = size;
         this.logMaxValue = logMaxValue;
         this.bitsRadix = bitsRadix;
         this.maskRadix = (1 << this.bitsRadix) - 1;
-        int bufSize = 256;
-
-        if (size > 0)
-        {
-            // Estimate a reasonable buffer size
-            // Buffers contains data with 4 bit radix => 16 queues
-            // Assuming 4 buffers per queue on average, each buffer contains on average
-            // size >> (4 + 2) elements
-            // Find log2(size >> 6)
-            int log2 = 31 - Integer.numberOfLeadingZeros(size >> 6);
-            bufSize = 1 << (log2 + 1);
-
-            // Avoid too small and big values
-            if (bufSize < 16)
-                bufSize = 16;
-            else if (bufSize > 4096)
-                bufSize = 4096;
-        }
-
-        this.bufferSize = bufSize;
+        this.bufferSize = 256;
         this.queues = new LinkedQueue[1<<this.bitsRadix];
 
         for (int i=0; i<this.queues.length; i++)
@@ -104,17 +73,22 @@ public final class RadixSort implements IntSorter, ByteSorter
 
     // Not thread safe
     @Override
-    public void sort(int[] input, int blkptr)
+    public boolean sort(int[] input, int blkptr, int len)
     {
-        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
-        final int end = blkptr + sz;
-        final int len = this.queues.length; // aliasing
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
+
+        if (len == 1)
+           return true;
+        
+        final int end = blkptr + len;
+        final int length = this.queues.length; // aliasing
         final int bSize = this.bufferSize; // aliasing
         final int mask = this.maskRadix;
         final int digits = (this.logMaxValue < 0) ? 32 / this.bitsRadix
                 : this.logMaxValue / this.bitsRadix;
 
-        for (int j=0; j<len; j++)
+        for (int j=0; j<length; j++)
             this.queues[j].store((int[]) null);
 
         // Do a pass for each radix (4 bit step)
@@ -137,27 +111,33 @@ public final class RadixSort implements IntSorter, ByteSorter
             }
 
             // Copy back data to the input array
-            for (int j=0, idx=blkptr; j<len; j++)
+            for (int j=0, idx=blkptr; j<length; j++)
                idx = this.queues[j].retrieve(input, idx);
         }
 
         LinkedQueue.clear();
+        return true;
     }
 
 
     // Not thread safe
     @Override
-    public void sort(byte[] input, int blkptr)
+    public boolean sort(byte[] input, int blkptr, int len)
     {
-        final int sz = (this.size == 0) ? input.length : this.size;
-        final int end = blkptr + sz;
-        final int len = this.queues.length; // aliasing
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
+
+        if (len == 1)
+           return true;
+        
+        final int end = blkptr + len;
+        final int length = this.queues.length; // aliasing
         final int bSize = this.bufferSize; // aliasing
         final int mask = this.maskRadix;
         final int digits = (this.logMaxValue < 0) ? 8 / this.bitsRadix
                 : this.logMaxValue / this.bitsRadix;
 
-        for (int j=0; j<len; j++)
+        for (int j=0; j<length; j++)
             this.queues[j].store((byte[]) null);
 
         // Do a pass for each radix (4 bit step)
@@ -180,11 +160,12 @@ public final class RadixSort implements IntSorter, ByteSorter
             }
 
             // Copy back data to the input array
-            for (int j=0, idx=blkptr; j<len; j++)
+            for (int j=0, idx=blkptr; j<length; j++)
                idx = this.queues[j].retrieve(input, idx);
         }
 
         LinkedQueue.clear();
+        return true;
     }
 
 
@@ -251,8 +232,8 @@ public final class RadixSort implements IntSorter, ByteSorter
         {
            if (buffer != null)
            {
-             this.tail.next = new Node(buffer);
-             this.tail = this.tail.next;
+              this.tail.next = new Node(buffer);
+              this.tail = this.tail.next;
            }
 
            this.byteBuffer = (POOL_B.size() == 0) ? new byte[this.bufferSize] : POOL_B.removeFirst();

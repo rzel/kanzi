@@ -19,58 +19,50 @@ import kanzi.IndexedIntArray;
 import kanzi.IntSorter;
 
 
-// A MergeSort is conceptually very simple(divide and merge) but usually not
+// A MergeSort is conceptually very simple (divide and merge) but usually not
 // very performant ... except for almost sorted data
 // This implementation based on OpenJDK avoids the usual trap of many array creations
 public class MergeSort implements IntSorter
 {
-    private final int size;
+    private static final int SMALL_ARRAY_THRESHOLD = 32;
+
     private int[] buffer;
 
 
     public MergeSort()
     {
-       this(0);
-    }
-
-
-    public MergeSort(int size)
-    {
-       if (size < 0)
-          throw new IllegalArgumentException("Invalid size parameter(must be a least 0)");
-
-       this.size = size;
-       this.buffer = new int[size];
+       this.buffer = new int[0];
     }
 
 
     // Not thread safe
     @Override
-    public void sort(int[] input, int blkptr)
+    public boolean sort(int[] input, int blkptr, int len)
     {
-        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
 
-        if (this.buffer.length < sz)
-            this.buffer = new int[sz];
+        if (len == 1)
+           return true;
+        
+        if (this.buffer.length < len)
+            this.buffer = new int[len];
 
-        System.arraycopy(input, blkptr, this.buffer, 0, sz);
-        IndexedIntArray src = new IndexedIntArray(input, blkptr);
-        IndexedIntArray dst = new IndexedIntArray(this.buffer, 0);
-        sort(dst, src, blkptr, blkptr+sz);
+        System.arraycopy(input, blkptr, this.buffer, 0, len);
+        IndexedIntArray dst = new IndexedIntArray(input, blkptr);
+        IndexedIntArray src = new IndexedIntArray(this.buffer, 0);
+        sort(src, dst, blkptr, blkptr+len);
+        return true;
     }
 
     private static void sort(IndexedIntArray srcIba, IndexedIntArray dstIba, int start, int end)
     {
-        int length = end - start;
-
-        if (length < 2)
-            return;
-
-        int[] src = srcIba.array;
-        int[] dst = dstIba.array;
+        final int length = end - start;
+        final int[] src = srcIba.array;
+        final int[] dst = dstIba.array;
 
         // Insertion sort on smallest arrays
-        if (length < 16)
+        if (length < SMALL_ARRAY_THRESHOLD)
         {
             start += dstIba.index;
             end   += dstIba.index;
@@ -79,7 +71,7 @@ public class MergeSort implements IntSorter
             {
                 for (int j=i; (j>start) && (dst[j-1]>dst[j]); j--)
                 {
-                    int tmp = dst[j-1];
+                    final int tmp = dst[j-1];
                     dst[j-1] = dst[j];
                     dst[j] = tmp;
                 }
@@ -88,22 +80,22 @@ public class MergeSort implements IntSorter
             return;
         }
 
-        int mid =  (start + end) >>> 1;
+        int mid = (start + end) >>> 1;
         sort(dstIba, srcIba, start, mid);
         sort(dstIba, srcIba, mid, end);
         mid += srcIba.index;
  
         if (src[mid-1] <= src[mid])
         {
-            System.arraycopy(src, start, dst, start, length);
-            return;
+           System.arraycopy(src, start, dst, start, length);
+           return;
         }
 
-        int starti = start + dstIba.index;
-        int endi = end + dstIba.index;
+        final int starti = start + dstIba.index;
+        final int endi = end + dstIba.index;
         int j = start + srcIba.index;
         int k = mid;
-        int endk = end + srcIba.index;
+        final int endk = end + srcIba.index;
 
         for (int i=starti; i<endi; i++)
         {

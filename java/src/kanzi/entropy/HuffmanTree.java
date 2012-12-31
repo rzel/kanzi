@@ -128,8 +128,8 @@ import kanzi.OutputBitStream;
        }
        
        // Sort by frequency
-       QuickSort sorter = new QuickSort(n, new DefaultArrayComparator(frequencies));
-       sorter.sort(array, 0);
+       QuickSort sorter = new QuickSort(new DefaultArrayComparator(frequencies));
+       sorter.sort(array, 0, n);
 
        // Create Huffman tree of (present) symbols
        LinkedList<Node> queue1 = new LinkedList<Node>();
@@ -253,8 +253,8 @@ import kanzi.OutputBitStream;
        }
        
        // Sort by decreasing size (first key) and increasing value (second key)
-       QuickSort sorter = new QuickSort(n, new HuffmanArrayComparator(lengths));
-       sorter.sort(array, 0);
+       QuickSort sorter = new QuickSort(new HuffmanArrayComparator(lengths));
+       sorter.sort(array, 0, n);
 
        final int[] codes_ = new int[256];
        int code = 0;

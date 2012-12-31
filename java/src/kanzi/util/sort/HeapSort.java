@@ -24,48 +24,49 @@ import kanzi.IntSorter;
 public final class HeapSort implements IntSorter
 {
     private final ArrayComparator cmp;
-    private final int size;
 
 
     public HeapSort()
     {
-        this(0, null);
+        this(null);
     }
 
 
-    public HeapSort(int size)
+    public HeapSort(ArrayComparator cmp)
     {
-        this(size, null);
-    }
-
-
-    public HeapSort(int size, ArrayComparator cmp)
-    {
-        if (size < 0)
-            throw new IllegalArgumentException("Invalid size parameter (must be a least 0)");
-
         this.cmp = cmp;
-        this.size = size;
     }
 
 
-    @Override
-    public void sort(int[] input, int blkptr)
+    protected ArrayComparator getComparator()
     {
-        final int sz = (this.size == 0) ? input.length - blkptr : this.size;
+        return this.cmp;
+    }
 
-        for (int k=sz>>1; k>0; k--)
+    
+    @Override
+    public boolean sort(int[] input, int blkptr, int len)
+    {
+        if ((blkptr < 0) || (len <= 0) || (blkptr+len > input.length))
+            return false;
+
+        if (len == 1)
+           return true;
+        
+        for (int k=len>>1; k>0; k--)
         {
-            doSort(input, blkptr, k, sz, this.cmp);
+            doSort(input, blkptr, k, len, this.cmp);
         }
 
-        for (int i=sz-1; i>0; i--)
+        for (int i=len-1; i>0; i--)
         {
             final int temp = input[blkptr];
             input[blkptr] = input[blkptr+i];
             input[blkptr+i] = temp;
             doSort(input, blkptr, 1, i, this.cmp);
         }
+        
+        return true;
     }
 
 
