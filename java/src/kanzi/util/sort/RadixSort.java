@@ -15,7 +15,7 @@ limitations under the License.
 
 package kanzi.util.sort;
 
-import java.util.LinkedList;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import kanzi.ByteSorter;
 import kanzi.IntSorter;
 
@@ -63,7 +63,7 @@ public final class RadixSort implements IntSorter, ByteSorter
         this.logMaxValue = logMaxValue;
         this.bitsRadix = bitsRadix;
         this.maskRadix = (1 << this.bitsRadix) - 1;
-        this.bufferSize = 256;
+        this.bufferSize = 1024;
         this.queues = new LinkedQueue[1<<this.bitsRadix];
 
         for (int i=0; i<this.queues.length; i++)
@@ -188,8 +188,8 @@ public final class RadixSort implements IntSorter, ByteSorter
 
     private static class LinkedQueue
     {
-        private static LinkedList<byte[]> POOL_B = new LinkedList<byte[]>();
-        private static LinkedList<int[]>  POOL_I = new LinkedList<int[]>();
+        private static ConcurrentLinkedQueue<byte[]> POOL_B = new ConcurrentLinkedQueue<byte[]>();
+        private static ConcurrentLinkedQueue<int[]>  POOL_I = new ConcurrentLinkedQueue<int[]>();
 
         private final Node head;
         private final int bufferSize;
@@ -201,8 +201,8 @@ public final class RadixSort implements IntSorter, ByteSorter
 
         public static void clear()
         {
-            POOL_B.clear();
-            POOL_I.clear();
+           POOL_B.clear();
+           POOL_I.clear();
         }
 
 
@@ -221,8 +221,12 @@ public final class RadixSort implements IntSorter, ByteSorter
               this.tail.next = new Node(buffer);
               this.tail = this.tail.next;
            }
-
-           this.intBuffer = (POOL_I.size() == 0) ? new int[this.bufferSize] : POOL_I.removeFirst();
+           
+           this.intBuffer = POOL_I.poll();
+           
+           if (this.intBuffer == null)
+              this.intBuffer = new int[this.bufferSize];
+           
            this.index = 0;
            return this.intBuffer;
         }
@@ -236,7 +240,11 @@ public final class RadixSort implements IntSorter, ByteSorter
               this.tail = this.tail.next;
            }
 
-           this.byteBuffer = (POOL_B.size() == 0) ? new byte[this.bufferSize] : POOL_B.removeFirst();
+           this.byteBuffer = POOL_B.poll();
+           
+           if (this.byteBuffer == null)
+              this.byteBuffer = new byte[this.bufferSize];
+           
            this.index = 0;
            return this.byteBuffer;
         }
