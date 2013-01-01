@@ -55,6 +55,7 @@ public class MergeSort implements IntSorter
         return true;
     }
 
+    
     private static void sort(IndexedIntArray srcIba, IndexedIntArray dstIba, int start, int end)
     {
         final int length = end - start;
@@ -105,8 +106,6 @@ public class MergeSort implements IntSorter
                 dst[i] = src[k++];
         }
     }
-
-
 }
 
 			

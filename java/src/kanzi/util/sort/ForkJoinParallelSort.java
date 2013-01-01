@@ -70,7 +70,7 @@ public class ForkJoinParallelSort implements IntSorter, ByteSorter
    
    static class SortTask extends RecursiveAction
    {
-      private static final int MIN_THRESHOLD = 16384;
+      private static final int MIN_THRESHOLD = 8192;
       private static final int MAX_THRESHOLD = MIN_THRESHOLD << 1;
 
       private final transient IntSorter iDelegate;
