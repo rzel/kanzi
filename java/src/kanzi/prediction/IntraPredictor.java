@@ -65,9 +65,9 @@ public class IntraPredictor
       }
    };
 
-   private static final int ACTION_POPULATE       = 1;
-   private static final int ACTION_GET_INDEX      = 2;
-   private static final int ACTION_GET_COORD      = 3;   
+   private static final int ACTION_POPULATE  = 1;
+   private static final int ACTION_GET_INDEX = 2;
+   private static final int ACTION_GET_COORD = 3;   
 
    public static final int DIR_LEFT  = 1;
    public static final int DIR_RIGHT = 2;
@@ -241,17 +241,17 @@ public class IntraPredictor
       if (((predictionType & REFERENCE) != 0) && (minSAD >= blockDim * blockDim * this.thresholdSAD))
       {
          // Spatial search of best matching nearby block
-         Prediction newPrediction = this.refPrediction;
+         final Prediction newPrediction = this.refPrediction;
          newPrediction.frame = input;
          newPrediction.blockDim = blockDim;
 
-         // Do the search and update prediction  error, coordinates and result block
+         // Do the search and update prediction error, coordinates and result block
          this.computeReferenceSearch(input, ix, iy, minSAD, newPrediction, predictionType);
+         final Prediction refPred = predictions[Mode.REFERENCE.ordinal()];
 
          // Is the new prediction an improvement ?
-         if (newPrediction.sad < predictions[Mode.REFERENCE.ordinal()].sad)
+         if (newPrediction.sad < refPred.sad)
          {
-            Prediction refPred = predictions[Mode.REFERENCE.ordinal()];
             refPred.x = newPrediction.x;
             refPred.y = newPrediction.y;
             refPred.sad = newPrediction.sad;
@@ -263,7 +263,7 @@ public class IntraPredictor
 
             System.arraycopy(newPrediction.residue, 0, refPred.residue, 0, newPrediction.residue.length);
 
-            if (predictions[minIdx].sad > predictions[Mode.REFERENCE.ordinal()].sad)
+            if (predictions[minIdx].sad > refPred.sad)
                minIdx = Mode.REFERENCE.ordinal();
          }
       }
