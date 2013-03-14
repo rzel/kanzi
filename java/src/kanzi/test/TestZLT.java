@@ -202,7 +202,7 @@ public class TestZLT
          System.out.println("ZLT encoding [ms] : " + delta1 / 1000000);
          System.out.println("Throughput [MB/s] : " + ((long) (iter*size)) * 1000000L / delta1 * 1000L / (1024*1024));
          System.out.println("ZLT decoding [ms] : " + delta2 / 1000000);
-         System.out.println("Throughput [MB/s] : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
+         System.out.println("Throughput [MB/s] : " + ((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
       }
    }
 }

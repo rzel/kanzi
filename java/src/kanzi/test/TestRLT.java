@@ -245,7 +245,7 @@ public class TestRLT
          System.out.println("RLT encoding [ms] : " + delta1 / 1000000);
          System.out.println("Throughput [MB/s] : " + ((long) (iter*size)) * 1000000L / delta1 * 1000L / (1024*1024));
          System.out.println("RLT decoding [ms] : " + delta2 / 1000000);
-         System.out.println("Throughput [MB/s] : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
+         System.out.println("Throughput [MB/s] : " + ((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
       }
    }
 }

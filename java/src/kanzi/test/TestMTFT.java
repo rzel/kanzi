@@ -151,16 +151,20 @@ public class TestMTFT
 
 
         // Speed Test
-        {
-            System.out.println("\nSpeed Test");
-
-            byte[] input = new byte[10000];
+      // Test speed
+      final int iter = 20000;
+      final int size = 10000;
+      System.out.println("\n\nSpeed test");
+      System.out.println("Iterations: "+iter);
+      
+      for (int jj=0; jj<3; jj++)
+      {     
+            byte[] input = new byte[size];
             byte[] transform = new byte[input.length];
             MTFT mtft = new MTFT();
             byte[] reverse = new byte[input.length];
             long delta1 = 0, delta2 = 0;
             long before, after;
-            int iter = 20000;
 
             for (int ii = 0; ii < iter; ii++)
             {
@@ -179,11 +183,27 @@ public class TestMTFT
                 reverse = mtft.inverse(transform, 0);
                 after = System.nanoTime();
                 delta2 += (after - before);
+
+                int idx = -1;
+
+                // Sanity check
+                for (int i=0; i<size; i++)
+                {
+                   if (input[i] != reverse[i])
+                   {
+                      idx = i;
+                      break;
+                   } 
+                }
+
+                if (idx >= 0)
+                   System.out.println("Failure at index "+idx+" ("+input[idx]+"<->"+reverse[idx]+")");
             }
 
-            System.out.println("Iterations: "+iter);
             System.out.println("MTFT Forward transform [ms]: " + delta1 / 1000000);
+            System.out.println("Throughput [KB/s] : " + ((long) (iter*size)) * 1000000L / delta1 * 1000L / 1024);
             System.out.println("MTFT Reverse transform [ms]: " + delta2 / 1000000);
+            System.out.println("Throughput [KB/s] : " + ((long) (iter*size)) * 1000000L / delta2 * 1000L / 1024);        
         }
     }
 }
