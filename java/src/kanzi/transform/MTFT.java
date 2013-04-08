@@ -105,14 +105,14 @@ public final class MTFT implements ByteTransform
            if (idx == 0)
               continue;
            
-           if (idx < 8)
+           if (idx < 16)
            {
               for (int j=idx-1; j>=0; j--)
                  indexes[j+1] = indexes[j];
            }
            else
            {
-              System.arraycopy (indexes, 0, indexes, 1, idx);
+              System.arraycopy(indexes, 0, indexes, 1, idx);
            }
            
            indexes[0] = value;
