@@ -66,8 +66,7 @@ public final class RangeDecoder extends AbstractDecoder
             this.baseFreq[i] = i << 4; // BASE
     }
 
-
-
+      
     // This method is on the speed critical path (called for each byte)
     // The speed optimization is focused on reducing the frequency table update
     @Override
@@ -96,7 +95,18 @@ public final class RangeDecoder extends AbstractDecoder
         if (count > 0)
         {
            final int end = value;
-           value = ((value + 15) > NB_SYMBOLS) ? NB_SYMBOLS : value+15;
+           
+           if (count < dfreq[value+8])
+           {
+              value = (count < dfreq[value+4]) ? value + 3 : value + 7;
+           }
+           else
+           {
+              value = (count < dfreq[value+12]) ? value + 11 : value + 15;
+              
+              if (value > NB_SYMBOLS)
+                 value = NB_SYMBOLS;
+           }
 
            while ((value >= end) && (count < dfreq[value]))
               value--;
@@ -133,7 +143,7 @@ public final class RangeDecoder extends AbstractDecoder
         }
 
         // Update frequencies: computational bottleneck !!!
-        this.updateFrequencies(value+1);
+        this.updateFrequencies(value+1);     
         return (byte) (value & 0xFF);
     }
 

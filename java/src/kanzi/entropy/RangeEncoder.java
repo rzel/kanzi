@@ -70,9 +70,9 @@ public final class RangeEncoder extends AbstractEncoder
     @Override
     public boolean encodeByte(byte b)
     {
-        int value = b & 0xFF;
-        int symbolLow = this.baseFreq[value>>4] + this.deltaFreq[value];
-        int symbolHigh = this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1];
+        final int value = b & 0xFF;
+        final int symbolLow = this.baseFreq[value>>4] + this.deltaFreq[value];
+        final int symbolHigh = this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1];
         this.range /= (this.baseFreq[NB_SYMBOLS>>4] + this.deltaFreq[NB_SYMBOLS]);
 
         // Encode symbol
