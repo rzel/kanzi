@@ -197,7 +197,13 @@ func (this *RangeDecoder) DecodeByte() (byte, error) {
 	count := (this.code - this.low) / this.range_
 
 	// Find first frequency less than 'count'
-	value := len(bfreq) - 1
+	var value int
+
+	if count < dfreq[len(bfreq)/2] {
+		value = len(bfreq)/2 - 1
+	} else {
+		value = len(bfreq) - 1
+	}
 
 	for value > 0 && count < bfreq[value] {
 		value--
@@ -208,10 +214,23 @@ func (this *RangeDecoder) DecodeByte() (byte, error) {
 
 	if count > 0 {
 		end := value
-		value += 15
 
-		if value > NB_SYMBOLS {
-			value = NB_SYMBOLS
+		if count < dfreq[value+8] {
+			if count < dfreq[value+4] {
+				value += 3
+			} else {
+				value += 7
+			}
+		} else {
+			if count < dfreq[value+12] {
+				value += 11
+			} else {
+				value += 15
+			}
+
+			if value > NB_SYMBOLS {
+				value = NB_SYMBOLS
+			}
 		}
 
 		for value >= end && count < dfreq[value] {

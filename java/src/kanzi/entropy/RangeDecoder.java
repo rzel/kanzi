@@ -84,7 +84,7 @@ public final class RangeDecoder extends AbstractDecoder
         int count = (int) ((this.code - this.low) / this.range);
 
         // Find first frequency less than 'count'
-        int value = bfreq.length - 1;
+        int value = (count < bfreq[bfreq.length/2]) ? bfreq.length/2 - 1 : bfreq.length - 1;
         
         while ((value > 0) && (count < bfreq[value]))
             value--;
