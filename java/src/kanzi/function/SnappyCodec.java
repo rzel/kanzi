@@ -37,6 +37,7 @@ public class SnappyCodec implements ByteFunction
    private static final int TAG_ENC_LEN3   = (TAG_DEC_LEN3<<2) | TAG_LITERAL;
    private static final int TAG_ENG_LEN4   = (TAG_DEC_LEN4<<2) | TAG_LITERAL;
    private static final int MAX_TABLE_SIZE = 16384;
+   private static final byte B0 = (byte) ((63 << 2) | TAG_COPY2);
    private static final long HASH_SEED     = 0x1e35a7bd;
 
    private int size;
@@ -155,12 +156,20 @@ public class SnappyCodec implements ByteFunction
            break;
         }
 
-        final int x = (len <= 64) ? len : 64;
-        dst[idx]   = (byte) (((x-1)<<2) | TAG_COPY2);
+        if (len < 64)
+        {
+           dst[idx] = (byte) (((len-1) << 2) | TAG_COPY2);
+           len = 0;
+        }
+        else
+        {
+           dst[idx] = B0;
+           len -= 64;
+        }
+        
         dst[idx+1] = b1;
         dst[idx+2] = b2;
         idx += 3;
-        len -= x;
      }
 
      return idx - destination.index;
@@ -218,13 +227,14 @@ public class SnappyCodec implements ByteFunction
      // Iterate over the source bytes
      int s = srcIdx; // The iterator position
      int lit = srcIdx; // The start position of any pending literal bytes
-
-     while (s+3 < count)
+     final int ends = count - 3;
+     
+     while (s < ends)
      {
         // Update the hash table
         long hl = (src[s] & 0xFF) | ((src[s+1] & 0xFF) << 8) |
                 ((src[s+2] & 0xFF) << 16) | ((src[s+3] & 0xFF) << 24);
-        hl = (((long) hl * HASH_SEED) & 0xFFFFFFFFL) >> shift;
+        hl = ((hl * HASH_SEED) & 0xFFFFFFFFL) >> shift;
         final int h = (int) hl;
         int t = table[h]; // The last position with the same hash as s
         table[h] = s;
