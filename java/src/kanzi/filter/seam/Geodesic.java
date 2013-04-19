@@ -32,6 +32,7 @@ public class Geodesic implements Comparable<Geodesic>
    }
 
 
+   @Override
    public int compareTo(Geodesic geo)
    {
       return this.cost - geo.cost;
