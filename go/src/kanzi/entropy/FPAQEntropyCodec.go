@@ -47,11 +47,10 @@ func (this *FPAQPredictor) Update(bit byte) {
 		st[1] >>= 1
 	}
 
-	this.ctxIdx <<= 1
-	this.ctxIdx += int(bit)
-
-	if this.ctxIdx >= 512 {
+	if this.ctxIdx >= 256 {
 		this.ctxIdx = 1
+	} else {
+		this.ctxIdx = (this.ctxIdx << 1) | int(bit)
 	}
 }
 
