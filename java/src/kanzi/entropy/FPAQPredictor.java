@@ -45,11 +45,7 @@ public class FPAQPredictor implements Predictor
          st[1] >>= 1;
       }
       
-      this.ctxIdx <<= 1;
-      this.ctxIdx += bit;
-      
-      if (this.ctxIdx >= 512)
-        this.ctxIdx = 1;  
+      this.ctxIdx = (this.ctxIdx < 256) ? (this.ctxIdx << 1) | bit : 1;
    }
 
    
