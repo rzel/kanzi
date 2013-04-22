@@ -19,10 +19,15 @@ import (
 	"kanzi"
 )
 
+const (
+	THRESHOLD = 200
+	SHIFT     = 1
+)
+
 // Based on fpaq1 by Matt Mahoney - Stationary order 0 binary entropy encoder/decoder
 type FPAQPredictor struct {
-	ctxIdx int
-	states [512][]int16
+	ctxIdx int          // previous 9 bits
+	states [512][]int16 // 512 frequency contexts for each bit
 }
 
 // ! Requires the coder to extend input bytes to 9-bit symbols !
@@ -42,9 +47,9 @@ func (this *FPAQPredictor) Update(bit byte) {
 	st := this.states[this.ctxIdx]
 	st[bit]++
 
-	if st[bit] > 2000 {
-		st[0] >>= 1
-		st[1] >>= 1
+	if st[bit] >= THRESHOLD {
+		st[0] >>= SHIFT
+		st[1] >>= SHIFT
 	}
 
 	if this.ctxIdx >= 256 {

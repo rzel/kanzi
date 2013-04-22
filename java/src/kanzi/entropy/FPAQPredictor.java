@@ -20,10 +20,12 @@ package kanzi.entropy;
 // ! Requires the coder to extend input bytes to 9-bit symbols !
 public class FPAQPredictor implements Predictor
 {
-   private final short[][] states;
-   private int ctxIdx;
+   private static final int THRESHOLD = 200;
+   private static final int SHIFT = 1;
    
-   
+   private final short[][] states; // 512 frequency contexts for each bit
+   private int ctxIdx; // previous 9 bits
+     
    public FPAQPredictor()
    {
       this.ctxIdx = 1;
@@ -39,10 +41,10 @@ public class FPAQPredictor implements Predictor
    {
       final short[] st = this.states[this.ctxIdx];
     
-      if (++st[bit] > 2000) 
+      if (++st[bit] >= THRESHOLD) 
       {
-         st[0] >>= 1;
-         st[1] >>= 1;
+         st[0] >>= SHIFT;
+         st[1] >>= SHIFT;
       }
       
       this.ctxIdx = (this.ctxIdx < 256) ? (this.ctxIdx << 1) | bit : 1;
@@ -50,7 +52,6 @@ public class FPAQPredictor implements Predictor
 
    
    // Assume stream of 9-bit symbols   
-   // ! Requires the coder to extend input bytes to 9-bit symbols !
    @Override
    public int get()
    {
