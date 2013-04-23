@@ -980,7 +980,7 @@ public class IntraPredictor
          return this.computeBlockVertical(prediction, output, x, y, direction);
 
       if (mode == Mode.MEDIAN)
-         return this.computeMedian(prediction, output, x, y, direction);
+         return this.computeBlockMedian(prediction, output, x, y, direction);
 
       if (mode == Mode.AVERAGE_HV)
          return this.computeBlockAverageHV(prediction, output, x, y, direction);
@@ -1346,7 +1346,7 @@ public class IntraPredictor
     }
 
                
-    private int[] computeMedian(Prediction prediction, int[] output, int x, int y,
+    private int[] computeBlockMedian(Prediction prediction, int[] output, int x, int y,
          int direction)
     {
        final int blockDim = prediction.blockDim;
