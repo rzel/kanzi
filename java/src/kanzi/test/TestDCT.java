@@ -30,6 +30,8 @@ public class TestDCT
         Runnable r2 = new Runnable()
         {
             int[] block = new int[] {
+2, 6, 7, 5, 1, -1, 2, 5, 1, 3, 3, 2, 2, 4, 2, -1, 1, 2, 1, 0, 3, 7, 4, -1, 2, 4, 4, 1, 1, 3, 5, 5, 4, 4, 4, 3, 1, 1, 5
+, 11, 5, 3, 2, 4, 3, 1, 3, 7, 5, 3, 3, 5, 5, 2, 1, 3, 5, 5, 5, 6, 5, 4, 2, 1,            
                3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3,
                2, 3, 8, 4, 6, 2, 6, 4, 3, 3, 8, 3, 2, 7, 9, 5,
                0, 2, 8, 8, 4, 1, 9, 7, 1, 6, 9, 3, 9, 9, 3, 7,
@@ -109,7 +111,7 @@ public class TestDCT
                   final int blockSize = dim * dim;
                   int[] data1 = new int[blockSize];
                   int[] data2 = new int[blockSize];
-                  DCT4 dct = new DCT4();
+                  IntTransform dct = dcts[dimIdx];
                   Random rnd = new Random();
 
                   for (int nn=0; nn<20; nn++)
