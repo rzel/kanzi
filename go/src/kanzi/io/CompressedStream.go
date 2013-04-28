@@ -29,7 +29,7 @@ import (
 const (
 	DEFAULT_BLOCK_SIZE       = 1024 * 1024 // Default block size
 	BITSTREAM_TYPE           = 0x4B414E5A  // "KANZ"
-	BITSTREAM_FORMAT_VERSION = 1
+	BITSTREAM_FORMAT_VERSION = 2
 	DEFAULT_BUFFER_SIZE      = 32768
 	COPY_LENGTH_MASK         = 0x0F
 	SMALL_BLOCK_MASK         = 0x80
@@ -84,7 +84,7 @@ func (this IOError) ErrorCode() int {
 
 type CompressedOutputStream struct {
 	blockSize     uint
-	hasher        *util.MurMurHash3
+	hasher        *util.XXHash
 	buffer1       []byte
 	buffer2       []byte
 	entropyType   byte
@@ -140,7 +140,7 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 	this.blockSize = blockSize
 
 	if checksum == true {
-		this.hasher, err = util.NewMurMurHash3(BITSTREAM_TYPE)
+		this.hasher, err = util.NewXXHash(BITSTREAM_TYPE)
 
 		if err != nil {
 			return this, err
@@ -383,7 +383,7 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 
 type CompressedInputStream struct {
 	blockSize     uint
-	hasher        *util.MurMurHash3
+	hasher        *util.XXHash
 	buffer1       []byte
 	buffer2       []byte
 	entropyType   byte
@@ -447,7 +447,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 	version := int((header >> 41) & 0x7F)
 
 	// Sanity check
-	if version < BITSTREAM_FORMAT_VERSION {
+	if version != BITSTREAM_FORMAT_VERSION {
 		errMsg := fmt.Sprintf("Cannot read this version of the stream: %d", version)
 		return NewIOError(errMsg, ERR_STREAM_VERSION)
 	}
@@ -456,7 +456,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 	checksum := (header >> 40) & 1
 
 	if checksum == 1 {
-		if this.hasher, err = util.NewMurMurHash3(BITSTREAM_TYPE); err != nil {
+		if this.hasher, err = util.NewXXHash(BITSTREAM_TYPE); err != nil {
 			return err
 		}
 	}

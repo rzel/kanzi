@@ -26,7 +26,7 @@ import kanzi.InputBitStream;
 import kanzi.bitstream.DefaultInputBitStream;
 import kanzi.entropy.EntropyCodecFactory;
 import kanzi.function.FunctionFactory;
-import kanzi.util.MurMurHash3;
+import kanzi.util.XXHash;
 
 
 // Implementation of a java.io.InputStream that can dedode a stream
@@ -34,7 +34,7 @@ import kanzi.util.MurMurHash3;
 public class CompressedInputStream extends InputStream
 {
    private static final int BITSTREAM_TYPE           = 0x4B414E5A; // "KANZ"
-   private static final int BITSTREAM_FORMAT_VERSION = 1;
+   private static final int BITSTREAM_FORMAT_VERSION = 2;
    private static final int DEFAULT_BUFFER_SIZE      = 32768;
    private static final int COPY_LENGTH_MASK         = 0x0F;
    private static final int SMALL_BLOCK_MASK         = 0x80;
@@ -42,7 +42,7 @@ public class CompressedInputStream extends InputStream
    private static final int MAX_BLOCK_SIZE           = (16*1024*1024) - 4;
 
    private int blockSize;
-   private MurMurHash3 hasher;
+   private XXHash hasher;
    private final IndexedByteArray iba1;
    private final IndexedByteArray iba2;
    private char entropyType;
@@ -94,13 +94,13 @@ public class CompressedInputStream extends InputStream
          final int version = (int) this.ibs.readBits(7);
 
          // Sanity check
-         if (version < BITSTREAM_FORMAT_VERSION)
+         if (version != BITSTREAM_FORMAT_VERSION)
             throw new kanzi.io.IOException("Cannot read this version of the stream: " + version,
                     Error.ERR_STREAM_VERSION);
 
          // Read block checksum
          if (this.ibs.readBit() == 1)
-            this.hasher = new MurMurHash3(BITSTREAM_TYPE);
+            this.hasher = new XXHash(BITSTREAM_TYPE);
 
          // Read entropy codec
          this.entropyType = (char) this.ibs.readBits(7);

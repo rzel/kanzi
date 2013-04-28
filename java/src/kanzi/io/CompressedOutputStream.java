@@ -25,7 +25,7 @@ import kanzi.OutputBitStream;
 import kanzi.bitstream.DefaultOutputBitStream;
 import kanzi.entropy.EntropyCodecFactory;
 import kanzi.function.FunctionFactory;
-import kanzi.util.MurMurHash3;
+import kanzi.util.XXHash;
 
 
 
@@ -37,7 +37,7 @@ public class CompressedOutputStream extends OutputStream
 {
    private static final int DEFAULT_BLOCK_SIZE       = 1024 * 1024; // Default block size
    private static final int BITSTREAM_TYPE           = 0x4B414E5A; // "KANZ"
-   private static final int BITSTREAM_FORMAT_VERSION = 1;
+   private static final int BITSTREAM_FORMAT_VERSION = 2;
    private static final int DEFAULT_BUFFER_SIZE      = 32768;
    private static final int COPY_LENGTH_MASK         = 0x0F;
    private static final int SMALL_BLOCK_MASK         = 0x80;
@@ -47,7 +47,7 @@ public class CompressedOutputStream extends OutputStream
    private static final int SMALL_BLOCK_SIZE         = 15;
 
    private final int blockSize;
-   private final MurMurHash3 hasher;
+   private final XXHash hasher;
    private final IndexedByteArray iba1;
    private final IndexedByteArray iba2;
    private final char entropyType;
@@ -101,7 +101,7 @@ public class CompressedOutputStream extends OutputStream
 
       this.transformType = type;
       this.blockSize = blockSize;
-      this.hasher = (checksum == true) ? new MurMurHash3(BITSTREAM_TYPE) : null;
+      this.hasher = (checksum == true) ? new XXHash(BITSTREAM_TYPE) : null;
       this.iba1 = new IndexedByteArray(new byte[blockSize], 0);
       this.iba2 = new IndexedByteArray(new byte[0], 0);
       this.ds = debug;
