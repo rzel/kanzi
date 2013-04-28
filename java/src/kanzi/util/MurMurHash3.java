@@ -17,15 +17,15 @@ package kanzi.util;
 
 // MurmurHash3 was written by Austin Appleby, and is placed in the public
 // domain. The author hereby disclaims copyright to this source code.
-// Original source code: http://code.google.com/p/smhasher/
+// Original source code: https://code.google.com/p/smhasher/
 
 public class MurMurHash3
 {
-  private static int C1 = 0xcc9e2d51;
-  private static int C2 = 0x1b873593;
-  private static int C3 = 0xe6546b64;
-  private static int C4 = 0x85ebca6b;
-  private static int C5 = 0xc2b2ae35;
+  private static final int C1 = 0xcc9e2d51;
+  private static final int C2 = 0x1b873593;
+  private static final int C3 = 0xe6546b64;
+  private static final int C4 = 0x85ebca6b;
+  private static final int C5 = 0xc2b2ae35;
   
   private int seed;
 
