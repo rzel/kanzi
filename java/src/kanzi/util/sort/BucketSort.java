@@ -59,13 +59,13 @@ public class BucketSort implements IntSorter, ByteSorter
         if (len == 1)
            return true;
         
-        final int len16 = len & -16;
-        final int end16 = blkptr + len16;
+        final int len8 = len & -8;
+        final int end8 = blkptr + len8;
         final int[] c = this.count;
         final int length = c.length;
 
         // Unroll loop
-        for (int i=blkptr; i<end16; i+=16)
+        for (int i=blkptr; i<end8; i+=8)
         {
             c[input[i]]++;
             c[input[i+1]]++;
@@ -75,17 +75,9 @@ public class BucketSort implements IntSorter, ByteSorter
             c[input[i+5]]++;
             c[input[i+6]]++;
             c[input[i+7]]++;
-            c[input[i+8]]++;
-            c[input[i+9]]++;
-            c[input[i+10]]++;
-            c[input[i+11]]++;
-            c[input[i+12]]++;
-            c[input[i+13]]++;
-            c[input[i+14]]++;
-            c[input[i+15]]++;
         }
 
-        for (int i=len16; i<len; i++)
+        for (int i=len8; i<len; i++)
             c[input[blkptr+i]]++;
 
         for (int i=0, j=blkptr; i<length; i++)
@@ -96,14 +88,13 @@ public class BucketSort implements IntSorter, ByteSorter
                 continue;
 
             c[i] = 0;
-            final int val16 = val & -16;
+            int val8 = val & -8;
 
-            for (int k=val; k>val16; k--)
+            for (int k=val; k>val8; k--)
                 input[j++] = i;
 
-            if (val16 > 0)
+            while (val8 > 0)
             {
-                int j0 = j;
                 input[j]    = i;
                 input[j+1]  = i;
                 input[j+2]  = i;
@@ -112,19 +103,8 @@ public class BucketSort implements IntSorter, ByteSorter
                 input[j+5]  = i;
                 input[j+6]  = i;
                 input[j+7]  = i;
-                input[j+8]  = i;
-                input[j+9]  = i;
-                input[j+10] = i;
-                input[j+11] = i;
-                input[j+12] = i;
-                input[j+13] = i;
-                input[j+14] = i;
-                input[j+15] = i;
-                j += 16;
-
-                // Native copy for improved speed
-                for (int k=val16-16; k>0; k-=16, j+=16)
-                    System.arraycopy(input, j0, input, j, 16);
+                j += 8;
+                val8 -= 8;
             }
         }
         
@@ -142,13 +122,13 @@ public class BucketSort implements IntSorter, ByteSorter
         if (len == 1)
            return true;
         
-        final int len16 = len & -16;
-        final int end16 = blkptr + len16;
+        final int len8 = len & -8;
+        final int end8 = blkptr + len8;
         final int[] c = this.count;
         final int length = c.length;
 
         // Unroll loop
-        for (int i=blkptr; i<end16; i+=16)
+        for (int i=blkptr; i<end8; i+=8)
         {
             c[input[i] & 0xFF]++;
             c[input[i+1] & 0xFF]++;
@@ -158,17 +138,9 @@ public class BucketSort implements IntSorter, ByteSorter
             c[input[i+5] & 0xFF]++;
             c[input[i+6] & 0xFF]++;
             c[input[i+7] & 0xFF]++;
-            c[input[i+8] & 0xFF]++;
-            c[input[i+9] & 0xFF]++;
-            c[input[i+10] & 0xFF]++;
-            c[input[i+11] & 0xFF]++;
-            c[input[i+12] & 0xFF]++;
-            c[input[i+13] & 0xFF]++;
-            c[input[i+14] & 0xFF]++;
-            c[input[i+15] & 0xFF]++;
         }
 
-        for (int i=len16; i<len; i++)
+        for (int i=len8; i<len; i++)
             c[input[blkptr+i] & 0xFF]++;
 
         for (int i=0, j=blkptr; i<length; i++)
@@ -178,15 +150,14 @@ public class BucketSort implements IntSorter, ByteSorter
             if (val == 0)
                 continue;
             
-            final int val16 = val & -16;
+            int val8 = val & -8;
             c[i] = 0;
 
-            for (int k=val; k>val16; k--)
+            for (int k=val; k>val8; k--)
                 input[j++] = (byte) i;
 
-            if (val16 > 0)
+            while (val8 > 0)
             {
-                int j0 = j;
                 input[j]    = (byte) i;
                 input[j+1]  = (byte) i;
                 input[j+2]  = (byte) i;
@@ -196,18 +167,8 @@ public class BucketSort implements IntSorter, ByteSorter
                 input[j+6]  = (byte) i;
                 input[j+7]  = (byte) i;
                 input[j+8]  = (byte) i;
-                input[j+9]  = (byte) i;
-                input[j+10] = (byte) i;
-                input[j+11] = (byte) i;
-                input[j+12] = (byte) i;
-                input[j+13] = (byte) i;
-                input[j+14] = (byte) i;
-                input[j+15] = (byte) i;
-                j += 16;
-
-                // Native copy for improved speed
-                for (int k=val16-16; k>0; k-=16, j+=16)
-                    System.arraycopy(input, j0, input, j, 16);
+                j += 8;
+                val8 -= 8;
             }
         }
         
