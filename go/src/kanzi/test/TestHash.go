@@ -41,7 +41,7 @@ func main() {
 		defer file.Close()
 		buffer := make([]byte, 16384)
 		before := time.Now()
-		hash, err := util.NewXXHash(uint(0))
+		hash, err := util.NewXXHash(uint32(0))
 
 		if err != nil {
 			fmt.Printf("Failed to create hash: %v\n", err)
@@ -50,7 +50,7 @@ func main() {
 
 		length, err := file.Read(buffer)
 		size := int64(0)
-		res := uint(0)
+		res := uint32(0)
 
 		for length > 0 {
 			if err != nil {
@@ -88,7 +88,7 @@ func main() {
 		defer file.Close()
 		buffer := make([]byte, 16384)
 		before := time.Now()
-		hash, err := util.NewMurMurHash3(uint(0))
+		hash, err := util.NewMurMurHash3(uint32(0))
 
 		if err != nil {
 			fmt.Printf("Failed to create hash: %v\n", err)
@@ -97,7 +97,7 @@ func main() {
 
 		length, err := file.Read(buffer)
 		size := int64(0)
-		res := uint(0)
+		res := uint32(0)
 
 		for length > 0 {
 			if err != nil {

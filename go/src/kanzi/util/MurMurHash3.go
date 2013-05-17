@@ -21,35 +21,35 @@ package util
 
 
 const (
-	C1 = uint(0xcc9e2d51)
-	C2 = uint(0x1b873593)
-	C3 = uint(0xe6546b64)
-	C4 = uint(0x85ebca6b)
-	C5 = uint(0xc2b2ae35)
+	C1 = uint32(0xcc9e2d51)
+	C2 = uint32(0x1b873593)
+	C3 = uint32(0xe6546b64)
+	C4 = uint32(0x85ebca6b)
+	C5 = uint32(0xc2b2ae35)
 )
 
 type MurMurHash3 struct {
-	seed uint
+	seed uint32
 }
 
-func NewMurMurHash3(seed uint) (*MurMurHash3, error) {
+func NewMurMurHash3(seed uint32) (*MurMurHash3, error) {
 	this := new(MurMurHash3)
 	this.seed = seed
 	return this, nil
 }
 
-func (this *MurMurHash3) SetSeed(seed uint) {
+func (this *MurMurHash3) SetSeed(seed uint32) {
 	this.seed = seed
 }
 
-func (this *MurMurHash3) Hash(data []byte) uint {
+func (this *MurMurHash3) Hash(data []byte) uint32 {
 	h1 := this.seed // aliasing
 	end4 := len(data) & -4
 
 	// Body
 	for i := 0; i < end4; i += 4 {
-		k1 := uint(data[i]) | (uint(data[i+1]) << 8) |
-			(uint(data[i+2]) << 16) | (uint(data[i+3]) << 24)
+		k1 := uint32(data[i]) | (uint32(data[i+1]) << 8) |
+			(uint32(data[i+2]) << 16) | (uint32(data[i+3]) << 24)
 
 		k1 *= C1
 		k1 = (k1 << 15) | (k1 >> 17)
@@ -60,17 +60,17 @@ func (this *MurMurHash3) Hash(data []byte) uint {
 	}
 
 	// Tail
-	var k1 uint
+	var k1 uint32
 	
 	switch len(data) & 3 {
 	  case 3:
-	    k1 ^= uint(data[end4+2]) << 16
+	    k1 ^= uint32(data[end4+2]) << 16
 	    fallthrough
 	  case 2:
-	    k1 ^= uint(data[end4+1]) << 8
+	    k1 ^= uint32(data[end4+1]) << 8
 	    fallthrough
 	  case 1:
-	    k1 ^= uint(data[end4])
+	    k1 ^= uint32(data[end4])
 
 		k1 *= C1
 		k1 = (k1 << 15) | (k1 >> 17)
@@ -79,7 +79,7 @@ func (this *MurMurHash3) Hash(data []byte) uint {
 	}
 	
 	// Finalization
-	h1 ^= uint(len(data))
+	h1 ^= uint32(len(data))
 	h1 ^= (h1 >> 16)
 	h1 *= C4
 	h1 ^= (h1 >> 13)

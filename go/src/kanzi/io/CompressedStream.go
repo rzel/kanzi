@@ -294,7 +294,7 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 	mode := byte(0)
 	dataSize := uint(0)
 	compressedLength := blockLength
-	checksum := uint(0)
+	checksum := uint32(0)
 	iIdx := uint(0)
 	oIdx := uint(0)
 
@@ -614,7 +614,7 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 
 	mode := byte(r)
 	var compressedLength uint
-	checksum1 := uint(0)
+	checksum1 := uint32(0)
 
 	if (mode & SMALL_BLOCK_MASK) != 0 {
 		compressedLength = uint(mode & COPY_LENGTH_MASK)
@@ -645,7 +645,7 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 			return 0, NewIOError(err.Error(), ERR_READ_FILE)
 		}
 
-		checksum1 = uint(r)
+		checksum1 = uint32(r)
 	}
 
 	if len(this.buffer2) < int(this.blockSize) {

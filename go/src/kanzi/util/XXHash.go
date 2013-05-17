@@ -16,34 +16,34 @@ limitations under the License.
 package util
 
 // XXHash is an extremely fast hash algorithm. It was written by Yann Collet.
-// Port to Go of the original source code: https://code.google.com/p/xxhash/
+// Port to Go from the original source code: https://code.google.com/p/xxhash/
 
 const (
-	PRIME1 = uint(2654435761)
-	PRIME2 = uint(2246822519)
-	PRIME3 = uint(3266489917)
-	PRIME4 = uint(668265263)
-	PRIME5 = uint(374761393)
+	PRIME1 = uint32(2654435761)
+	PRIME2 = uint32(2246822519)
+	PRIME3 = uint32(3266489917)
+	PRIME4 = uint32(668265263)
+	PRIME5 = uint32(374761393)
 )
 
 type XXHash struct {
-	seed uint
+	seed uint32
 }
 
-func NewXXHash(seed uint) (*XXHash, error) {
+func NewXXHash(seed uint32) (*XXHash, error) {
 	this := new(XXHash)
 	this.seed = seed
 	return this, nil
 }
 
-func (this *XXHash) SetSeed(seed uint) {
+func (this *XXHash) SetSeed(seed uint32) {
 	this.seed = seed
 }
 
-func (this *XXHash) Hash(data []byte) uint {
-	length := uint(len(data))
-	var h32 uint
-	idx := uint(0)
+func (this *XXHash) Hash(data []byte) uint32 {
+	length := uint32(len(data))
+	var h32 uint32
+	idx := uint32(0)
 
 	if length >= 16 {
 		limit := length - 16
@@ -53,19 +53,19 @@ func (this *XXHash) Hash(data []byte) uint {
 		v4 := this.seed - PRIME1
 
 		for idx <= limit {
-			v1 += ((uint(data[idx]) | (uint(data[idx+1]) << 8) | (uint(data[idx+2]) << 16) |
-				(uint(data[idx+3]) << 24)) * PRIME2)
+			v1 += ((uint32(data[idx]) | (uint32(data[idx+1]) << 8) | (uint32(data[idx+2]) << 16) |
+				(uint32(data[idx+3]) << 24)) * PRIME2)
 			v1 = ((v1 << 13) | (v1 >> 19)) * PRIME1
-			v2 += ((uint(data[idx+4]) | (uint(data[idx+5]) << 8) | (uint(data[idx+6]) << 16) |
-				(uint(data[idx+7]) << 24)) * PRIME2)
+			v2 += ((uint32(data[idx+4]) | (uint32(data[idx+5]) << 8) | (uint32(data[idx+6]) << 16) |
+				(uint32(data[idx+7]) << 24)) * PRIME2)
 			v2 = ((v2 << 13) | (v2 >> 19)) * PRIME1
 
-			v3 += ((uint(data[idx+8]) | (uint(data[idx+9]) << 8) | (uint(data[idx+10]) << 16) |
-				(uint(data[idx+11]) << 24)) * PRIME2)
+			v3 += ((uint32(data[idx+8]) | (uint32(data[idx+9]) << 8) | (uint32(data[idx+10]) << 16) |
+				(uint32(data[idx+11]) << 24)) * PRIME2)
 			v3 = ((v3 << 13) | (v3 >> 19)) * PRIME1
 
-			v4 += ((uint(data[idx+12]) | (uint(data[idx+13]) << 8) | (uint(data[idx+14]) << 16) |
-				(uint(data[idx+15]) << 24)) * PRIME2)
+			v4 += ((uint32(data[idx+12]) | (uint32(data[idx+13]) << 8) | (uint32(data[idx+14]) << 16) |
+				(uint32(data[idx+15]) << 24)) * PRIME2)
 			v4 = ((v4 << 13) | (v4 >> 19)) * PRIME1
 			idx += 16
 		}
@@ -81,14 +81,14 @@ func (this *XXHash) Hash(data []byte) uint {
 	h32 += length
 
 	for idx <= length-4 {
-		h32 += ((uint(data[idx]) | (uint(data[idx+1]) << 8) | (uint(data[idx+2]) << 16) |
-			(uint(data[idx+3]) << 24)) * PRIME3)
+		h32 += ((uint32(data[idx]) | (uint32(data[idx+1]) << 8) | (uint32(data[idx+2]) << 16) |
+			(uint32(data[idx+3]) << 24)) * PRIME3)
 		h32 = ((h32 << 17) | (h32 >> 15)) * PRIME4
 		idx += 4
 	}
 
 	for idx < length {
-		h32 += (uint(data[idx]) * PRIME5)
+		h32 += (uint32(data[idx]) * PRIME5)
 		h32 = ((h32 << 11) | (h32 >> 21)) * PRIME1
 		idx++
 	}
