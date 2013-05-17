@@ -16,9 +16,10 @@ limitations under the License.
 package main
 
 import (
-	"kanzi/transform"
 	"fmt"
+	"kanzi/transform"
 	"math/rand"
+	"os"
 	"time"
 )
 
@@ -86,32 +87,52 @@ func main() {
 	}
 
 	// Speed Test
-	fmt.Printf("\nSpeed test")
-
-	input := make([]byte, 10000)
-	transformed := make([]byte, len(input))
-	mtft, _ := transform.NewMTFT(uint(0))
-	//reversed := make([]byte, len(input))
-	delta1 := int64(0)
-	delta2 := int64(0)
 	iter := 20000
+	size := 10000
+	fmt.Printf("\n\nSpeed test\n")
+	fmt.Printf("Iterations: %v\n", iter)
 
-	for ii := 0; ii < iter; ii++ {
-		for i := 0; i < len(input); i++ {
-			input[i] = byte(rand.Intn(64))
+	for jj := 0; jj < 3; jj++ {
+		input := make([]byte, size)
+		var output []byte
+		var reverse []byte
+		mtft, _ := transform.NewMTFT(uint(size))
+		delta1 := int64(0)
+		delta2 := int64(0)
+
+		for ii := 0; ii < iter; ii++ {
+			for i := 0; i < len(input); i++ {
+				input[i] = byte(rand.Intn(64))
+			}
+
+			before := time.Now()
+			output = mtft.Forward(input)
+			after := time.Now()
+			delta1 += after.Sub(before).Nanoseconds()
+			before = time.Now()
+			reverse = mtft.Inverse(output)
+			after = time.Now()
+			delta2 += after.Sub(before).Nanoseconds()
 		}
 
-		before := time.Now()
-		transformed = mtft.Forward(input)
-		after := time.Now()
-		delta1 += after.Sub(before).Nanoseconds()
-		before = time.Now()
-		mtft.Inverse(transformed)
-		after = time.Now()
-		delta2 += after.Sub(before).Nanoseconds()
-	}
+		idx := -1
 
-	fmt.Printf("\nIterations: %v", iter)
-	fmt.Printf("\nMTFT Forward transform [ms]: %v", delta1/1000000)
-	fmt.Printf("\nMTFT Reverse transform [ms]: %v", delta2/1000000)
+		// Sanity check
+		for i := range input {
+			if input[i] != reverse[i] {
+				idx = i
+				break
+			}
+		}
+
+		if idx >= 0 {
+			fmt.Printf("Failure at index %v (%v <-> %v)\n", idx, input[idx], reverse[idx])
+			os.Exit(1)
+		}
+
+		fmt.Printf("\nMTFT Forward transform [ms]: %v", delta1/1000000)
+		fmt.Printf("\nThroughput [KB/s]: %d", (int64(iter*size))*1000000/delta1*1000/1024)
+		fmt.Printf("\nMTFT Reverse transform [ms]: %v", delta2/1000000)
+		fmt.Printf("\nThroughput [KB/s]: %d", (int64(iter*size))*1000000/delta2*1000/1024)
+	}
 }
