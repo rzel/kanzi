@@ -36,7 +36,7 @@ public class FPAQEntropyDecoder extends BinaryEntropyDecoder
       super(ibs, p);
    }
 
-
+ 
    @Override
    public int decode(byte[] array, int blkptr, int len)
    {
@@ -53,7 +53,7 @@ public class FPAQEntropyDecoder extends BinaryEntropyDecoder
      {
         // Stop if decodeBit() != 0
         while ((this.decodeBit() == 0) && (i < end))
-           array[i++] = this.decodeByte();
+           array[i++] = this.decodeByte_();
      }
      catch (BitStreamException e)
      {
@@ -62,16 +62,11 @@ public class FPAQEntropyDecoder extends BinaryEntropyDecoder
 
      return i - blkptr;
    }
-
-
+ 
+ 
    @Override
-   public byte decodeByte()
+   protected byte decodeByte_()
    {
-      // Deferred initialization: the bistream may not be ready at build time
-      // Initialize 'current' with bytes read from the bitstream
-      if (this.isInitialized() == false)
-        this.initialize();
-
       int res = 1;
 
       // Custom logic to decode a byte

@@ -16,6 +16,7 @@ limitations under the License.
 package kanzi.entropy;
 
 
+import kanzi.BitStreamException;
 import kanzi.InputBitStream;
 
 
@@ -37,6 +38,7 @@ public class BinaryEntropyDecoder extends AbstractDecoder
       if (predictor == null)
          throw new NullPointerException("Invalid null predictor parameter");
 
+      // Defer stream reading. We are creating the object, we should not do any I/O
       this.low = 0L;
       this.high = 0xFFFFFFFFL;
       this.bitstream = bitstream;
@@ -46,13 +48,45 @@ public class BinaryEntropyDecoder extends AbstractDecoder
 
 
    @Override
+   public int decode(byte[] array, int blkptr, int len)
+   {
+     if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
+        return -1;
+
+     final int end = blkptr + len;
+     int i = blkptr;
+
+     if (this.isInitialized() == false)
+        this.initialize();
+
+     try
+     {
+        while (i < end)
+           array[i++] = this.decodeByte_();
+     }
+     catch (BitStreamException e)
+     {
+        // Fallback
+     }
+
+     return i - blkptr;
+   }
+   
+   
+   @Override
    public byte decodeByte()
    {
       // Deferred initialization: the bistream may not be ready at build time
       // Initialize 'current' with bytes read from the bitstream
       if (this.isInitialized() == false)
          this.initialize();
-
+   
+      return this.decodeByte_();
+   }
+   
+   
+   protected byte decodeByte_()
+   {
       int res = 0;
 
       for (int i=7; i>=0; i--)
