@@ -24,8 +24,8 @@ type Predictor interface {
 	// Used to update the probability model
 	Update(bit byte)
 
-	// Return the split value representing the  probability for each symbol 
-	// in the [0..4095] range. 
+	// Return the split value representing the  probability for each symbol
+	// in the [0..4095] range.
 	// E.G. 410 represents roughly a probability of 10% for 0
 	Get() uint
 }
@@ -128,6 +128,7 @@ func NewBinaryEntropyDecoder(bs kanzi.InputBitStream, predictor Predictor) (*Bin
 		return nil, errors.New("Predictor parameter cannot be null")
 	}
 
+	// Defer stream reading. We are creating the object, we should not do any I/O
 	this := new(BinaryEntropyDecoder)
 	this.predictor = predictor
 	this.low = 0
@@ -145,6 +146,10 @@ func (this *BinaryEntropyDecoder) DecodeByte() (byte, error) {
 		this.Initialize()
 	}
 
+	return this.decodeByte_()
+}
+
+func (this *BinaryEntropyDecoder) decodeByte_() (byte, error) {
 	res := 0
 
 	for i := 7; i >= 0; i-- {
@@ -224,7 +229,21 @@ func (this *BinaryEntropyDecoder) Read() error {
 }
 
 func (this *BinaryEntropyDecoder) Decode(block []byte) (int, error) {
-	return EntropyDecodeArray(this, block)
+	err := error(nil)
+
+	// Deferred initialization: the bistream may not be ready at build time
+	// Initialize 'current' with bytes read from the bitstream
+	if this.Initialized() == false {
+		this.Initialize()
+	}
+
+	for i := range block {
+		if block[i], err = this.decodeByte_(); err != nil {
+			return i, err
+		}
+	}
+
+	return len(block), err
 }
 
 func (this *BinaryEntropyDecoder) BitStream() kanzi.InputBitStream {

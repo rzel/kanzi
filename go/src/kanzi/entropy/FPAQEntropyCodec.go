@@ -59,10 +59,10 @@ func (this *FPAQPredictor) Update(bit byte) {
 	}
 }
 
-// Return the split value representing the  probability for each symbol 
-// in the [0..4095] range. 
+// Return the split value representing the probability for each symbol
+// in the [0..4095] range.
 // E.G. 410 represents roughly a probability of 10% for 0
-// Assume stream of 9-bit symbols   
+// Assume stream of 9-bit symbols
 func (this *FPAQPredictor) Get() uint {
 	st := this.states[this.ctxIdx]
 	num := uint(st[1]+1) << 12
@@ -143,11 +143,16 @@ func (this *FPAQEntropyDecoder) DecodeByte() (byte, error) {
 		this.Initialize()
 	}
 
+	return this.decodeByte_()
+}
+
+func (this *FPAQEntropyDecoder) decodeByte_() (byte, error) {
 	res := 1
 
 	// Custom logic to decode a byte
 	for res < 256 {
 		res <<= 1
+
 		read, err := this.DecodeBit()
 
 		if err != nil {
@@ -169,20 +174,13 @@ func (this *FPAQEntropyDecoder) Decode(block []byte) (int, error) {
 		this.Initialize()
 	}
 
-	err := error(nil)
-	bit := 0
 	i := 0
+	bit, err := this.DecodeBit()
 
-	for i = 0; i < len(block); i++ {
-		bit, err = this.DecodeBit()
-
-		for err == nil && bit == 0 && i < len(block) {
-			block[i], err = this.DecodeByte()
-
-			if err == nil {
-				i++
-				bit, err = this.DecodeBit()
-			}
+	for err == nil && bit == 0 && i < len(block) {
+		if block[i], err = this.decodeByte_(); err == nil {
+			i++
+			bit, err = this.DecodeBit()
 		}
 	}
 
