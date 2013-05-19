@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
+import kanzi.BitStreamException;
 import kanzi.InputBitStream;
 
 
@@ -36,9 +37,53 @@ public final class NullEntropyDecoder extends AbstractDecoder
         
      
     @Override
+    public int decode(byte[] array, int blkptr, int len)
+    {
+       if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
+          return -1;
+
+       final int len8 = len & -8;
+       final int end8 = blkptr + len8;
+       int i = blkptr;
+
+       try
+       {
+          while (i < end8)
+          {
+             final long val = this.decodeLong();
+             array[i]   = (byte) (val >>> 56);
+             array[i+1] = (byte) (val >>> 48);
+             array[i+2] = (byte) (val >>> 40);
+             array[i+3] = (byte) (val >>> 32);
+             array[i+4] = (byte) (val >>> 24);
+             array[i+5] = (byte) (val >>> 16);
+             array[i+6] = (byte) (val >>> 8);
+             array[i+7] = (byte) (val & 0xFF);
+             i += 8;
+          }
+
+          while (i < blkptr + len)
+             array[i++] = this.decodeByte();
+       }
+       catch (BitStreamException e)
+       {
+          return i - blkptr;
+       }
+
+       return len;
+    }
+
+    
+    @Override
     public byte decodeByte()
     {
        return (byte) this.bitstream.readBits(8);
+    }
+
+    
+    private long decodeLong()
+    {
+       return this.bitstream.readBits(64);
     }
    
      

@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
+import kanzi.BitStreamException;
 import kanzi.OutputBitStream;
 
 
@@ -36,12 +37,63 @@ public final class NullEntropyEncoder extends AbstractEncoder
 
 
     @Override
+    public int encode(byte[] array, int blkptr, int len)
+    {
+        if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
+           return -1;
+
+        final int len8 = len & -8;
+        final int end8 = blkptr + len8;
+        int i = blkptr;
+
+        try
+        {
+           while (i < end8)
+           {            
+              if (this.encodeLong(array, i) == false)
+                 return i;
+
+              i += 8;
+           }
+           
+           while (i < blkptr + len)
+           {            
+              if (this.encodeByte(array[i]) == false)
+                 return i;
+
+              i++;
+           }
+        }
+        catch (BitStreamException e)
+        {
+           return i - blkptr;
+        }
+
+        return len;
+    }
+
+    
+    @Override
     public boolean encodeByte(byte val)
     {
         return (this.bitstream.writeBits(val, 8) == 8);
     }
 
+    
+    private boolean encodeLong(byte[] array, int offset)
+    {
+        long val = ((long) (array[offset] & 0xFF)) << 56;
+        val |= ((long) (array[offset+1] & 0xFF) << 48);
+        val |= ((long) (array[offset+2] & 0xFF) << 40);
+        val |= ((long) (array[offset+3] & 0xFF) << 32);
+        val |= ((long) (array[offset+4] & 0xFF) << 24);
+        val |= ((long) (array[offset+5] & 0xFF) << 16);
+        val |= ((long) (array[offset+6] & 0xFF) << 8);
+        val |=  (long) (array[offset+7] & 0xFF);
+        return (this.bitstream.writeBits(val, 64) == 64);
+    }
 
+    
     @Override
     public void dispose()
     {
