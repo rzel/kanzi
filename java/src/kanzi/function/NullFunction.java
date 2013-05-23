@@ -72,7 +72,34 @@ public class NullFunction implements ByteFunction
       if (destination.index + len > destination.array.length)
          return false;
 
-      System.arraycopy(source.array, source.index, destination.array, destination.index, len);
+      if (source.array == destination.array)
+      {
+         final int len8 = len & - 8;
+         
+         for (int i=0; i<len8; i+=8)   
+         {
+            final int srcIdx = i + source.index;
+            final int dstIdx = i + destination.index;
+            destination.array[dstIdx]   = source.array[srcIdx];
+            destination.array[dstIdx+1] = source.array[srcIdx+1];
+            destination.array[dstIdx+2] = source.array[srcIdx+2];
+            destination.array[dstIdx+3] = source.array[srcIdx+3];
+            destination.array[dstIdx+4] = source.array[srcIdx+4];
+            destination.array[dstIdx+5] = source.array[srcIdx+5];
+            destination.array[dstIdx+6] = source.array[srcIdx+6];
+            destination.array[dstIdx+7] = source.array[srcIdx+7];                       
+         }
+         
+         for (int i=len8; i<len; i++)
+            destination.array[destination.index+i] = source.array[source.index+i];
+      }
+      else
+      {
+         System.arraycopy(source.array, source.index, destination.array, destination.index, len);
+      }
+      
+      source.index += len;
+      destination.index += len;
       return true;
    }
 }
