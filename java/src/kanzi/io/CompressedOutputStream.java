@@ -38,7 +38,6 @@ public class CompressedOutputStream extends OutputStream
    private static final int DEFAULT_BLOCK_SIZE       = 1024 * 1024; // Default block size
    private static final int BITSTREAM_TYPE           = 0x4B414E5A; // "KANZ"
    private static final int BITSTREAM_FORMAT_VERSION = 2;
-   private static final int DEFAULT_BUFFER_SIZE      = 32768;
    private static final int COPY_LENGTH_MASK         = 0x0F;
    private static final int SMALL_BLOCK_MASK         = 0x80;
    private static final int SKIP_FUNCTION_MASK       = 0x40;
@@ -81,7 +80,7 @@ public class CompressedOutputStream extends OutputStream
       if (blockSize < MIN_BLOCK_SIZE)
          throw new IllegalArgumentException("The block size must be at least "+MIN_BLOCK_SIZE);
 
-      this.obs = new DefaultOutputBitStream(os, DEFAULT_BUFFER_SIZE);
+      this.obs = new DefaultOutputBitStream(os, blockSize);
 
       // Check entropy type validity (throws if not valid)
       char type = entropyCodec.toUpperCase().charAt(0);

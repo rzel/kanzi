@@ -30,13 +30,21 @@ type DefaultInputBitStream struct {
 	buffer      []byte
 }
 
-func NewDefaultInputBitStream(stream kanzi.InputStream) (*DefaultInputBitStream, error) {
+func NewDefaultInputBitStream(stream kanzi.InputStream, bufferSize uint) (*DefaultInputBitStream, error) {
 	if stream == nil {
-		return nil, errors.New("The stream cannot be null")
+		return nil, errors.New("Invalid null input stream parameter")
+	}
+
+	if bufferSize < 1024 {
+		return nil, errors.New("Invalid buffer size parameter (must be at least 1024 bytes)")
+	}
+
+	if bufferSize > 16*1024*1024 {
+		return nil, errors.New("Invalid buffer size parameter (must be at most 16 MB)")
 	}
 
 	this := new(DefaultInputBitStream)
-	this.buffer = make([]byte, 16384)
+	this.buffer = make([]byte, bufferSize)
 	this.is = stream
 	this.bitIndex = 7
 	this.position = -1

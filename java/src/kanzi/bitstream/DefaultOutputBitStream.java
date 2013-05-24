@@ -36,8 +36,11 @@ public final class DefaultOutputBitStream implements OutputBitStream
       if (os == null)
          throw new NullPointerException("Invalid null output stream parameter");
    
-      if (bufferSize < 64)
-         throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 64)");
+      if (bufferSize < 1024)
+         throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 1024 bytes)");
+
+      if (bufferSize > 16*1024*1024)
+         throw new IllegalArgumentException("Invalid buffer size parameter (must be at most 16 MB)");
 
       this.os = os;
       this.buffer = new byte[bufferSize];

@@ -16,8 +16,8 @@ limitations under the License.
 package bitstream
 
 import (
-	"kanzi"
 	"errors"
+	"kanzi"
 )
 
 type DefaultOutputBitStream struct {
@@ -29,13 +29,21 @@ type DefaultOutputBitStream struct {
 	buffer   []byte
 }
 
-func NewDefaultOutputBitStream(stream kanzi.OutputStream) (*DefaultOutputBitStream, error) {
+func NewDefaultOutputBitStream(stream kanzi.OutputStream, bufferSize uint) (*DefaultOutputBitStream, error) {
 	if stream == nil {
-		return nil, errors.New("The stream cannot be null")
+		return nil, errors.New("Invalid null output stream parameter")
+	}
+
+	if bufferSize < 1024 {
+		return nil, errors.New("Invalid buffer size parameter (must be at least 1024 bytes)")
+	}
+
+	if bufferSize > 16*1024*1024 {
+		return nil, errors.New("Invalid buffer size parameter (must be at most 16 MB)")
 	}
 
 	this := new(DefaultOutputBitStream)
-	this.buffer = make([]byte, 16384)
+	this.buffer = make([]byte, bufferSize)
 	this.os = stream
 	this.bitIndex = 7
 	return this, nil

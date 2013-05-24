@@ -27,10 +27,9 @@ import (
 )
 
 const (
-	DEFAULT_BLOCK_SIZE       = 1024 * 1024 // Default block size
 	BITSTREAM_TYPE           = 0x4B414E5A  // "KANZ"
 	BITSTREAM_FORMAT_VERSION = 2
-	DEFAULT_BUFFER_SIZE      = 32768
+	DEFAULT_BUFFER_SIZE      = 1024 * 1024
 	COPY_LENGTH_MASK         = 0x0F
 	SMALL_BLOCK_MASK         = 0x80
 	SKIP_FUNCTION_MASK       = 0x40
@@ -116,7 +115,7 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 	this := new(CompressedOutputStream)
 	var err error
 
-	if this.obs, err = bitstream.NewDefaultOutputBitStream(os); err != nil {
+	if this.obs, err = bitstream.NewDefaultOutputBitStream(os, blockSize); err != nil {
 		return this, err
 	}
 
@@ -279,8 +278,8 @@ func (this *CompressedOutputStream) GetWritten() uint64 {
 }
 
 func (this *CompressedOutputStream) encode(data []byte) error {
-    blockLength := uint(len(data))
-    
+	blockLength := uint(len(data))
+
 	if len(this.buffer2) < int(blockLength*5/4) {
 		this.buffer2 = make([]byte, blockLength*5/4)
 	}
@@ -409,7 +408,7 @@ func NewCompressedInputStream(is kanzi.InputStream,
 	this.debugWriter = debugWriter
 	var err error
 
-	if this.ibs, err = bitstream.NewDefaultInputBitStream(is); err != nil {
+	if this.ibs, err = bitstream.NewDefaultInputBitStream(is, DEFAULT_BUFFER_SIZE); err != nil {
 		errMsg := fmt.Sprintf("Cannot create input bit stream: %v", err)
 		return nil, NewIOError(errMsg, ERR_CREATE_BITSTREAM)
 	}
@@ -470,7 +469,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 	// Read block size
 	this.blockSize = uint(header & uint64(0x03FFFFFF))
 
-	if this.blockSize > uint(function.MAX_BLOCK_SIZE) {
+	if this.blockSize > MAX_BLOCK_SIZE {
 		errMsg := fmt.Sprintf("Invalid block size read from file: %d", this.blockSize)
 		return NewIOError(errMsg, ERR_BLOCK_SIZE)
 	}

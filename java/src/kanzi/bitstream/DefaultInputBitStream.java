@@ -36,9 +36,12 @@ public final class DefaultInputBitStream implements InputBitStream
    {
       if (is == null)
          throw new NullPointerException("Invalid null input stream parameter");
+  
+      if (bufferSize < 1024)
+         throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 1024 bytes)");
 
-      if (bufferSize < 64)
-         throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 64)");
+      if (bufferSize > 16*1024*1024)
+         throw new IllegalArgumentException("Invalid buffer size parameter (must be at most 16 MB)");
 
       this.is = is;
       this.buffer = new byte[bufferSize];
