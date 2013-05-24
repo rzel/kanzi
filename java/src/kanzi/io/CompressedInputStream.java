@@ -35,7 +35,7 @@ public class CompressedInputStream extends InputStream
 {
    private static final int BITSTREAM_TYPE           = 0x4B414E5A; // "KANZ"
    private static final int BITSTREAM_FORMAT_VERSION = 2;
-   private static final int DEFAULT_BUFFER_SIZE      = 32768;
+   private static final int DEFAULT_BUFFER_SIZE      = 1024*1024;
    private static final int COPY_LENGTH_MASK         = 0x0F;
    private static final int SMALL_BLOCK_MASK         = 0x80;
    private static final int SKIP_FUNCTION_MASK       = 0x40;
