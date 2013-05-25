@@ -24,6 +24,7 @@ public class FunctionFactory
    public static final byte RLT_TYPE     = 82; // 'R'
    public static final byte SNAPPY_TYPE  = 83; // 'S'
    public static final byte ZLT_TYPE     = 90; // 'Z'
+   public static final byte LZ4_TYPE     = 76; // 'L'
    public static final byte NONE_TYPE    = 78; // 'N'
    
    
@@ -35,6 +36,8 @@ public class FunctionFactory
             return new BlockCodec(size);
          case SNAPPY_TYPE:
             return new SnappyCodec(size);
+         case LZ4_TYPE:
+            return new LZ4Codec(size);
          case RLT_TYPE:
             return new RLT(size);
          case ZLT_TYPE:
@@ -55,6 +58,8 @@ public class FunctionFactory
             return "BLOCK";
          case SNAPPY_TYPE:
             return "SNAPPY";
+         case LZ4_TYPE:
+            return "LZ4";
          case RLT_TYPE:
             return "RLT";
          case ZLT_TYPE:

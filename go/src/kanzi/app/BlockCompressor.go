@@ -53,7 +53,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	var outputName = flag.String("output", "", "optional name of the output file (defaults to <input.knz>)")
 	var blockSize = flag.Int("block", 100000, "size of the blocks (max 16 MB / min 1KB / default 100 KB)")
 	var entropy = flag.String("entropy", "Huffman", "entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]")
-	var function = flag.String("transform", "Block", "transform to use [None|Block*|Snappy|RLT]")
+	var function = flag.String("transform", "Block", "transform to use [None|Block*|Snappy|LZ4|RLT]")
 	var cksum = flag.Bool("checksum", false, "enable block checksum")
 
 	// Parse

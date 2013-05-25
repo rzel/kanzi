@@ -279,7 +279,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
                printOut("-output=<outputName> : optional name of the output file (defaults to <input.knz>)", true);
                printOut("-block=<size>        : size of the blocks (max 16 MB / min 1KB / default 100 KB)", true);
                printOut("-entropy=            : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true);
-               printOut("-transform=          : transform to use [None|Block*|Snappy|RLT]", true);
+               printOut("-transform=          : transform to use [None|Block*|Snappy|LZ4|RLT]", true);
                printOut("-checksum =          : enable block checksum", true);
                System.exit(0);
            }
