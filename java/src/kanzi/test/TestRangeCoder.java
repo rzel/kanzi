@@ -78,7 +78,7 @@ public class TestRangeCoder
                 //dbgbs.flush();
                 rc.dispose();
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1024);
                 RangeDecoder rd = new RangeDecoder(bs2);
                 System.out.println("\nDecoded:");
                 int len = values.length; // buf.length >> 3;

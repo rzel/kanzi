@@ -77,7 +77,7 @@ public class TestFPAQEntropyCoder
                 //dbgbs.flush();
                 fpec.dispose();
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1024);
                 FPAQEntropyDecoder fped = new FPAQEntropyDecoder(bs2, new FPAQPredictor());
                 System.out.println("\nDecoded:");
                 boolean ok = true;

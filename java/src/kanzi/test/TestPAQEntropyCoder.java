@@ -72,7 +72,7 @@ public class TestPAQEntropyCoder
                 bec.encode(values, 0, values.length);
                 bec.dispose();
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 64);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1024);
                 BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new PAQPredictor());
                 System.out.println("\nDecoded:");
                 boolean ok = true;
