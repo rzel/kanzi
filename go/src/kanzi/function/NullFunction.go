@@ -49,11 +49,7 @@ func doCopy(src, dst []byte, sz uint) (uint, uint, error) {
 		return uint(0), uint(0), errors.New("Destination buffer too small")
 	}
 
-	if bytes.Equal(src, dst) {
-		for i := uint(0); i < length; i++ {
-			dst[i] = src[i]
-		}
-	} else {
+	if !bytes.Equal(src, dst) {
 		copy(dst, src[0:length])
 	}
 
