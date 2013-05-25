@@ -34,7 +34,7 @@ func main() {
 
 	before := time.Now()
 	sum := int64(0)
-	bs, _ := bitstream.NewDefaultInputBitStream(file)
+	bs, _ := bitstream.NewDefaultInputBitStream(file, 16384)
 
 	for i := uint64(0); i < 1000000; i++ {
 		//		fmt.Println(bs.ReadBits(1 + uint(i&63)))

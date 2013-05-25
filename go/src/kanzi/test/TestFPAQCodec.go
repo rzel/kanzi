@@ -71,7 +71,7 @@ func TestCorrectness(filename string) {
 		}
 
 		defer oFile.Close()
-		obs, _ := bitstream.NewDefaultOutputBitStream(oFile)
+		obs, _ := bitstream.NewDefaultOutputBitStream(oFile, 16384)
 		dbgbs, _ := bitstream.NewDebugOutputBitStream(obs, os.Stdout)
 		dbgbs.ShowByte(true)
 		dbgbs.Mark(true)
@@ -96,7 +96,7 @@ func TestCorrectness(filename string) {
 		}
 
 		defer iFile.Close()
-		ibs, _ := bitstream.NewDefaultInputBitStream(iFile)
+		ibs, _ := bitstream.NewDefaultInputBitStream(iFile, 16384)
 		dbgbs2, _ := bitstream.NewDebugInputBitStream(ibs, os.Stdout)
 		dbgbs2.ShowByte(true)
 		//dbgbs2.Mark(true)
@@ -161,14 +161,14 @@ func TestSpeed(filename string) {
 		delta2 := int64(0)
 		
 		size := 50000
-		iter := 1000
+		iter := 2000
 		values1 := make([]byte, size)
 		values2 := make([]byte, size)
 		predictor1, _ := entropy.NewFPAQPredictor()
-		obs, _ := bitstream.NewDefaultOutputBitStream(oFile)
+		obs, _ := bitstream.NewDefaultOutputBitStream(oFile, 16384)
 		rc, _ := entropy.NewFPAQEntropyEncoder(obs, predictor1)
 		predictor2, _ := entropy.NewFPAQPredictor()
-		ibs, _ := bitstream.NewDefaultInputBitStream(iFile)
+		ibs, _ := bitstream.NewDefaultInputBitStream(iFile, 16384)
 		rd, _ := entropy.NewFPAQEntropyDecoder(ibs, predictor2)
 
 		for ii := 0; ii < iter; ii++ {

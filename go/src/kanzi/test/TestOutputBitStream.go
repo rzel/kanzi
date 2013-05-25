@@ -41,7 +41,7 @@ func main() {
 	}
 
 	before := time.Now()
-	bs, _ := bitstream.NewDefaultOutputBitStream(file)
+	bs, _ := bitstream.NewDefaultOutputBitStream(file, 16384)
 
 	for i := uint64(0); i < 1000000; i++ {
 		bs.WriteBits(i, 1+uint(i&63))
