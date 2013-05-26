@@ -180,17 +180,26 @@ public class LZ4Codec implements ByteFunction
 
       while (true)
       {
-         int forward = srcIdx;
          int attempts = DEFAULT_FIND_MATCH_ATTEMPTS;
          int ref;
 
          // Find a match
-         do
+         while (true)
          {
-            srcIdx = forward;
-            forward += (attempts >>> SKIP_STRENGTH);
+            final int val = ((src[srcIdx] & 0xFF) << SHIFT1) | ((src[srcIdx+1] & 0xFF) << SHIFT2) |
+                  ((src[srcIdx+2] & 0xFF) << SHIFT3) | ((src[srcIdx+3] & 0xFF) << SHIFT4);
+            final int h = (val * HASH_SEED) >>> hashShift;
+            ref = base + (table[h] & hashMask);
+            table[h] = srcIdx - base;
 
-            if (forward > mfLimit)
+            if ((ref >= srcIdx - dist) && (src[ref] == src[srcIdx]) && 
+                 (src[ref+1] == src[srcIdx+1]) && (src[ref+2] == src[srcIdx+2]) &&
+                 (src[ref+3] == src[srcIdx+3]))
+                   break;
+           
+            srcIdx += (attempts >>> SKIP_STRENGTH);
+
+            if (srcIdx > mfLimit)
             {
                source.index = anchor;
                destination.index = dstIdx;
@@ -199,16 +208,8 @@ public class LZ4Codec implements ByteFunction
             }
 
             attempts++;
-            final int val = ((src[srcIdx] & 0xFF) << SHIFT1) | ((src[srcIdx+1] & 0xFF) << SHIFT2) |
-                  ((src[srcIdx+2] & 0xFF) << SHIFT3) | ((src[srcIdx+3] & 0xFF) << SHIFT4);
-            final int h = (val * HASH_SEED) >>> hashShift;
-            ref = base + (table[h] & hashMask);
-            table[h] = srcIdx - base;
          }
-         while ((ref < srcIdx - dist) || (src[ref] != src[srcIdx]) || 
-                 (src[ref+1] != src[srcIdx+1]) || (src[ref+2] != src[srcIdx+2]) || 
-                 (src[ref+3] != src[srcIdx+3]));
-
+         
          // Catch up
          while ((ref > srcIdx0) && (srcIdx > anchor) && (src[ref-1] == src[srcIdx-1]))
          {

@@ -26,7 +26,6 @@ import (
 // More details on the algorithm are available here:
 // http://fastcompression.blogspot.com/2011/05/lz4-explained.html
 
-
 const (
 	HASH_SEED                   = 0x9E3779B1
 	HASH_LOG                    = 12
@@ -186,29 +185,17 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 		table[i] = 0
 	}
 
-	// Find a match
-	for true {
-		forward := srcIdx
+	for {
 		attempts := DEFAULT_FIND_MATCH_ATTEMPTS
 		var ref int
 
 		// Find a match
-		for true {
-			srcIdx = forward
-			forward += (attempts >> SKIP_STRENGTH)
-
-			if forward > mfLimit {
-				_, dstDelta, _ := emitLiterals(src[anchor:], dst[dstIdx:], srcEnd-anchor, true)
-				return uint(srcEnd), uint(dstIdx + dstDelta), error(nil)
-			}
-
-			attempts++
-			var val32, h32 uint32
-			val32 = uint32(src[srcIdx]) << SHIFT1
+		for {
+			val32 := uint32(src[srcIdx]) << SHIFT1
 			val32 |= (uint32(src[srcIdx+1]) << SHIFT2)
 			val32 |= (uint32(src[srcIdx+2]) << SHIFT3)
 			val32 |= (uint32(src[srcIdx+3]) << SHIFT4)
-			h32 = (val32 * HASH_SEED) >> hashShift
+			h32 := (val32 * HASH_SEED) >> hashShift
 			ref = base + (table[h32] & hashMask)
 			table[h32] = srcIdx - base
 
@@ -217,6 +204,15 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 				(src[ref+3] == src[srcIdx+3]) {
 				break
 			}
+
+			srcIdx += (attempts >> SKIP_STRENGTH)
+
+			if srcIdx > mfLimit {
+				_, dstDelta, _ := emitLiterals(src[anchor:], dst[dstIdx:], srcEnd-anchor, true)
+				return uint(srcEnd), uint(dstIdx + dstDelta), error(nil)
+			}
+
+			attempts++
 		}
 
 		// Catch up
@@ -245,7 +241,7 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 			idx1 := srcIdx
 			idx2 := ref + MIN_MATCH
 
-			for (src[idx2] == src[idx1]) && (idx1 < srcLimit) {
+			for (idx1 < srcLimit) && (src[idx2] == src[idx1]) {
 				idx1++
 				idx2++
 				matchLen++
@@ -268,18 +264,17 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 			}
 
 			// Test next position
-			var val32_1, val32_2, h32_1, h32_2 uint32
-			val32_1 = uint32(src[srcIdx-2]) << SHIFT1
+			val32_1 := uint32(src[srcIdx-2]) << SHIFT1
 			val32_1 |= (uint32(src[srcIdx-1]) << SHIFT2)
 			val32_1 |= (uint32(src[srcIdx]) << SHIFT3)
 			val32_1 |= (uint32(src[srcIdx+1]) << SHIFT4)
-			h32_1 = (val32_1 * HASH_SEED) >> hashShift
+			h32_1 := (val32_1 * HASH_SEED) >> hashShift
 
-			val32_2 = uint32(src[srcIdx]) << SHIFT1
+			val32_2 := uint32(src[srcIdx]) << SHIFT1
 			val32_2 |= (uint32(src[srcIdx+1]) << SHIFT2)
 			val32_2 |= (uint32(src[srcIdx+2]) << SHIFT3)
 			val32_2 |= (uint32(src[srcIdx+3]) << SHIFT4)
-			h32_2 = (val32_2 * HASH_SEED) >> hashShift
+			h32_2 := (val32_2 * HASH_SEED) >> hashShift
 
 			table[h32_1] = srcIdx - 2 - base
 			ref = base + (table[h32_2] & hashMask)
