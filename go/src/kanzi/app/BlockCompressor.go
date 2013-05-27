@@ -107,6 +107,13 @@ func main() {
 		os.Exit(io.ERR_CREATE_COMPRESSOR)
 	}
 
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("An unexpected error occured during compression: %v\n", r.(error))
+			os.Exit(io.ERR_UNKNOWN)
+		}
+	}()
+
 	code, _ := bc.call()
 	os.Exit(code)
 }

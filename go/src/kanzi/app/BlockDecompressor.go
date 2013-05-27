@@ -70,10 +70,10 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 		os.Exit(io.ERR_MISSING_FILENAME)
 	}
 
-    if strings.HasSuffix(*inputName, ".knz") == false {
+	if strings.HasSuffix(*inputName, ".knz") == false {
 		printOut("Warning: the input file name does not end with the .KNZ extension", true)
 	}
-	
+
 	if len(*outputName) == 0 {
 		if strings.HasSuffix(*inputName, ".knz") == false {
 			*outputName = *inputName + ".tmp"
@@ -97,6 +97,13 @@ func main() {
 		fmt.Printf("Failed to create block decompressor: %v\n", err)
 		os.Exit(io.ERR_CREATE_DECOMPRESSOR)
 	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("An unexpected error occured during decompression: %v\n", r.(error))
+			os.Exit(io.ERR_UNKNOWN)
+		}
+	}()
 
 	code, _ := bd.call()
 	os.Exit(code)
@@ -180,7 +187,6 @@ func (this *BlockDecompressor) call() (int, uint64) {
 			}
 		}
 
-
 		if decoded > 0 {
 			_, err = output.Write(buffer[0:decoded])
 
@@ -199,7 +205,7 @@ func (this *BlockDecompressor) call() (int, uint64) {
 
 	after := time.Now()
 	delta := after.Sub(before).Nanoseconds() / 1000000 // convert to ms
-	
+
 	printOut("", !this.silent)
 	msg = fmt.Sprintf("Decoding:          %d ms", delta)
 	printOut(msg, !this.silent)
@@ -207,12 +213,12 @@ func (this *BlockDecompressor) call() (int, uint64) {
 	printOut(msg, !this.silent)
 	msg = fmt.Sprintf("Output size:       %d", read)
 	printOut(msg, !this.silent)
-	
+
 	if delta > 0 {
 		msg = fmt.Sprintf("Throughput (KB/s): %d", ((read*uint64(1000))>>10)/uint64(delta))
 		printOut(msg, !this.silent)
 	}
-	
+
 	printOut("", !this.silent)
 	return 0, cis.GetRead()
 }
