@@ -286,11 +286,12 @@ public class CompressedOutputStream extends OutputStream
             // Forward transform
             if ((transform.forward(data, this.iba2) == false) || (this.iba2.index >= blockLength))
             {
+               data.index = savedIdx;
+               
                // Transform failed or did not compress, skip and copy block
                if (data.array != this.iba2.array)
                   System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
 
-               data.index = savedIdx;
                data.index += blockLength;
                this.iba2.index = blockLength;
                mode |= SKIP_FUNCTION_MASK;
