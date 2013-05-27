@@ -44,7 +44,8 @@ public class CompressedOutputStream extends OutputStream
    private static final int MIN_BLOCK_SIZE           = 1024;
    private static final int MAX_BLOCK_SIZE           = (16*1024*1024) - 4;
    private static final int SMALL_BLOCK_SIZE         = 15;
-
+   private static final byte[] EMPTY_BYTE_ARRAY      = new byte[0];
+ 
    private final int blockSize;
    private final XXHash hasher;
    private final IndexedByteArray iba1;
@@ -102,7 +103,7 @@ public class CompressedOutputStream extends OutputStream
       this.blockSize = blockSize;
       this.hasher = (checksum == true) ? new XXHash(BITSTREAM_TYPE) : null;
       this.iba1 = new IndexedByteArray(new byte[blockSize], 0);
-      this.iba2 = new IndexedByteArray(new byte[0], 0);
+      this.iba2 = new IndexedByteArray(EMPTY_BYTE_ARRAY, 0);
       this.ds = debug;
    }
 
@@ -250,7 +251,9 @@ public class CompressedOutputStream extends OutputStream
 
       try
       {
-         if (this.iba2.array.length < blockLength*5/4)
+         if (this.transformType == 'N')
+            this.iba2.array = data.array; //share
+         else if (this.iba2.array.length < blockLength*5/4) //ad-hoc size
              this.iba2.array = new byte[blockLength*5/4];
 
          ByteFunction transform = new FunctionFactory().newFunction(blockLength,
@@ -265,7 +268,9 @@ public class CompressedOutputStream extends OutputStream
          if (blockLength <= SMALL_BLOCK_SIZE)
          {
             // Just copy
-            System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
+            if (data.array != this.iba2.array)
+               System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
+            
             data.index += blockLength;
             this.iba2.index = blockLength;
             mode = (byte) (SMALL_BLOCK_MASK | (blockLength & COPY_LENGTH_MASK));
@@ -282,8 +287,10 @@ public class CompressedOutputStream extends OutputStream
             if ((transform.forward(data, this.iba2) == false) || (this.iba2.index >= blockLength))
             {
                // Transform failed or did not compress, skip and copy block
+               if (data.array != this.iba2.array)
+                  System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
+
                data.index = savedIdx;
-               System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
                data.index += blockLength;
                this.iba2.index = blockLength;
                mode |= SKIP_FUNCTION_MASK;
@@ -330,7 +337,7 @@ public class CompressedOutputStream extends OutputStream
 
             this.ds.println();
          }
-
+            
          return encoded;
       }
       catch (Exception e)
@@ -339,6 +346,10 @@ public class CompressedOutputStream extends OutputStream
       }
       finally
       {
+         // Reset buffer in case another block uses a different transform
+         if (this.transformType == 'N')
+            this.iba2.array = EMPTY_BYTE_ARRAY;
+
          if (ee != null)
            ee.dispose();
       }

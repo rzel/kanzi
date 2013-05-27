@@ -16,6 +16,7 @@ limitations under the License.
 package io
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -27,7 +28,7 @@ import (
 )
 
 const (
-	BITSTREAM_TYPE           = 0x4B414E5A  // "KANZ"
+	BITSTREAM_TYPE           = 0x4B414E5A // "KANZ"
 	BITSTREAM_FORMAT_VERSION = 2
 	DEFAULT_BUFFER_SIZE      = 1024 * 1024
 	COPY_LENGTH_MASK         = 0x0F
@@ -54,6 +55,10 @@ const (
 	ERR_INVALID_FILE        = -15
 	ERR_STREAM_VERSION      = -16
 	ERR_UNKNOWN             = -127
+)
+
+var (
+	EMPTY_BYTE_SLICE = make([]byte, 0)
 )
 
 type IOError struct {
@@ -147,7 +152,7 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 	}
 
 	this.buffer1 = make([]byte, blockSize)
-	this.buffer2 = make([]byte, 0)
+	this.buffer2 = EMPTY_BYTE_SLICE
 	this.debugWriter = debugWriter
 	return this, nil
 }
@@ -280,7 +285,9 @@ func (this *CompressedOutputStream) GetWritten() uint64 {
 func (this *CompressedOutputStream) encode(data []byte) error {
 	blockLength := uint(len(data))
 
-	if len(this.buffer2) < int(blockLength*5/4) {
+	if this.transformType == 'N' {
+		this.buffer2 = data // share
+	} else if len(this.buffer2) < int(blockLength*5/4) { // ad-hoc size
 		this.buffer2 = make([]byte, blockLength*5/4)
 	}
 
@@ -299,7 +306,10 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 
 	if blockLength <= SMALL_BLOCK_SIZE {
 		// Just copy
-		copy(this.buffer2, data[0:blockLength])
+		if !bytes.Equal(this.buffer2, data) {
+			copy(this.buffer2, data[0:blockLength])
+		}
+
 		iIdx += blockLength
 		oIdx += blockLength
 		mode = byte(SMALL_BLOCK_SIZE | (blockLength & COPY_LENGTH_MASK))
@@ -375,6 +385,11 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 		}
 
 		fmt.Fprintln(this.debugWriter, "")
+	}
+
+	// Reset buffer in case another block uses a different transform
+	if this.transformType == 'N' {
+		this.buffer2 = EMPTY_BYTE_SLICE
 	}
 
 	return nil
@@ -647,7 +662,9 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 		checksum1 = uint32(r)
 	}
 
-	if len(this.buffer2) < int(this.blockSize) {
+	if this.transformType == 'N' {
+		this.buffer2 = data // share
+	} else if len(this.buffer2) < int(this.blockSize) {
 		this.buffer2 = make([]byte, this.blockSize)
 	}
 
@@ -661,7 +678,10 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 	var decoded int
 
 	if ((mode & SMALL_BLOCK_MASK) != 0) || ((mode & SKIP_FUNCTION_MASK) != 0) {
-		copy(data, this.buffer2[0:compressedLength])
+		if !bytes.Equal(this.buffer2, data) {
+			copy(data, this.buffer2[0:compressedLength])
+		}
+
 		decoded = int(compressedLength)
 	} else {
 		// Each block is decoded separately
@@ -702,6 +722,11 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 			}
 		}
 
+	}
+
+	// Reset buffer in case another block uses a different transform
+	if this.transformType == 'N' {
+		this.buffer2 = EMPTY_BYTE_SLICE
 	}
 
 	return decoded, nil

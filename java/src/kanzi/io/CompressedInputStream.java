@@ -40,6 +40,7 @@ public class CompressedInputStream extends InputStream
    private static final int SMALL_BLOCK_MASK         = 0x80;
    private static final int SKIP_FUNCTION_MASK       = 0x40;
    private static final int MAX_BLOCK_SIZE           = (16*1024*1024) - 4;
+   private static final byte[] EMPTY_BYTE_ARRAY      = new byte[0];
 
    private int blockSize;
    private XXHash hasher;
@@ -68,8 +69,8 @@ public class CompressedInputStream extends InputStream
          throw new NullPointerException("Invalid null input stream parameter");
 
       this.ibs = new DefaultInputBitStream(is, DEFAULT_BUFFER_SIZE);
-      this.iba1 = new IndexedByteArray(new byte[0], 0);
-      this.iba2 = new IndexedByteArray(new byte[0], 0);
+      this.iba1 = new IndexedByteArray(EMPTY_BYTE_ARRAY, 0);
+      this.iba2 = new IndexedByteArray(EMPTY_BYTE_ARRAY, 0);
       this.ds = debug;
    }
 
@@ -269,8 +270,8 @@ public class CompressedInputStream extends InputStream
       this.ibs.close();
 
       // Release resources
-      this.iba1.array = new byte[0];
-      this.iba2.array = new byte[0];
+      this.iba1.array = EMPTY_BYTE_ARRAY;
+      this.iba2.array = EMPTY_BYTE_ARRAY;
       this.maxIdx = 0;
       super.close();
    }
@@ -321,7 +322,9 @@ public class CompressedInputStream extends InputStream
          if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
             checksum1 = (int) bs.readBits(32);
 
-         if (this.iba2.array.length < this.blockSize)
+         if (this.transformType == 'N')
+            this.iba2.array = data.array; // share
+         else if (this.iba2.array.length < this.blockSize)
              this.iba2.array = new byte[this.blockSize];
 
          final int savedIdx = data.index;
@@ -332,7 +335,9 @@ public class CompressedInputStream extends InputStream
 
          if (((mode & SMALL_BLOCK_MASK) != 0) || ((mode & SKIP_FUNCTION_MASK) != 0))
          {
-            System.arraycopy(this.iba2.array, 0, data.array, savedIdx, compressedLength);
+            if (this.iba2.array != data.array)
+               System.arraycopy(this.iba2.array, 0, data.array, savedIdx, compressedLength);
+            
             this.iba2.index = compressedLength;
             data.index = savedIdx + compressedLength;
          }
@@ -378,6 +383,10 @@ public class CompressedInputStream extends InputStream
       }
       finally
       {
+         // Reset buffer in case another block uses a different transform
+         if (this.transformType == 'N')
+            this.iba2.array = EMPTY_BYTE_ARRAY; 
+
          if (ed != null)
             ed.dispose();
       }
