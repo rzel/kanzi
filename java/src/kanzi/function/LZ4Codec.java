@@ -33,8 +33,7 @@ public class LZ4Codec implements ByteFunction
    private static final int HASH_LOG_64K       = 13;
    private static final int MASK_HASH          = -1;
    private static final int MASK_HASH_64K      = 0xFFFF;
-   private static final int MAX_DISTANCE       = 1 << 16;
-   private static final int MAX_DISTANCE_64K   = Integer.MAX_VALUE;
+   private static final int MAX_DISTANCE       = (1 << 16) - 1;
    private static final int SKIP_STRENGTH      = 6;
    private static final int LAST_LITERALS      = 5;
    private static final int MIN_MATCH          = 4;
@@ -90,7 +89,14 @@ public class LZ4Codec implements ByteFunction
 
    private static int writeLength(IndexedByteArray iba, int len)
    {
-      while (len >= 0xFF)
+      while (len >= 0x1FE)
+      {
+         iba.array[iba.index++] = (byte) 0xFF;
+         iba.array[iba.index++] = (byte) 0xFF;
+         len -= 0x1FE;
+      }
+
+      if (len >= 0xFF)
       {
          iba.array[iba.index++] = (byte) 0xFF;
          len -= 0xFF;
@@ -145,13 +151,13 @@ public class LZ4Codec implements ByteFunction
          return false;
 
       return (count < LZ4_64K_LIMIT) ?
-         this.doForward(source, destination, source.index, HASH_LOG_64K, MASK_HASH_64K, MAX_DISTANCE_64K) :
-         this.doForward(source, destination, 0, HASH_LOG, MASK_HASH, MAX_DISTANCE);
+         this.doForward(source, destination, source.index, HASH_LOG_64K, MASK_HASH_64K) :
+         this.doForward(source, destination, 0, HASH_LOG, MASK_HASH);
    }
 
 
    private boolean doForward(IndexedByteArray source, IndexedByteArray destination,
-           final int base, final int hashLog, final int hashMask, final int dist)
+           final int base, final int hashLog, final int hashMask)
    {
       final int srcIdx0 = source.index;
       final int dstIdx0 = destination.index;
@@ -192,7 +198,7 @@ public class LZ4Codec implements ByteFunction
             ref = base + (table[h] & hashMask);
             table[h] = srcIdx - base;
 
-            if ((ref >= srcIdx - dist) && (src[ref] == src[srcIdx]) && 
+            if ((ref >= srcIdx - MAX_DISTANCE) && (src[ref] == src[srcIdx]) && 
                  (src[ref+1] == src[srcIdx+1]) && (src[ref+2] == src[srcIdx+2]) &&
                  (src[ref+3] == src[srcIdx+3]))
                    break;
@@ -235,14 +241,16 @@ public class LZ4Codec implements ByteFunction
 
             // Start counting
             srcIdx += MIN_MATCH;
-            int matchLen = 0;
-            int idx1 = srcIdx;
-            int idx2 = ref + MIN_MATCH;
+            ref += MIN_MATCH;
+            anchor = srcIdx;
 
-            while ((idx1 < srcLimit) && (src[idx2++] == src[idx1++]))
-               matchLen++;
+            while ((srcIdx < srcLimit) && (src[srcIdx] == src[ref]))
+            {
+               srcIdx++;
+               ref++;
+            }
 
-            srcIdx += matchLen;
+            final int matchLen = srcIdx - anchor;
 
             // Encode match length
             if (matchLen >= ML_MASK)
@@ -278,7 +286,7 @@ public class LZ4Codec implements ByteFunction
             ref = base + (table[h2] & hashMask);
             table[h2] = srcIdx - base;
 
-            if ((ref <= srcIdx - dist) || (src[ref] != src[srcIdx]) || 
+            if ((ref <= srcIdx - MAX_DISTANCE) || (src[ref] != src[srcIdx]) || 
                 (src[ref+1] != src[srcIdx+1]) || (src[ref+2] != src[srcIdx+2]) || 
                 (src[ref+3] != src[srcIdx+3]))
                break;
@@ -339,11 +347,12 @@ public class LZ4Codec implements ByteFunction
          srcIdx += length;
          dstIdx += length;
 
-         // Matches
+         // Get offset
          final int delta = (src[srcIdx++] & 0xFF) | ((src[srcIdx++] & 0xFF) << 8);
          int matchOffset = dstIdx - delta;
          length = token & ML_MASK;
 
+         // Get match length
          if (length == ML_MASK)
          {
             byte len;
@@ -381,6 +390,7 @@ public class LZ4Codec implements ByteFunction
             while (dstIdx < matchEnd);
          }
 
+         // Correction
          dstIdx = matchEnd;
       }
 

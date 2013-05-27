@@ -32,8 +32,7 @@ const (
 	HASH_LOG_64K                = 13
 	MASK_HASH                   = -1
 	MASK_HASH_64K               = 0xFFFF
-	MAX_DISTANCE                = 1 << 16
-	MAX_DISTANCE_64K            = 0x7FFFFFFF
+	MAX_DISTANCE                = (1 << 16) - 1
 	SKIP_STRENGTH               = 6
 	LAST_LITERALS               = 5
 	MIN_MATCH                   = 4
@@ -99,7 +98,14 @@ func (this *LZ4Codec) SetSize(sz uint) bool {
 func writeLength(array []byte, length int) int {
 	index := 0
 
-	for length >= 0xFF {
+	for length >= 0x1FE {
+		array[index] = 0xFF
+		array[index+1] = 0xFF
+		length -= 0x1FE
+		index+=2
+	}
+
+	if length >= 0xFF {
 		array[index] = 0xFF
 		length -= 0xFF
 		index++
@@ -152,14 +158,14 @@ func (this *LZ4Codec) Forward(src, dst []byte) (uint, uint, error) {
 	}
 
 	if count < LZ4_64K_LIMIT {
-		return this.doForward(src, dst, 0, HASH_LOG_64K, MASK_HASH_64K, MAX_DISTANCE_64K)
+		return this.doForward(src, dst, 0, HASH_LOG_64K, MASK_HASH_64K)
 	} else {
-		return this.doForward(src, dst, 0, HASH_LOG, MASK_HASH, MAX_DISTANCE)
+		return this.doForward(src, dst, 0, HASH_LOG, MASK_HASH)
 	}
 }
 
 func (this *LZ4Codec) doForward(src []byte, dst []byte,
-	base int, hashLog uint, hashMask int, dist int) (uint, uint, error) {
+	base int, hashLog uint, hashMask int) (uint, uint, error) {
 	count := this.size
 
 	if this.size == 0 {
@@ -199,7 +205,7 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 			ref = base + (table[h32] & hashMask)
 			table[h32] = srcIdx - base
 
-			if (ref >= srcIdx-dist) && (src[ref] == src[srcIdx]) &&
+			if (ref >= srcIdx-MAX_DISTANCE) && (src[ref] == src[srcIdx]) &&
 				(src[ref+1] == src[srcIdx+1]) && (src[ref+2] == src[srcIdx+2]) &&
 				(src[ref+3] == src[srcIdx+3]) {
 				break
@@ -237,17 +243,15 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 
 			// Count matches
 			srcIdx += MIN_MATCH
-			matchLen := 0
-			idx1 := srcIdx
-			idx2 := ref + MIN_MATCH
+			ref += MIN_MATCH
+			anchor = srcIdx
 
-			for (idx1 < srcLimit) && (src[idx2] == src[idx1]) {
-				idx1++
-				idx2++
-				matchLen++
+			for (srcIdx < srcLimit) && (src[srcIdx] == src[ref]) {
+				srcIdx++
+				ref++
 			}
 
-			srcIdx += matchLen
+			matchLen := srcIdx - anchor
 
 			// Encode match length
 			if matchLen >= ML_MASK {
@@ -280,7 +284,7 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 			ref = base + (table[h32_2] & hashMask)
 			table[h32_2] = srcIdx - base
 
-			if (ref <= srcIdx-dist) || (src[ref] != src[srcIdx]) ||
+			if (ref <= srcIdx-MAX_DISTANCE) || (src[ref] != src[srcIdx]) ||
 				(src[ref+1] != src[srcIdx+1]) || (src[ref+2] != src[srcIdx+2]) ||
 				(src[ref+3] != src[srcIdx+3]) {
 				break
@@ -313,7 +317,7 @@ func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
 	srcIdx := 0
 	dstIdx := 0
 
-	for srcIdx < srcEnd {
+	for {
 		token := int(src[srcIdx] & 0xFF)
 		srcIdx++
 
@@ -326,7 +330,7 @@ func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
 				length += 0xFF
 			}
 
-			length += int(src[srcIdx] & 0xFF)
+			length += int(src[srcIdx])
 			srcIdx++
 		}
 
@@ -341,19 +345,20 @@ func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
 			break
 		}
 
-		// Matches
+		// Get offset
 		delta := int(src[srcIdx]) | (int(src[srcIdx+1]) << 8)
 		srcIdx += 2
 		matchOffset := dstIdx - delta
 		length = token & ML_MASK
 
+		// Get match length
 		if length == ML_MASK {
 			for src[srcIdx] == byte(0xFF) {
 				srcIdx++
 				length += 0xFF
 			}
 
-			length += int(src[srcIdx] & 0xFF)
+			length += int(src[srcIdx])
 			srcIdx++
 		}
 
@@ -364,6 +369,7 @@ func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
 			dst[dstIdx+i] = dst[matchOffset+i]
 		}
 
+		// Correction
 		dstIdx += length
 	}
 
