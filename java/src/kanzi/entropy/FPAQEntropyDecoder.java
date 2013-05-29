@@ -62,21 +62,4 @@ public class FPAQEntropyDecoder extends BinaryEntropyDecoder
 
      return i - blkptr;
    }
- 
- 
-   @Override
-   protected byte decodeByte_()
-   {
-      int res = 1;
-
-      // Custom logic to decode a byte
-      while (res < 256)
-      {
-        res <<= 1;
-        res += this.decodeBit();
-      }
-
-      return (byte) (res-256);
-   }
-
 }

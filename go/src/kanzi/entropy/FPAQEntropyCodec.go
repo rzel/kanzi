@@ -147,22 +147,7 @@ func (this *FPAQEntropyDecoder) DecodeByte() (byte, error) {
 }
 
 func (this *FPAQEntropyDecoder) decodeByte_() (byte, error) {
-	res := 1
-
-	// Custom logic to decode a byte
-	for res < 256 {
-		res <<= 1
-
-		read, err := this.DecodeBit()
-
-		if err != nil {
-			return byte(read), err
-		}
-
-		res += int(read)
-	}
-
-	return byte(res - 256), nil
+    return this.super.decodeByte_()
 }
 
 func (this *FPAQEntropyDecoder) DecodeBit() (int, error) {
