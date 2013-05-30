@@ -81,105 +81,79 @@ func (array HuffmanNodeArray2) Swap(i, j int) {
 	array[i], array[j] = array[j], array[i]
 }
 
-type HuffmanTree struct {
-	codes         []uint
-	sizes         []uint
-	root          *HuffmanNode
-	decodingCache []*HuffmanCacheData
-	current       *HuffmanCacheData
-}
-
-// Used by encoder
-func newHuffmanTreeFromFrequencies(frequencies []uint) (*HuffmanTree, error) {
-	this := new(HuffmanTree)
-	this.sizes = make([]uint, 256)
-
-	// Create tree from frequencies
-	this.root = this.createTreeFromFrequencies(frequencies)
-
-	// Create canonical codes
-	this.codes = generateCanonicalCodes(this.sizes)
-	return this, nil
-}
-
-// Used by decoder
-func newHuffmanTreeFromSizes(sz []uint, maxSize uint) (*HuffmanTree, error) {
-	this := new(HuffmanTree)
-	this.sizes = make([]uint, 256)
-	copy(this.sizes, sz)
-
-	// Create canonical codes
-	this.codes = generateCanonicalCodes(this.sizes)
-
-	// Create tree from code sizes
-	this.root = createTreeFromSizes(maxSize, this.sizes, this.codes)
-	this.decodingCache = createDecodingCache(this.root)
-	this.current = &HuffmanCacheData{value: this.root} // point to root
-	return this, nil
-}
-
-func createDecodingCache(rootNode *HuffmanNode) []*HuffmanCacheData {
-	nodes := list.New()
-	end := 1 << DECODING_BATCH_SIZE
-	var previousData *HuffmanCacheData
-
-	// Create an array storing a list of Nodes for each input byte value
-	for val := 0; val < end; val++ {
-		shift := DECODING_BATCH_SIZE - 1
-		firstAdded := false
-
-		for shift >= 0 {
-			// Start from root
-			currentNode := rootNode
-			
-			// Process next bit
-			for shift >= 0 && (currentNode.left != nil || currentNode.right != nil) {
-
-				if (val>>uint(shift))&1 == 0 {
-					currentNode = currentNode.left
-				} else {
-					currentNode = currentNode.right
-				}
-
-				shift--
-			}
-
-			currentData := &HuffmanCacheData{value: currentNode}
-
-			// The list is made of linked nodes
-			if previousData != nil {
-				previousData.next = currentData
-			}
-
-			previousData = currentData
-
-			if firstAdded == false {
-				// Add first node of list to array (whether it is a leaf or not)
-				nodes.PushBack(currentData)
-				firstAdded = true
-			}
-		}
-
-		previousData.next = &HuffmanCacheData{value: rootNode}
-		previousData = previousData.next
-	}
-
-	res := make([]*HuffmanCacheData, nodes.Len())
+// Return the number of codes generated
+func GenerateCanonicalCodes(sizes, codes []uint) int {
+	array := make(HuffmanNodeArray, len(sizes))
 	n := 0
 
-	for e := nodes.Front(); e != nil; e = e.Next() {
-		res[n] = e.Value.(*HuffmanCacheData)
-		n++
+	for i := range array {
+		codes[i] = 0
+
+		if sizes[i] > 0 {
+			array[n] = &HuffmanNode{symbol: byte(i), weight: sizes[i]}
+			n++
+		}
 	}
 
-	return res
+	// Sort by decreasing size (first key) and increasing value (second key)
+	sort.Sort(array[0:n])
+	code := uint(0)
+	length := sizes[array[0].symbol]
+
+	for i := 0; i < n; i++ {
+		idx := array[i].symbol
+		currentSize := sizes[idx]
+
+		if length > currentSize {
+			code >>= (length - currentSize)
+			length = currentSize
+		}
+
+		codes[idx] = code
+		code++
+	}
+
+	return n
 }
 
-func (this *HuffmanTree) createTreeFromFrequencies(frequencies []uint) *HuffmanNode {
+// ---- Encoder
+
+type HuffmanEncoder struct {
+	bitstream kanzi.OutputBitStream
+	buffer    []uint
+	codes     []uint
+	sizes     []uint
+}
+
+func NewHuffmanEncoder(bs kanzi.OutputBitStream) (*HuffmanEncoder, error) {
+	if bs == nil {
+		err := errors.New("Invalid null bitstream parameter")
+		return nil, err
+	}
+
+	this := new(HuffmanEncoder)
+	this.bitstream = bs
+	this.buffer = make([]uint, 256)
+	this.codes = make([]uint, 256)
+	this.sizes = make([]uint, 256)
+
+	// Default frequencies, sizes and codes
+	for i := 1; i < 256; i++ {
+		this.buffer[i] = 1
+		this.sizes[i] = 8
+		this.codes[i] = uint(i)
+	}
+	
+	return this, nil
+}
+
+func createTreeFromFrequencies(frequencies, sizes_ []uint) *HuffmanNode {
 	array := make(HuffmanNodeArray2, 256)
 	n := 0
 
 	for i := range array {
+		sizes_[i] = 0
+
 		if frequencies[i] > 0 {
 			array[n] = &HuffmanNode{symbol: byte(i), weight: frequencies[i]}
 			n++
@@ -195,7 +169,7 @@ func (this *HuffmanTree) createTreeFromFrequencies(frequencies []uint) *HuffmanN
 	nodes := make([]*HuffmanNode, 2)
 
 	for i := n - 1; i >= 0; i-- {
-			queue1.PushFront(array[i])
+		queue1.PushFront(array[i])
 	}
 
 	for queue1.Len()+queue2.Len() > 1 {
@@ -229,52 +203,209 @@ func (this *HuffmanTree) createTreeFromFrequencies(frequencies []uint) *HuffmanN
 		queue2.PushBack(merged)
 	}
 
-    var rootNode *HuffmanNode
-    
+	var rootNode *HuffmanNode
+
 	if queue1.Len() == 0 {
 		rootNode = queue2.Front().Value.(*HuffmanNode)
 	} else {
- 		rootNode = queue1.Front().Value.(*HuffmanNode)
- 	}
- 	
-	this.fillTree(rootNode, 0)
+		rootNode = queue1.Front().Value.(*HuffmanNode)
+	}
+
+	fillTree(rootNode, 0, sizes_)
 	return rootNode
 }
 
 // Fill size and code arrays
-func (this *HuffmanTree) fillTree(node *HuffmanNode, depth uint) {
+func fillTree(node *HuffmanNode, depth uint, sizes_ []uint) {
 	if node.left == nil && node.right == nil {
 		idx := node.symbol
-		this.sizes[idx] = depth	
+		sizes_[idx] = depth
 		return
 	}
 
 	if node.left != nil {
-		this.fillTree(node.left, depth+1)
+		fillTree(node.left, depth+1, sizes_)
 	}
 
 	if node.right != nil {
-		this.fillTree(node.right, depth+1)
+		fillTree(node.right, depth+1, sizes_)
 	}
 }
 
-func createTreeFromSizes(maxSize uint, lengths []uint, codes []uint) *HuffmanNode {
+func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
+	if frequencies == nil || len(frequencies) != 256 {
+		err := errors.New("Invalid null frequencies parameter")
+		return err
+	}
+
+	// Create tree from frequencies
+	createTreeFromFrequencies(frequencies, this.sizes)
+
+	// Create canonical codes
+	GenerateCanonicalCodes(this.sizes, this.codes)
+	prevSize := uint(1)
+	egenc, err := NewExpGolombEncoder(this.bitstream, true)
+
+	if err != nil {
+		return err
+	}
+
+	// Transmit code lengths only, frequencies and codes do not matter
+	// Unary encode the length difference
+	for i := 0; i < len(frequencies); i++ {
+		nextSize := this.sizes[i]
+
+		// The encoder is sign aware ...
+		egenc.EncodeByte(byte(nextSize - prevSize))
+		prevSize = nextSize
+	}
+
+	return nil
+}
+
+// Dynamically compute the frequencies of the input data
+func (this *HuffmanEncoder) Encode(block []byte) (int, error) {
+	if block == nil {
+		return 0, errors.New("Invalid null block parameter")
+	}
+
+	buf := this.buffer // alias
+
+	for i := range buf {
+		buf[i] = 0
+	}
+
+	for i := range block {
+		buf[block[i]]++
+	}
+
+	this.UpdateFrequencies(buf)
+	return EntropyEncodeArray(this, block)
+}
+
+// Frequencies of the data block must have been previously set
+func (this *HuffmanEncoder) EncodeByte(val byte) error {
+	idx := val
+	_, err := this.bitstream.WriteBits(uint64(this.codes[idx]), this.sizes[idx])
+	return err
+}
+
+func (this *HuffmanEncoder) Dispose() {
+	this.bitstream.Flush()
+}
+
+func (this *HuffmanEncoder) BitStream() kanzi.OutputBitStream {
+	return this.bitstream
+}
+
+// ---- Decoder
+
+type HuffmanDecoder struct {
+	bitstream     kanzi.InputBitStream
+	codes     []uint
+	sizes     []uint
+	root          *HuffmanNode
+	decodingCache []*HuffmanCacheData
+	current       *HuffmanCacheData
+}
+
+func NewHuffmanDecoder(bs kanzi.InputBitStream) (*HuffmanDecoder, error) {
+	if bs == nil {
+		err := errors.New("Invalid null bitstream parameter")
+		return nil, err
+	}
+
+	this := new(HuffmanDecoder)
+	this.bitstream = bs
+	this.sizes = make([]uint, 256)
+	this.codes = make([]uint, 256)
+	this.decodingCache = make([]*HuffmanCacheData, 1<<DECODING_BATCH_SIZE)
+
+	// Default lengths
+	for i := range this.sizes {
+		this.sizes[i] = 8
+	}
+
+	// Create canonical codes
+	GenerateCanonicalCodes(this.sizes, this.codes)
+
+	// Create tree from code sizes
+	this.root = this.createTreeFromSizes(8)
+	buildDecodingCache(this.root, this.decodingCache)
+	this.current = &HuffmanCacheData{value: this.root} // point to root
+	return this, nil
+}
+
+func buildDecodingCache(rootNode *HuffmanNode, data []*HuffmanCacheData) []*HuffmanCacheData {
+	end := 1 << DECODING_BATCH_SIZE
+	previousData := &HuffmanCacheData{}
+	n := 0
+
+	// Create an array storing a list of tree nodes (shortcuts) for each input value
+	for val := 0; val < end; val++ {
+		shift := DECODING_BATCH_SIZE - 1
+		firstAdded := false
+
+		for shift >= 0 {
+			// Start from root
+			currentNode := rootNode
+
+			// Process next bit
+			for currentNode.left != nil || currentNode.right != nil {
+
+				if (val>>uint(shift))&1 == 0 {
+					currentNode = currentNode.left
+				} else {
+					currentNode = currentNode.right
+				}
+
+				shift--
+
+				if shift < 0 {
+					break
+				}
+			}
+
+			currentData := &HuffmanCacheData{value: currentNode}
+
+			// The cache is made of linked nodes
+			previousData.next = currentData
+			previousData = currentData
+
+			if firstAdded == false {
+				// Add first node of list to array (whether it is a leaf or not)
+				data[n] = currentData
+				n++
+				firstAdded = true
+			}
+		}
+
+		previousData.next = &HuffmanCacheData{value: rootNode}
+		previousData = previousData.next
+	}
+
+	return data
+}
+
+func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
 	codeMap := make(map[int]*HuffmanNode)
 	sum := uint(1 << maxSize)
-	keys := make([]int, len(lengths))
+	keys := make([]int, 256)
 	tree := kanzi.IntBTree{} //use binary tree
 	codeMap[0] = &HuffmanNode{symbol: byte(0), weight: sum}
 	tree.Add(0) // add key(0,0)
 
 	// Create node for each (present) symbol and add to map
-	for i := range lengths {
-		if lengths[i] == 0 {
+	for i := range this.sizes {
+		size := this.sizes[i]
+		
+		if size == 0 {
 			continue
 		}
 
-		key := int((lengths[i] << 16) | codes[i])
+		key := int((size << 16) | this.codes[i])
 		tree.Add(key)
-		value := &HuffmanNode{symbol: byte(i), weight: sum >> lengths[i]}
+		value := &HuffmanNode{symbol: byte(i), weight: sum >> size}
 		codeMap[key] = value
 	}
 
@@ -307,234 +438,8 @@ func createTreeFromSizes(maxSize uint, lengths []uint, codes []uint) *HuffmanNod
 	return codeMap[keys[0]]
 }
 
-func generateCanonicalCodes(lengths []uint) []uint {
-	array := make(HuffmanNodeArray, len(lengths))
-	n := 0
-
-	for i := range array {
-		if lengths[i] > 0 {
-			array[n] = &HuffmanNode{symbol: byte(i), weight: lengths[i]}
-			n++
-		}
-	}
-
-	// Sort by decreasing size and increasing value
-	sort.Sort(array[0:n])
-	codes := make([]uint, 256)
-	code := uint(0)
-	length := lengths[array[0].symbol]
-
-	for i := 0; i<n; i++ {
-		idx := array[i].symbol
-		currentSize := lengths[idx]
-
-		for length > currentSize {
-			code >>= 1
-			length--
-		}
-
-		codes[idx] = code
-		code++
-	}
-
-	return codes
-}
-
-func (this *HuffmanTree) Code(val int) uint {
-	return this.codes[val]
-}
-
-func (this *HuffmanTree) Size(val int) uint {
-	return this.sizes[val]
-}
-
-func (this *HuffmanTree) encodeByte(bitstream kanzi.OutputBitStream, val byte) error {
-	idx := val
-	_, err := bitstream.WriteBits(uint64(this.codes[idx]), this.sizes[idx])
-	return err
-}
-
-func (this *HuffmanTree) decodeByte(bitstream kanzi.InputBitStream) (byte, error) {
-	// Empty cache
-	currNode := this.current.value
-
-	if currNode != this.root {
-		this.current = this.current.next
-	}
-
-	for currNode.left != nil || currNode.right != nil {
-		r, err := bitstream.ReadBit()
-
-		if err != nil {
-			return 0, err
-		}
-
-		if r == 0 {
-			currNode = currNode.left
-		} else {
-			currNode = currNode.right
-		}
-	}
-
-	return currNode.symbol, nil
-}
-
-// DECODING_BATCH_SIZE bits must be available in the bitstream
-func (this *HuffmanTree) fastDecodeByte(bitstream kanzi.InputBitStream) (byte, error) {
-	currNode := this.current.value
-
-	// Use the cache to find a good starting point in the tree
-	if currNode == this.root {
-		// Read more bits from the bitstream and fetch starting point from cache
-		var idx uint64
-		idx, _ = bitstream.ReadBits(DECODING_BATCH_SIZE)
-		this.current = this.decodingCache[idx]
-		currNode = this.current.value
-	}
-
-	for currNode.left != nil || currNode.right != nil {
-
-		r, err := bitstream.ReadBit()
-
-		if err != nil {
-			return 0, err
-		}
-
-		if r == 0 {
-			currNode = currNode.left
-		} else {
-			currNode = currNode.right
-		}
-	}
-
-	this.current = this.current.next
-	return currNode.symbol, nil
-}
-
-// ---- Encoder
-
-type HuffmanEncoder struct {
-	bitstream kanzi.OutputBitStream
-	buffer    []uint
-	tree      *HuffmanTree
-}
-
-func NewHuffmanEncoder(bs kanzi.OutputBitStream) (*HuffmanEncoder, error) {
-	if bs == nil {
-		err := errors.New("Invalid null bitstream parameter")
-		return nil, err
-	}
-
-	this := new(HuffmanEncoder)
-	this.bitstream = bs
-	this.buffer = make([]uint, 256)
-
-	// Default frequencies
-	for i := range this.buffer {
-		this.buffer[i] = 1
-	}
-
-	var err error
-	this.tree, err = newHuffmanTreeFromFrequencies(this.buffer)
-	return this, err
-}
-
-func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
-	if frequencies == nil {
-		err := errors.New("Invalid null frequencies parameter")
-		return err
-	}
-
-	var err error
-	this.tree, err = newHuffmanTreeFromFrequencies(frequencies)
-
-	if err != nil {
-		return err
-	}
-
-	prevSize := uint(1)
-	egenc, err := NewExpGolombEncoder(this.bitstream, true)
-
-	if err != nil {
-		return err
-	}
-
-	// Transmit code lengths only, frequencies and code do not matter
-	// Unary encode the length difference
-	for i := 0; i < len(frequencies); i++ {
-		nextSize := this.tree.Size(i)
-
-		// Encode delta as byte (unsigned) but the encoder is sign aware
-		egenc.EncodeByte(byte(nextSize - prevSize))
-		prevSize = nextSize
-	}
-
-	return nil
-}
-
-// Dynamically compute the frequencies of the input data
-func (this *HuffmanEncoder) Encode(block []byte) (int, error) {
-	if block == nil {
-		return 0, errors.New("Invalid null block parameter")
-	}
-
-	buf := this.buffer // alias
-
-	for i := range buf {
-		buf[i] = 0
-	}
-
-	for i := range block {
-		buf[block[i]]++
-	}
-
-	this.UpdateFrequencies(buf)
-	return EntropyEncodeArray(this, block)
-}
-
-// Frequencies of the data block must have been previously set
-func (this *HuffmanEncoder) EncodeByte(val byte) error {
-	return this.tree.encodeByte(this.bitstream, val)
-}
-
-func (this *HuffmanEncoder) Dispose() {
-	this.bitstream.Flush()
-}
-
-func (this *HuffmanEncoder) BitStream() kanzi.OutputBitStream {
-	return this.bitstream
-}
-
-// ---- Decoder
-
-type HuffmanDecoder struct {
-	bitstream kanzi.InputBitStream
-	buffer    []uint
-	tree      *HuffmanTree
-}
-
-func NewHuffmanDecoder(bs kanzi.InputBitStream) (*HuffmanDecoder, error) {
-	if bs == nil {
-		err := errors.New("Invalid null bitstream parameter")
-		return nil, err
-	}
-
-	this := new(HuffmanDecoder)
-	this.bitstream = bs
-	this.buffer = make([]uint, 256)
-
-	// Default lengths
-	for i := range this.buffer {
-		this.buffer[i] = 8
-	}
-
-	var err error
-	this.tree, err = newHuffmanTreeFromSizes(this.buffer, 8)
-	return this, err
-}
-
 func (this *HuffmanDecoder) ReadLengths() error {
-	buf := this.buffer // alias
+	buf := this.sizes // alias
 	maxSize := uint(1)
 
 	egdec, err := NewExpGolombDecoder(this.bitstream, true)
@@ -559,7 +464,7 @@ func (this *HuffmanDecoder) ReadLengths() error {
 			return err
 		}
 
-		// Treat szDelta as a signed value (int8) 
+		// Treat szDelta as a signed value (int8)
 		buf[i] = uint(int8(buf[i-1]) + int8(szDelta))
 
 		if maxSize < buf[i] {
@@ -567,9 +472,14 @@ func (this *HuffmanDecoder) ReadLengths() error {
 		}
 	}
 
-	// Create Huffman tree
-	this.tree, err = newHuffmanTreeFromSizes(buf, maxSize)
-	return err
+	// Create canonical codes
+	GenerateCanonicalCodes(buf, this.codes)
+
+	// Create tree from code sizes
+	this.root = this.createTreeFromSizes(maxSize)
+	buildDecodingCache(this.root, this.decodingCache)
+	this.current = &HuffmanCacheData{value: this.root} // point to root
+	return nil
 }
 
 // Rebuild the Huffman tree for each block of data before decoding
@@ -585,10 +495,8 @@ func (this *HuffmanDecoder) Decode(block []byte) (int, error) {
 	var err error
 
 	for i < end1 {
-		// Decode fast by reading one byte at a time from the bitstream
-		block[i], err = this.tree.fastDecodeByte(this.bitstream)
-
-		if err != nil {
+		// Fast decoding by reading several bits at a time from the bitstream
+		if block[i], err = this.fastDecodeByte(); err != nil {
 			return i, err
 		}
 
@@ -597,9 +505,7 @@ func (this *HuffmanDecoder) Decode(block []byte) (int, error) {
 
 	for i < end2 {
 		// Regular decoding by reading one bit at a time from the bitstream
-		block[i], err = this.tree.decodeByte(this.bitstream)
-
-		if err != nil {
+		if block[i], err = this.DecodeByte(); err != nil {
 			return i, err
 		}
 
@@ -610,7 +516,58 @@ func (this *HuffmanDecoder) Decode(block []byte) (int, error) {
 }
 
 func (this *HuffmanDecoder) DecodeByte() (byte, error) {
-	return this.tree.decodeByte(this.bitstream)
+	// Empty cache
+	currNode := this.current.value
+
+	if currNode != this.root {
+		this.current = this.current.next
+	}
+
+	for currNode.left != nil || currNode.right != nil {
+		r, err := this.bitstream.ReadBit()
+
+		if err != nil {
+			return 0, err
+		}
+
+		if r == 0 {
+			currNode = currNode.left
+		} else {
+			currNode = currNode.right
+		}
+	}
+
+	return currNode.symbol, nil
+}
+
+// DECODING_BATCH_SIZE bits must be available in the bitstream
+func (this *HuffmanDecoder) fastDecodeByte() (byte, error) {
+	currNode := this.current.value
+
+	// Use the cache to find a good starting point in the tree
+	if currNode == this.root {
+		// Read more bits from the bitstream and fetch starting point from cache
+		idx, _ := this.bitstream.ReadBits(DECODING_BATCH_SIZE)
+		this.current = this.decodingCache[idx]
+		currNode = this.current.value
+	}
+
+	for currNode.left != nil || currNode.right != nil {
+		r, err := this.bitstream.ReadBit()
+
+		if err != nil {
+			return 0, err
+		}
+
+		if r == 0 {
+			currNode = currNode.left
+		} else {
+			currNode = currNode.right
+		}
+	}
+
+	this.current = this.current.next
+	return currNode.symbol, nil
 }
 
 func (this *HuffmanDecoder) BitStream() kanzi.InputBitStream {

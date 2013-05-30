@@ -15,7 +15,6 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.TreeMap;
 import kanzi.BitStreamException;
@@ -45,6 +44,7 @@ public class HuffmanDecoder extends AbstractDecoder
         this.bitstream = bitstream;
         this.sizes = new int[256];
         this.codes = new int[256];
+        this.decodingCache = new CacheData[1 << DECODING_BATCH_SIZE];
 
         // Default lengths
         for (int i=0; i<256; i++)
@@ -55,19 +55,19 @@ public class HuffmanDecoder extends AbstractDecoder
 
        // Create tree from code sizes
        this.root = this.createTreeFromSizes(8);
-       this.decodingCache = createDecodingCache(this.root);
+       buildDecodingCache(this.root, this.decodingCache);
        this.current = new CacheData(this.root); // point to root
     }
        
     
-    private static CacheData[] createDecodingCache(Node rootNode)
+    private static CacheData[] buildDecodingCache(Node rootNode, CacheData[] data)
     {
-       LinkedList<CacheData> nodes = new LinkedList<CacheData>();
-       final int end = 1 << DECODING_BATCH_SIZE;
-       CacheData previousData = null;
+       final int size = 1 << DECODING_BATCH_SIZE;
+       CacheData previousData = new CacheData(null);
+       int n = 0;
 
-       // Create an array storing a list of tree nodes for each input byte value
-       for (int val=0; val<end; val++)
+       // Create an array storing a list of tree nodes (shortcuts) for each input value
+       for (int val=0; val<size; val++)
        {
           int shift = DECODING_BATCH_SIZE - 1;
           boolean firstAdded = false;
@@ -78,24 +78,24 @@ public class HuffmanDecoder extends AbstractDecoder
              Node currentNode = rootNode;
 
              // Process next bit
-             while ((shift >= 0) && ((currentNode.left != null) || (currentNode.right != null)))
+             while ((currentNode.left != null) || (currentNode.right != null))
              {
                 currentNode = (((val >> shift) & 1) == 0) ? currentNode.left : currentNode.right;
-                shift--;
+                
+                if (--shift < 0)
+                   break;
              }
 
              final CacheData currentData = new CacheData(currentNode);
 
              // The cache is made of linked nodes
-             if (previousData != null)
-                previousData.next = currentData;
-
+             previousData.next = currentData;
              previousData = currentData;
 
              if (firstAdded == false)
              {
                 // Add first node of list to array (whether it is a leaf or not)
-                nodes.addLast(currentData);
+                data[n++] = currentData;
                 firstAdded = true;
              }
           }
@@ -104,7 +104,7 @@ public class HuffmanDecoder extends AbstractDecoder
           previousData = previousData.next;
        }
 
-       return nodes.toArray(new CacheData[nodes.size()]);
+       return data;
     }
 
 
@@ -175,7 +175,7 @@ public class HuffmanDecoder extends AbstractDecoder
 
         // Create tree from code sizes
         this.root = this.createTreeFromSizes(maxSize);
-        this.decodingCache = createDecodingCache(this.root);
+        buildDecodingCache(this.root, this.decodingCache);
         this.current = new CacheData(this.root); // point to root
         return true;
     }
