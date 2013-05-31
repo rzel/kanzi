@@ -79,19 +79,20 @@ func (this *RangeEncoder) EncodeByte(b byte) error {
 	this.low += (symbolLow * this.range_)
 	this.range_ *= (symbolHigh - symbolLow)
 
-	checkRange := (this.low ^ (this.low + this.range_)) & MASK
-
 	// If the left-most digits are the same throughout the range, write bits to bitstream
-	for checkRange < TOP || this.range_ < MAX_RANGE {
-		// Normalize
-		if checkRange >= TOP {
-			this.range_ = (-this.low & MASK) & BOTTOM
+	for {
+		if (this.low^(this.low+this.range_))&MASK >= TOP {
+			if this.range_ >= MAX_RANGE {
+				break
+			} else {
+				// Normalize
+				this.range_ = (-this.low & MASK) & BOTTOM
+			}
 		}
 
 		this.bitstream.WriteBits(uint64((this.low>>48)&0xFF), 8)
 		this.range_ <<= 8
 		this.low <<= 8
-		checkRange = (this.low ^ (this.low + this.range_)) & MASK
 	}
 
 	// Update frequencies: computational bottleneck !!!
@@ -101,20 +102,16 @@ func (this *RangeEncoder) EncodeByte(b byte) error {
 }
 
 func (this *RangeEncoder) updateFrequencies(value int) {
-	freq := this.baseFreq // alias
 	start := (value + 15) >> 4
-	length := len(freq)
 
 	// Update absolute frequencies
-	for j := start; j < length; j++ {
-		freq[j]++
+	for j := len(this.baseFreq) - 1; j >= start; j-- {
+		this.baseFreq[j]++
 	}
-
-	freq = this.deltaFreq // alias
 
 	// Update relative frequencies (in the 'right' segment only)
 	for j := (start << 4) - 1; j >= value; j-- {
-		freq[j]++
+		this.deltaFreq[j]++
 	}
 }
 
@@ -177,66 +174,45 @@ func NewRangeDecoder(bs kanzi.InputBitStream) (*RangeDecoder, error) {
 	return this, nil
 }
 
-// This method is on the speed critical path (called for each byte)
-// The speed optimization is focused on reducing the frequency table update
-func (this *RangeDecoder) DecodeByte() (byte, error) {
-	if this.initialized == false {
-		this.initialized = true
-		read, err := this.bitstream.ReadBits(56)
+func (this *RangeDecoder) Initialized() bool {
+	return this.initialized
+}
 
-		if err != nil {
-			return 0, err
-		}
+func (this *RangeDecoder) Initialize() error {
+	if this.initialized == true {
+		return nil
+	}
 
+	this.initialized = true
+	read, err := this.bitstream.ReadBits(56)
+
+	if err == nil {
 		this.code = int64(read)
 	}
 
+	return err
+}
+
+func (this *RangeDecoder) DecodeByte() (byte, error) {
+	if this.initialized == false {
+		if err := this.Initialize(); err != nil {
+			return byte(0), err
+		}
+	}
+
+	return this.decodeByte_()
+}
+
+// This method is on the speed critical path (called for each byte)
+// The speed optimization is focused on reducing the frequency table update
+func (this *RangeDecoder) decodeByte_() (byte, error) {
 	bfreq := this.baseFreq  // alias
 	dfreq := this.deltaFreq // alias
 	this.range_ /= (bfreq[NB_SYMBOLS>>4] + dfreq[NB_SYMBOLS])
 	count := (this.code - this.low) / this.range_
 
 	// Find first frequency less than 'count'
-	var value int
-
-	if count < dfreq[len(bfreq)/2] {
-		value = len(bfreq)/2 - 1
-	} else {
-		value = len(bfreq) - 1
-	}
-
-	for value > 0 && count < bfreq[value] {
-		value--
-	}
-
-	count -= bfreq[value]
-	value <<= 4
-
-	if count > 0 {
-		end := value
-
-		if count < dfreq[value+8] {
-			if count < dfreq[value+4] {
-				value += 3
-			} else {
-				value += 7
-			}
-		} else {
-			if count < dfreq[value+12] {
-				value += 11
-			} else {
-				value += 15
-			}
-
-			if value > NB_SYMBOLS {
-				value = NB_SYMBOLS
-			}
-		}
-
-		for value >= end && count < dfreq[value] {
-			value--
-		}
-	}
+	value := this.findSymbol(count)
 
 	if value == LAST {
 		more, err := this.bitstream.HasMoreToRead()
@@ -260,12 +236,14 @@ func (this *RangeDecoder) DecodeByte() (byte, error) {
 	this.low += (symbolLow * this.range_)
 	this.range_ *= (symbolHigh - symbolLow)
 
-	checkRange := (this.low ^ (this.low + this.range_)) & MASK
-
-	for checkRange < TOP || this.range_ < BOTTOM {
-		// Normalize
-		if checkRange >= TOP {
-			this.range_ = (-this.low & MASK) & BOTTOM
+	for {
+		if (this.low^(this.low+this.range_))&MASK >= TOP {
+			if this.range_ >= MAX_RANGE {
+				break
+			} else {
+				// Normalize
+				this.range_ = (-this.low & MASK) & BOTTOM
+			}
 		}
 
 		read, err := this.bitstream.ReadBits(8)
@@ -274,11 +252,9 @@ func (this *RangeDecoder) DecodeByte() (byte, error) {
 			return 0, err
 		}
 
-		this.code <<= 8
-		this.code |= int64(read)
+		this.code = (this.code << 8) | int64(read)
 		this.range_ <<= 8
 		this.low <<= 8
-		checkRange = (this.low ^ (this.low + this.range_)) & MASK
 	}
 
 	// Update frequencies: computational bottleneck !!!
@@ -286,26 +262,86 @@ func (this *RangeDecoder) DecodeByte() (byte, error) {
 	return byte(value & 0xFF), nil
 }
 
-func (this *RangeDecoder) updateFrequencies(value int) {
-	freq := this.baseFreq // alias
-	start := (value + 15) >> 4
-	length := len(freq)
+func (this *RangeDecoder) findSymbol(freq int64) int {
+	// Find first frequency less than 'count'
+	bfreq := this.baseFreq  // alias
+	dfreq := this.deltaFreq // alias
+	var value int
 
-	// Update absolute frequencies
-	for j := start; j < length; j++ {
-		freq[j]++
+	if freq < dfreq[len(bfreq)/2] {
+		value = len(bfreq)/2 - 1
+	} else {
+		value = len(bfreq) - 1
 	}
 
-	freq = this.deltaFreq // alias
+	for value > 0 && freq < bfreq[value] {
+		value--
+	}
+
+	freq -= bfreq[value]
+	value <<= 4
+
+	if freq > 0 {
+		end := value
+
+		if freq < dfreq[value+8] {
+			if freq < dfreq[value+4] {
+				value += 3
+			} else {
+				value += 7
+			}
+		} else {
+			if freq < dfreq[value+12] {
+				value += 11
+			} else {
+				value += 15
+			}
+
+			if value > NB_SYMBOLS {
+				value = NB_SYMBOLS
+			}
+		}
+
+		for value >= end && freq < dfreq[value] {
+			value--
+		}
+	}
+
+	return value
+}
+
+func (this *RangeDecoder) updateFrequencies(value int) {
+	start := (value + 15) >> 4
+
+	// Update absolute frequencies
+	for j := len(this.baseFreq) - 1; j >= start; j-- {
+		this.baseFreq[j]++
+	}
 
 	// Update relative frequencies (in the 'right' segment only)
 	for j := (start << 4) - 1; j >= value; j-- {
-		freq[j]++
+		this.deltaFreq[j]++
 	}
 }
 
 func (this *RangeDecoder) Decode(block []byte) (int, error) {
-	return EntropyDecodeArray(this, block)
+	err := error(nil)
+
+	// Deferred initialization: the bistream may not be ready at build time
+	// Initialize 'current' with bytes read from the bitstream
+	if this.Initialized() == false {
+		if err = this.Initialize(); err != nil {
+			return 0, err
+		}
+	}
+
+	for i := range block {
+		if block[i], err = this.decodeByte_(); err != nil {
+			return i, err
+		}
+	}
+
+	return len(block), nil
 }
 
 func (this *RangeDecoder) BitStream() kanzi.InputBitStream {

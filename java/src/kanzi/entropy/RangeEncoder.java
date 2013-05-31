@@ -79,19 +79,20 @@ public final class RangeEncoder extends AbstractEncoder
         this.low += (symbolLow * this.range);
         this.range *= (symbolHigh - symbolLow);
 
-        long checkRange = ((this.low ^ (this.low + this.range)) & MASK);
-
-        // If the left-most digits are the same throughout the range, write bits to bitstream
-        while ((checkRange < TOP) || (this.range < MAX_RANGE))
-        {
-            // Normalize
-            if (checkRange >= TOP)
-                this.range = (-this.low & MASK) & BOTTOM;
+       // If the left-most digits are the same throughout the range, write bits to bitstream
+        while (true)
+        {                       
+            if (((this.low ^ (this.low + this.range)) & MASK) >= TOP)
+            {
+               if (this.range >= MAX_RANGE)
+                  break;
+               else // Normalize
+                  this.range = (-this.low & MASK) & BOTTOM;
+            }
 
             this.bitstream.writeBits(((this.low >> 48) & 0xFF), 8);
             this.range <<= 8;
             this.low <<= 8;
-            checkRange = ((this.low ^ (this.low + this.range)) & MASK);
         }
 
         // Update frequencies: computational bottleneck !!!
@@ -103,19 +104,15 @@ public final class RangeEncoder extends AbstractEncoder
 
     private void updateFrequencies(int value)
     {
-        int[] freq = this.baseFreq;
         final int start = (value + 15) >> 4;
-        final int len = freq.length;
 
         // Update absolute frequencies
-        for (int j=start; j<len; j++)
-            freq[j]++;
-
-        freq = this.deltaFreq;
+        for (int j=this.baseFreq.length-1; j>=start; j--)
+            this.baseFreq[j]++;
 
         // Update relative frequencies (in the 'right' segment only)
         for (int j=(start<<4)-1; j>=value; j--)
-            freq[j]++;
+            this.deltaFreq[j]++;
     }
 
 

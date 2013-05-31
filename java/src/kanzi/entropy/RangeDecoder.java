@@ -66,103 +66,155 @@ public final class RangeDecoder extends AbstractDecoder
             this.baseFreq[i] = i << 4; // BASE
     }
 
-      
-    // This method is on the speed critical path (called for each byte)
-    // The speed optimization is focused on reducing the frequency table update
+    
+    @Override
+    public int decode(byte[] array, int blkptr, int len)
+    {
+      if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
+         return -1;
+
+      final int end = blkptr + len;
+      int i = blkptr;
+      this.initialize();
+
+      try
+      {
+         while (i < end)
+            array[i++] = this.decodeByte_();
+      }
+      catch (BitStreamException e)
+      {
+         // Fallback
+      }
+
+      return i - blkptr;
+    }
+
+    
+    public boolean isInitialized()
+    {
+       return this.initialized;
+    }
+    
+    
+    public void initialize() 
+    {
+       if (this.initialized == true)
+          return;
+       
+       // Reading the bitstream is deferred (not in constructor)
+       this.initialized = true;
+       this.code = this.bitstream.readBits(56) & 0xFFFFFFFF;
+    }
+   
+    
     @Override
     public byte decodeByte()
     {
-        if (this.initialized == false)
-        {
-            this.initialized = true;
-            this.code = this.bitstream.readBits(56) & 0xFFFFFFFF;
-        }
+       if (this.initialized == false)
+          this.initialize();        
+       
+       return this.decodeByte_();
+    }
+    
+    
+    // This method is on the speed critical path (called for each byte)
+    // The speed optimization is focused on reducing the frequency table update
+    private byte decodeByte_()
+    {
+       final int[] bfreq = this.baseFreq;
+       final int[] dfreq = this.deltaFreq;        
+       this.range /= (bfreq[NB_SYMBOLS>>4] + dfreq[NB_SYMBOLS]);
+       final int count = (int) ((this.code - this.low) / this.range);
 
-        final int[] bfreq = this.baseFreq;
-        final int[] dfreq = this.deltaFreq;        
-        this.range /= (bfreq[NB_SYMBOLS>>4] + dfreq[NB_SYMBOLS]);
-        int count = (int) ((this.code - this.low) / this.range);
-
-        // Find first frequency less than 'count'
-        int value = (count < bfreq[bfreq.length/2]) ? bfreq.length/2 - 1 : bfreq.length - 1;
+       // Find first frequency less than 'count'
+       final int value = this.findSymbol(count);
         
-        while ((value > 0) && (count < bfreq[value]))
-            value--;
+       if (value == LAST)
+       {
+          if (this.bitstream.hasMoreToRead() == false)
+             throw new BitStreamException("End of bitstream", BitStreamException.END_OF_STREAM);
 
-        count -= bfreq[value];
-        value <<= 4;
+          throw new BitStreamException("Unknown symbol: "+value, BitStreamException.INVALID_STREAM);
+       }
 
-        if (count > 0)
-        {
-           final int end = value;
-           
-           if (count < dfreq[value+8])
-           {
-              value = (count < dfreq[value+4]) ? value + 3 : value + 7;
-           }
-           else
-           {
-              value = (count < dfreq[value+12]) ? value + 11 : value + 15;
-              
-              if (value > NB_SYMBOLS)
-                 value = NB_SYMBOLS;
-           }
+       final int symbolLow = bfreq[value>>4] + dfreq[value];
+       final int symbolHigh = bfreq[(value+1)>>4] + dfreq[value+1];
 
-           while ((value >= end) && (count < dfreq[value]))
-              value--;
-        }
+       // Decode symbol
+       this.low += (symbolLow * this.range);
+       this.range *= (symbolHigh - symbolLow);
 
-        if (value == LAST)
-        {
-            if (this.bitstream.hasMoreToRead() == false)
-                throw new BitStreamException("End of bitstream", BitStreamException.END_OF_STREAM);
-
-            throw new BitStreamException("Unknown symbol: "+value, BitStreamException.INVALID_STREAM);
-        }
-
-        final int symbolLow = bfreq[value>>4] + dfreq[value];
-        final int symbolHigh = bfreq[(value+1)>>4] + dfreq[value+1];
-
-        // Decode symbol
-        this.low += (symbolLow * this.range);
-        this.range *= (symbolHigh - symbolLow);
-
-        long checkRange = (this.low ^ (this.low + this.range)) & MASK;
-
-        while ((checkRange < TOP) || (this.range < MAX_RANGE))
-        {
-            // Normalize
-            if (checkRange >= TOP)
+       while (true)
+       {                       
+          if (((this.low ^ (this.low + this.range)) & MASK) >= TOP)
+          {
+             if (this.range >= MAX_RANGE)
+                break;
+             else // Normalize
                 this.range = (-this.low & MASK) & BOTTOM;
+          }
 
-            this.code <<= 8;
-            this.code |= (this.bitstream.readBits(8) & 0xFF);
-            this.range <<= 8;
-            this.low <<= 8;
-            checkRange = (this.low ^ (this.low + this.range)) & MASK;
-        }
+          this.code = (this.code << 8) | (this.bitstream.readBits(8) & 0xFF);
+          this.range <<= 8;
+          this.low <<= 8;
+       }
 
-        // Update frequencies: computational bottleneck !!!
-        this.updateFrequencies(value+1);     
-        return (byte) (value & 0xFF);
+       // Update frequencies: computational bottleneck !!!
+       this.updateFrequencies(value+1);     
+       return (byte) (value & 0xFF);
     }
 
+    
+    private int findSymbol(int freq)
+    {
+       final int[] bfreq = this.baseFreq;
+       final int[] dfreq = this.deltaFreq;        
 
+       // Find first frequency less than 'count'
+       int value = (freq < bfreq[bfreq.length/2]) ? bfreq.length/2 - 1 : bfreq.length - 1;
+        
+       while ((value > 0) && (freq < bfreq[value]))
+          value--;
+
+       freq -= bfreq[value];
+       value <<= 4;
+
+       if (freq > 0)
+       {
+          final int end = value;
+           
+          if (freq < dfreq[value+8])
+          {
+             value = (freq < dfreq[value+4]) ? value + 3 : value + 7;
+          }
+          else
+          {
+             value = (freq < dfreq[value+12]) ? value + 11 : value + 15;
+              
+             if (value > NB_SYMBOLS)
+                value = NB_SYMBOLS;
+          }
+
+          while ((value >= end) && (freq < dfreq[value]))
+            value--;
+       }
+     
+       return value;
+    }
+    
+ 
     private void updateFrequencies(int value)
     {
-        int[] freq = this.baseFreq;
         final int start = (value + 15) >> 4;
-        final int len = freq.length;
 
         // Update absolute frequencies
-        for (int j=start; j<len; j++)
-            freq[j]++;
-
-        freq = this.deltaFreq;
+        for (int j=this.baseFreq.length-1; j>=start; j--)
+            this.baseFreq[j]++;
 
         // Update relative frequencies (in the 'right' segment only)
         for (int j=(start<<4)-1; j>=value; j--)
-            freq[j]++;
+            this.deltaFreq[j]++;
     }
 
 
