@@ -234,7 +234,9 @@ func (this *BinaryEntropyDecoder) Decode(block []byte) (int, error) {
 	// Deferred initialization: the bistream may not be ready at build time
 	// Initialize 'current' with bytes read from the bitstream
 	if this.Initialized() == false {
-		this.Initialize()
+		if err = this.Initialize(); err != nil {
+		   return 0, err
+		}
 	}
 
 	for i := range block {
