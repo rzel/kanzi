@@ -143,7 +143,7 @@ func NewHuffmanEncoder(bs kanzi.OutputBitStream) (*HuffmanEncoder, error) {
 		this.sizes[i] = 8
 		this.codes[i] = uint(i)
 	}
-	
+
 	return this, nil
 }
 
@@ -252,7 +252,7 @@ func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 
 	// Transmit code lengths only, frequencies and codes do not matter
 	// Unary encode the length difference
-	for i := 0; i < len(frequencies); i++ {
+	for i := 0; i < 256; i++ {
 		nextSize := this.sizes[i]
 
 		// The encoder is sign aware ...
@@ -302,8 +302,8 @@ func (this *HuffmanEncoder) BitStream() kanzi.OutputBitStream {
 
 type HuffmanDecoder struct {
 	bitstream     kanzi.InputBitStream
-	codes     []uint
-	sizes     []uint
+	codes         []uint
+	sizes         []uint
 	root          *HuffmanNode
 	decodingCache []*HuffmanCacheData
 	current       *HuffmanCacheData
@@ -398,7 +398,7 @@ func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
 	// Create node for each (present) symbol and add to map
 	for i := range this.sizes {
 		size := this.sizes[i]
-		
+
 		if size == 0 {
 			continue
 		}
