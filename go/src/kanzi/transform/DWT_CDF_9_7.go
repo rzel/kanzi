@@ -19,6 +19,7 @@ import (
 	"errors"
 )
 
+// Discrete Wavelet Transform Cohen-Daubechies-Fauveau 9/7 for 2D signals
 const (
 	SHIFT  = 12
 	ADJUST = 1 << (SHIFT - 1)

@@ -31,8 +31,8 @@ import kanzi.util.XXHash;
 
 // Implementation of a java.io.OutputStream that encodes a stream
 // using a 2 step process:
-// - step 1: a ByteFunction is used to reduce the size ogf the input data
-// - step 2: an EntropyEncoder is used to entropy code the results of step 1
+// - step 1: a ByteFunction is used to reduce the size of the input data (bytes input & output)
+// - step 2: an EntropyEncoder is used to entropy code the results of step 1 (bytes input, bits output)
 public class CompressedOutputStream extends OutputStream
 {
    private static final int DEFAULT_BLOCK_SIZE       = 1024 * 1024; // Default block size
@@ -45,7 +45,7 @@ public class CompressedOutputStream extends OutputStream
    private static final int MAX_BLOCK_SIZE           = (16*1024*1024) - 4;
    private static final int SMALL_BLOCK_SIZE         = 15;
    private static final byte[] EMPTY_BYTE_ARRAY      = new byte[0];
- 
+
    private final int blockSize;
    private final XXHash hasher;
    private final IndexedByteArray iba1;
@@ -114,22 +114,22 @@ public class CompressedOutputStream extends OutputStream
          return;
 
       if (this.obs.writeBits(BITSTREAM_TYPE, 32) != 32)
-         throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write bitstream type in header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBits(BITSTREAM_FORMAT_VERSION, 7) != 7)
-         throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write bitstream version in header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBit((this.hasher != null) ? 1 : 0) == false)
-         throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write checksum in header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBits(this.entropyType & 0x7F, 7) != 7)
-         throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write entropy type in header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBits(this.transformType & 0x7F, 7) != 7)
-         throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write transform type in header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBits(this.blockSize, 26) != 26)
-         throw new kanzi.io.IOException("Cannot write header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write block size in header", Error.ERR_WRITE_FILE);
    }
 
 
@@ -270,7 +270,7 @@ public class CompressedOutputStream extends OutputStream
             // Just copy
             if (data.array != this.iba2.array)
                System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
-            
+
             data.index += blockLength;
             this.iba2.index = blockLength;
             mode = (byte) (SMALL_BLOCK_MASK | (blockLength & COPY_LENGTH_MASK));
@@ -287,7 +287,7 @@ public class CompressedOutputStream extends OutputStream
             if ((transform.forward(data, this.iba2) == false) || (this.iba2.index >= blockLength))
             {
                data.index = savedIdx;
-               
+
                // Transform failed or did not compress, skip and copy block
                if (data.array != this.iba2.array)
                   System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
@@ -338,7 +338,7 @@ public class CompressedOutputStream extends OutputStream
 
             this.ds.println();
          }
-            
+
          return encoded;
       }
       catch (Exception e)

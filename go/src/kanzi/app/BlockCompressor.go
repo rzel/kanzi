@@ -251,7 +251,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 	printOut(msg, !this.silent)
 
 	if delta > 0 {
-		msg = fmt.Sprintf("Throughput (KB/s) %d", ((read*int64(1000))>>10)/delta)
+		msg = fmt.Sprintf("Throughput (KB/s): %d", ((read*int64(1000))>>10)/delta)
 		printOut(msg, !this.silent)
 	}
 

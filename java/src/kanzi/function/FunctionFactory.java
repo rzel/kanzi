@@ -18,7 +18,7 @@ package kanzi.function;
 import kanzi.ByteFunction;
 
 
-public class FunctionFactory 
+public class FunctionFactory
 {
    public static final byte BLOCK_TYPE   = 66; // 'B'
    public static final byte RLT_TYPE     = 82; // 'R'
@@ -26,8 +26,8 @@ public class FunctionFactory
    public static final byte ZLT_TYPE     = 90; // 'Z'
    public static final byte LZ4_TYPE     = 76; // 'L'
    public static final byte NONE_TYPE    = 78; // 'N'
-   
-   
+
+
    public ByteFunction newFunction(int size, byte type)
    {
       switch (type)
@@ -47,9 +47,9 @@ public class FunctionFactory
          default:
             throw new IllegalArgumentException("Unsupported function type: " + (char) type);
       }
-   } 
-   
-   
+   }
+
+
    public String getName(byte type)
    {
       switch (type)
@@ -67,7 +67,7 @@ public class FunctionFactory
          case NONE_TYPE:
             return "NONE";
          default:
-            throw new IllegalArgumentException("Unsupported function type" + (char) type);
+            throw new IllegalArgumentException("Unsupported function type: " + (char) type);
       }
    }
 }

@@ -27,6 +27,12 @@ import (
 	"kanzi/util"
 )
 
+// Write to/read from stream using a 2 step process:
+// Encoding:
+// - step 1: a ByteFunction is used to reduce the size of the input data (bytes input & output)
+// - step 2: an EntropyEncoder is used to entropy code the results of step 1 (bytes input, bits output)
+// Decoding is the exact reverse process.
+
 const (
 	BITSTREAM_TYPE           = 0x4B414E5A // "KANZ"
 	BITSTREAM_FORMAT_VERSION = 2
@@ -165,11 +171,11 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 	var err error
 
 	if _, err = this.obs.WriteBits(BITSTREAM_TYPE, 32); err != nil {
-		return NewIOError("Cannot write header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write bitstream type in header", ERR_WRITE_FILE)
 	}
 
 	if _, err = this.obs.WriteBits(BITSTREAM_FORMAT_VERSION, 7); err != nil {
-		return NewIOError("Cannot write header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write bitstream version in header", ERR_WRITE_FILE)
 	}
 
 	cksum := 0
@@ -179,19 +185,19 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 	}
 
 	if err = this.obs.WriteBit(cksum); err != nil {
-		return NewIOError("Cannot write header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write checksum in header", ERR_WRITE_FILE)
 	}
 
 	if _, err = this.obs.WriteBits(uint64(this.entropyType&0x7F), 7); err != nil {
-		return NewIOError("Cannot write header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write entropy type in header", ERR_WRITE_FILE)
 	}
 
 	if _, err = this.obs.WriteBits(uint64(this.transformType&0x7F), 7); err != nil {
-		return NewIOError("Cannot write header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write transform type in header", ERR_WRITE_FILE)
 	}
 
 	if _, err = this.obs.WriteBits(uint64(this.blockSize), 26); err != nil {
-		return NewIOError("Cannot write header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write block size header", ERR_WRITE_FILE)
 	}
 
 	return nil
@@ -441,7 +447,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 
 	// Read stream type
 	if fileType, err = this.ibs.ReadBits(32); err != nil {
-		errMsg := fmt.Sprintf("Error reading header from input file: %v", err)
+		errMsg := fmt.Sprintf("Error reading stream type in header from input file: %v", err)
 		return NewIOError(errMsg, ERR_READ_FILE)
 	}
 
@@ -454,7 +460,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 	header := uint64(0)
 
 	if header, err = this.ibs.ReadBits(48); err != nil {
-		errMsg := fmt.Sprintf("Error reading input file: %v", err)
+		errMsg := fmt.Sprintf("Error reading header in input file: %v", err)
 		return NewIOError(errMsg, ERR_READ_FILE)
 	}
 
