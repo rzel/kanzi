@@ -102,7 +102,7 @@ func writeLength(array []byte, length int) int {
 		array[index] = 0xFF
 		array[index+1] = 0xFF
 		length -= 0x1FE
-		index+=2
+		index += 2
 	}
 
 	if length >= 0xFF {
@@ -147,13 +147,13 @@ func emitLiterals(src []byte, dst []byte, runLen int, last bool) (int, int, int)
 }
 
 func (this *LZ4Codec) Forward(src, dst []byte) (uint, uint, error) {
-	count := this.size
+	count := int(this.size)
 
 	if this.size == 0 {
-		count = uint(len(src))
+		count = len(src)
 	}
 
-	if n := MaxEncodedLen(int(count)); len(dst) < n {
+	if n := MaxEncodedLen(count); len(dst) < n {
 		return 0, 0, fmt.Errorf("Output buffer is too small - size: %d, required %d", len(dst), n)
 	}
 
@@ -166,19 +166,19 @@ func (this *LZ4Codec) Forward(src, dst []byte) (uint, uint, error) {
 
 func (this *LZ4Codec) doForward(src []byte, dst []byte,
 	base int, hashLog uint, hashMask int) (uint, uint, error) {
-	count := this.size
+	count := int(this.size)
 
 	if this.size == 0 {
-		count = uint(len(src))
+		count = len(src)
 	}
 
 	if count < MIN_LENGTH {
-		srcIdx, dstIdx, _ := emitLiterals(src, dst, int(count), true)
+		srcIdx, dstIdx, _ := emitLiterals(src, dst, count, true)
 		return uint(srcIdx), uint(dstIdx), error(nil)
 	}
 
 	hashShift := 32 - hashLog
-	srcEnd := int(count)
+	srcEnd := count
 	srcLimit := srcEnd - LAST_LITERALS
 	mfLimit := srcEnd - MF_LIMIT
 	srcIdx := 0
@@ -222,7 +222,7 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 		}
 
 		// Catch up
-		for (ref > 0) && (srcIdx > anchor) && (src[ref-1] == src[srcIdx-1]) {
+		for ref > 0 && srcIdx > anchor && src[ref-1] == src[srcIdx-1] {
 			ref--
 			srcIdx--
 		}
@@ -246,7 +246,7 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 			ref += MIN_MATCH
 			anchor = srcIdx
 
-			for (srcIdx < srcLimit) && (src[srcIdx] == src[ref]) {
+			for srcIdx < srcLimit && src[srcIdx] == src[ref] {
 				srcIdx++
 				ref++
 			}
@@ -304,21 +304,19 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 }
 
 func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
-	count := this.size
+	count := int(this.size)
 
 	if this.size == 0 {
-		count = uint(len(src))
+		count = len(src)
 	}
 
-	srcEnd := int(count)
-	dstEnd := len(dst)
-	srcEnd2 := srcEnd - COPY_LENGTH
-	dstEnd2 := dstEnd - COPY_LENGTH
+	srcEnd := count - COPY_LENGTH
+	dstEnd := len(dst) - COPY_LENGTH
 	srcIdx := 0
 	dstIdx := 0
 
 	for {
-		token := int(src[srcIdx] & 0xFF)
+		token := int(src[srcIdx])
 		srcIdx++
 
 		// Literals
@@ -341,7 +339,7 @@ func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
 		srcIdx += length
 		dstIdx += length
 
-		if (dstIdx > dstEnd2) || (srcIdx > srcEnd2) {
+		if dstIdx > dstEnd || srcIdx > srcEnd {
 			break
 		}
 
@@ -373,7 +371,7 @@ func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
 		dstIdx += length
 	}
 
-	return count, uint(dstIdx), nil
+	return uint(count), uint(dstIdx), nil
 }
 
 func MaxEncodedLen(srcLen int) int {

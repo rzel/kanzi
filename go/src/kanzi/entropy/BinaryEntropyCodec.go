@@ -56,9 +56,7 @@ func NewBinaryEntropyEncoder(bs kanzi.OutputBitStream, predictor Predictor) (*Bi
 
 func (this *BinaryEntropyEncoder) EncodeByte(val byte) error {
 	for i := 7; i >= 0; i-- {
-		err := this.EncodeBit((val >> uint(i)) & 1)
-
-		if err != nil {
+		if err := this.EncodeBit((val >> uint(i)) & 1); err != nil {
 			return err
 		}
 	}
@@ -205,9 +203,7 @@ func (this *BinaryEntropyDecoder) DecodeBit() (int, error) {
 
 	// Read from bitstream
 	for ((this.low ^ this.high) & uint64(0xFF000000)) == 0 {
-		err := this.Read()
-
-		if err != nil {
+		if err := this.Read(); err != nil {
 			return 0, err
 		}
 	}
@@ -220,12 +216,11 @@ func (this *BinaryEntropyDecoder) Read() error {
 	this.high = uint64((this.high << 8) | 255)
 	read, err := this.bitstream.ReadBits(8)
 
-	if err != nil {
-		return err
+	if err == nil {
+		this.current = uint64((this.current << 8) | read)
 	}
 
-	this.current = uint64((this.current << 8) | read)
-	return nil
+	return err
 }
 
 func (this *BinaryEntropyDecoder) Decode(block []byte) (int, error) {
@@ -235,7 +230,7 @@ func (this *BinaryEntropyDecoder) Decode(block []byte) (int, error) {
 	// Initialize 'current' with bytes read from the bitstream
 	if this.Initialized() == false {
 		if err = this.Initialize(); err != nil {
-		   return 0, err
+			return 0, err
 		}
 	}
 

@@ -76,7 +76,7 @@ func (this *BWT) Forward(input []byte) []byte {
 	}
 
 	for i := 0; i < length; i++ {
-		this.data[i] = int(input[i]) & 0xFF
+		this.data[i] = int(input[i])
 	}
 
 	sa := this.buffer1 // alias
@@ -111,13 +111,13 @@ func (this *BWT) Inverse(input []byte) []byte {
 		this.buffer2 = make([]byte, length)
 	}
 
-	for i := 0; i < 256; i++ {
+	for i := range this.buckets {
 		this.buckets[i] = 0
 	}
 
 	// Create histogram
 	for i := 0; i < length; i++ {
-		idx := int(input[i]) & 0xFF
+		idx := int(input[i])
 		this.data[i] = this.buckets[idx]
 		this.buckets[idx]++
 	}
@@ -125,7 +125,7 @@ func (this *BWT) Inverse(input []byte) []byte {
 	sum := 0
 
 	// Create cumulative histogram
-	for i := 0; i < 256; i++ {
+	for i := range this.buckets {
 		val := this.buckets[i]
 		this.buckets[i] = sum
 		sum += val
@@ -138,7 +138,7 @@ func (this *BWT) Inverse(input []byte) []byte {
 	for i := length - 1; i >= 0; i-- {
 		idx := input[val]
 		buffer[i] = idx
-		val = this.data[val] + this.buckets[int(idx)&0xFF]
+		val = this.data[val] + this.buckets[int(idx)]
 
 		if val < pIdx {
 			val++
@@ -272,7 +272,7 @@ func postProcessLMS(src []int, sa []int, n, m int) int {
 	j := 0
 
 	// compact all the sorted substrings into the first m items of sa
-	// 2*m must be not larger than n        
+	// 2*m must be not larger than n
 	for p := sa[i]; p < 0; i++ {
 		sa[i] = ^p
 		p = sa[i+1]
