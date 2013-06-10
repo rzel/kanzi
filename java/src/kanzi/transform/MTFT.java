@@ -48,7 +48,7 @@ public final class MTFT implements ByteTransform
         this.heads = new Payload[16];
         this.lengths = new int[16];
         this.buckets = new byte[256];
- 
+
         // Initialize the linked lists: 1 item in bucket 0 and 17 in each other
         Payload previous = new Payload((byte) 0);
         this.heads[0] = previous;
@@ -81,7 +81,7 @@ public final class MTFT implements ByteTransform
         this.balanceLists(true);
         final int end = (this.size == 0) ? input.length : blkptr + this.size;
 
-        // This section is in the critical speed path 
+        // This section is on the critical speed path
         return this.moveToFront(input, blkptr, end);
     }
 
@@ -90,21 +90,21 @@ public final class MTFT implements ByteTransform
     public byte[] inverse(byte[] input, int blkptr)
     {
         final byte[] indexes = this.buckets;
-        
+
         for (int i=0; i<indexes.length; i++)
             indexes[i] = (byte) i;
-        
+
         final int end = (this.size == 0) ? input.length : blkptr + this.size;
 
         for (int i=blkptr; i<end; i++)
         {
-           final int idx = input[i] & 0xFF;                      
+           final int idx = input[i] & 0xFF;
            final byte value = indexes[idx];
            input[i] = value;
 
            if (idx == 0)
               continue;
-           
+
            if (idx < 16)
            {
               for (int j=idx-1; j>=0; j--)
@@ -114,7 +114,7 @@ public final class MTFT implements ByteTransform
            {
               System.arraycopy(indexes, 0, indexes, 1, idx);
            }
-           
+
            indexes[0] = value;
         }
 
@@ -139,14 +139,13 @@ public final class MTFT implements ByteTransform
     }
 
 
-    
     // Recreate one list with 1 item and 15 lists with 17 items
     // Update lengths and buckets accordingly. This is a time consuming operation
     private void balanceLists(boolean resetValues)
     {
        this.lengths[0] = 1;
-       byte listIdx = 0;
        Payload p = this.heads[0].next;
+       byte val = 0;
 
        if (resetValues == true)
        {
@@ -154,25 +153,23 @@ public final class MTFT implements ByteTransform
           this.buckets[0] = 0;
        }
 
-       for (int i=1, n=0; i<256; i++)
+       for (byte listIdx=1; listIdx<16; listIdx++)
        {
-          if (resetValues == true)
-             p.value = (byte) i;
-          
-          if (n == 0)
-          {
-             listIdx++;
-             this.heads[listIdx] = p;
-             this.lengths[listIdx] = 17;
-          }
+          this.heads[listIdx] = p;
+          this.lengths[listIdx] = 17;
 
-          this.buckets[p.value & 0xFF] = listIdx;
-          p = p.next;
-          n = (n < 16) ? n + 1 : 0;
+          for (int n=0; n<=16; n++)
+          {
+             if (resetValues == true)
+                p.value = ++val;
+
+             this.buckets[p.value & 0xFF] = listIdx;
+             p = p.next;
+          }
        }
     }
 
-    
+
     private byte[] moveToFront(byte[] values, int start, int end)
     {
        byte previous = this.heads[0].value;
@@ -180,22 +177,21 @@ public final class MTFT implements ByteTransform
        for (int ii=start; ii<end; ii++)
        {
           final byte current = values[ii];
-          
+
           if (current == previous)
-          { 
+          {
              values[ii] = 0;
              continue;
           }
 
           // Find list index
-          int listIdx = this.buckets[current & 0xFF];
-          
+          final int listIdx = this.buckets[current & 0xFF];
           Payload p = this.heads[listIdx];
           int idx = 0;
 
           for (int i=0; i<listIdx; i++)
              idx += this.lengths[i];
-          
+
           // Find index in list (less than RESET_THRESHOLD iterations)
           while (p.value != current)
           {
@@ -217,7 +213,7 @@ public final class MTFT implements ByteTransform
              this.heads[listIdx] = p.next;
 
           // Add to head of first list
-          Payload q = this.heads[0];
+          final Payload q = this.heads[0];
           q.previous = p;
           p.next = q;
           this.heads[0] = p;

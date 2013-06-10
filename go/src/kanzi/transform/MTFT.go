@@ -81,7 +81,7 @@ func (this *MTFT) Forward(input []byte) []byte {
 		end = this.size
 	}
 
-	// This section is in the critical speed path 
+	// This section is on the critical speed path
 	return this.moveToFront(input, end)
 }
 
@@ -117,33 +117,26 @@ func (this *MTFT) Inverse(input []byte) []byte {
 // Update lengths and buckets accordingly. This is a time consuming operation
 func (this *MTFT) balanceLists(resetValues bool) {
 	this.lengths[0] = 1
-	listIdx := byte(0)
 	p := this.heads[0].next
+	val := byte(0)
 
 	if resetValues == true {
 		this.heads[0].value = byte(0)
 		this.buckets[0] = 0
 	}
 
-	n := 0
+	for listIdx := byte(1); listIdx < 16; listIdx++ {
+		this.heads[listIdx] = p
+		this.lengths[listIdx] = 17
 
-	for i := 1; i < 256; i++ {
-		if resetValues == true {
-			p.value = byte(i)
-		}
+		for n := 0; n <= 16; n++ {
+			if resetValues == true {
+				val++
+				p.value = val
+			}
 
-		if n == 0 {
-			listIdx++
-			this.heads[listIdx] = p
-			this.lengths[listIdx] = 17
-		}
-
-		this.buckets[int(p.value)&0xFF] = listIdx
-		p = p.next
-		n++
-
-		if n > 16 {
-			n = 0
+			this.buckets[int(p.value)] = listIdx
+			p = p.next
 		}
 	}
 }
@@ -160,7 +153,7 @@ func (this *MTFT) moveToFront(values []byte, end uint) []byte {
 		}
 
 		// Find list index
-		listIdx := int(this.buckets[int(current)&0xFF])
+		listIdx := int(this.buckets[int(current)])
 
 		p := this.heads[listIdx]
 		idx := 0
@@ -201,7 +194,7 @@ func (this *MTFT) moveToFront(values []byte, end uint) []byte {
 		if listIdx != 0 {
 			this.lengths[listIdx]--
 			this.lengths[0]++
-			this.buckets[int(current)&0xFF] = 0
+			this.buckets[int(current)] = 0
 
 			if this.lengths[0] > RESET_THRESHOLD || this.lengths[listIdx] == 0 {
 				this.balanceLists(false)
