@@ -77,7 +77,7 @@ func main() {
 		}
 
 		fmt.Printf(" (Compression ratio: %v%%)", dstIdx*100/srcIdx)
-		zlt, _ = function.NewZLT(dstIdx) // Required to reset internal attributes
+		zlt, _ = function.NewZLT(dstIdx)
 		zlt.Inverse(output, reverse)
 		fmt.Printf("\nDecoded: ")
 		ok := true
@@ -114,6 +114,8 @@ func main() {
 
 		// Generate random data with runs
 		n := 0
+		var compressed uint
+		var err error
 		delta1 := int64(0)
 		delta2 := int64(0)
 
@@ -136,8 +138,8 @@ func main() {
 			zlt, _ := function.NewZLT(0)
 			before := time.Now()
 
-			if _, _, err := zlt.Forward(input, output); err != nil {
-				fmt.Printf("Encoding error%v\n", err)
+			if _, compressed, err = zlt.Forward(input, output); err != nil {
+				fmt.Printf("Encoding error: %v\n", err)
 				os.Exit(1)
 			}
 
@@ -146,11 +148,11 @@ func main() {
 		}
 
 		for ii := 0; ii < iter; ii++ {
-			zlt, _ := function.NewZLT(0)
+			zlt, _ := function.NewZLT(compressed)
 			before := time.Now()
 
-			if _, _, err := zlt.Inverse(output, reverse); err != nil {
-				fmt.Printf("Decoding error%v\n", err)
+			if _, _, err = zlt.Inverse(output, reverse); err != nil {
+				fmt.Printf("Decoding error: %v\n", err)
 				os.Exit(1)
 			}
 

@@ -15,6 +15,10 @@ limitations under the License.
 
 package function
 
+import (
+	"errors"
+)
+
 // Zero Length Encoding is a simple encoding algorithm by Wheeler
 // closely related to Run Length Encoding. The main difference is
 // that only runs of 0 values are processed. Also, the length is
@@ -22,12 +26,11 @@ package function
 // This algorithm is well adapted to process post BWT/MTFT data
 
 const (
-	ZLT_MAX_RUN = uint(1 << 31)
+	ZLT_MAX_RUN = int(1<<31) - 1
 )
 
 type ZLT struct {
-	size   uint
-	copies uint
+	size uint
 }
 
 func NewZLT(sz uint) (*ZLT, error) {
@@ -47,11 +50,12 @@ func (this *ZLT) Forward(src, dst []byte) (uint, uint, error) {
 		srcEnd = uint(len(src))
 	}
 
-	runLength := this.copies
+	dstEnd := uint(len(dst))
+	runLength := 1
 	srcIdx := uint(0)
 	dstIdx := uint(0)
 
-	for srcIdx < srcEnd && dstIdx < uint(len(dst)) {
+	for srcIdx < srcEnd && dstIdx < dstEnd {
 		val := src[srcIdx]
 
 		if val == 0 {
@@ -63,63 +67,50 @@ func (this *ZLT) Forward(src, dst []byte) (uint, uint, error) {
 			}
 		}
 
-		if runLength > 0 {
-			// Write length
-			log2 := uint(0)
-			run := runLength + 1
+		if runLength > 1 {
+			// Encode length
+			log2 := uint(1)
 
-			for val2 := run; val2 > 1; val2 >>= 1 {
+			for runLength>>log2 > 1 {
 				log2++
 			}
 
-			if dstIdx <= uint(len(dst))-log2 {
-				// Write every bit as a byte except the most significant one
-				for log2 > 0 {
-					log2--
-					dst[dstIdx] = byte((run >> log2) & 1)
-					dstIdx++
-				}
-
-				runLength = 0
-				continue
-			} else {
-				// Will reach end of destination array, must truncate block
-				// Can only write the bits that fit into the destination array
-				log2 = uint(len(dst)) - dstIdx
-
-				// Write every bit as a byte except the most significant one
-				for dstIdx < uint(len(dst)) {
-					dst[dstIdx] = byte(1)
-					dstIdx++
-				}
-
-				// The most significant bit is not encoded, so log2 corresponds
-				// to the max value of (1 << ((log2+1) + 1)) - 1
-				delta := uint((1 << (log2 + 2)) - 1)
-				runLength -= delta
-				srcIdx -= delta
-				break
+			if dstIdx > dstEnd-log2 {
+				return srcIdx, dstIdx, errors.New("Cannot write run length to output buffer: full!")
 			}
+
+			// Write every bit as a byte except the most significant one
+			for log2 > 0 {
+				log2--
+				dst[dstIdx] = byte((runLength >> log2) & 1)
+				dstIdx++
+			}
+
+			runLength = 1
+			continue
 		}
 
 		if val >= 0xFE {
-			if dstIdx >= uint(len(dst)-1) {
-				break
+			if dstIdx > dstEnd-2 {
+				return srcIdx, dstIdx, errors.New("Cannot write value to output buffer: full!")
 			}
 
-			dst[dstIdx] = byte(0xFF)
+			dst[dstIdx] = 0xFF
 			dstIdx++
-			dst[dstIdx] = byte(val - 0xFE)
+			dst[dstIdx] = val - 0xFE
 			dstIdx++
 		} else {
-			dst[dstIdx] = byte(val + 1)
+			dst[dstIdx] = val + 1
 			dstIdx++
 		}
 
 		srcIdx++
 	}
 
-	this.copies = runLength
+	if srcIdx < srcEnd {
+		return srcIdx, dstIdx, errors.New("Output buffer is too small")
+	}
+
 	return srcIdx, dstIdx, nil
 }
 
@@ -130,67 +121,65 @@ func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
 		srcEnd = uint(len(src))
 	}
 
-	runLength := this.copies
+	dstEnd := uint(len(dst))
+	runLength := 1
 	srcIdx := uint(0)
 	dstIdx := uint(0)
 
-	for srcIdx < srcEnd && dstIdx < uint(len(dst)) {
-		if runLength > 0 {
+	for srcIdx < srcEnd && dstIdx < dstEnd {
+		if runLength > 1 {
 			runLength--
 			dst[dstIdx] = 0
 			dstIdx++
 			continue
 		}
 
-		val := uint(src[srcIdx])
+		val := src[srcIdx]
 
 		if val <= 1 {
 			// Generate the run length bit by bit (but force MSB)
-			run := uint(1)
+			runLength = 1
 
-			// Exit if no more data to read from source array (incomplete length)
-			// Calling the method again with reset arrays will resume 'correctly'
 			for val <= 1 {
-				run = (run << 1) | val
+				runLength = (runLength << 1) | int(val)
 				srcIdx++
 
 				if srcIdx >= srcEnd {
 					break
 				}
 
-				val = uint(src[srcIdx])
+				val = src[srcIdx]
 			}
 
-			// Update run length
-			runLength = uint(run - 1)
 			continue
 		}
 
 		// Regular data processing
 		if val > 0xFE {
 			srcIdx++
-			val += uint(src[srcIdx] & 0x01)
+			val += (src[srcIdx] & 0x01)
 		}
 
-		dst[dstIdx] = byte(val - 1)
+		dst[dstIdx] = val - 1
 		dstIdx++
 		srcIdx++
 	}
 
-	min := int(runLength)
+	// If runLength is not 1, add trailing 0s
+	end := dstIdx + uint(runLength) - 1
 
-	if runLength > uint(len(dst))-dstIdx {
-		min = len(dst) - int(dstIdx)
+	if end > dstEnd {
+		return srcIdx, dstIdx, errors.New("Output buffer is too small")
 	}
 
-	min--
-
-	for min >= 0 {
+	for dstIdx < end {
 		dst[dstIdx] = 0
 		dstIdx++
-		min--
 	}
 
-	this.copies = runLength
+	if srcIdx < srcEnd {
+		return srcIdx, dstIdx, errors.New("Output buffer is too small")
+	}
+
 	return srcIdx, dstIdx, nil
 }

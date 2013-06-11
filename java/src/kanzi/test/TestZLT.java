@@ -89,7 +89,7 @@ public class TestZLT
          }
 
          System.out.print(" (Compression ratio: " + (iba2.index * 100 / input.length)+ "%)");
-         zlt = new ZLT(); // Required to reset internal attributes
+         zlt = new ZLT(iba2.index); 
          iba1.index = 0;
          iba2.index = 0;
          iba3.index = 0;
@@ -152,7 +152,7 @@ public class TestZLT
          
          for (int ii = 0; ii < iter; ii++)
          {
-            zlt = new ZLT(); // Required to reset internal attributes
+            zlt = new ZLT(); 
             iba1.index = 0;
             iba2.index = 0;
             before = System.nanoTime();
@@ -169,7 +169,7 @@ public class TestZLT
          
          for (int ii = 0; ii < iter; ii++)
          {
-            zlt = new ZLT(); // Required to reset internal attributes
+            zlt = new ZLT(iba2.index); 
             iba2.index = 0;
             iba3.index = 0;
             before = System.nanoTime();

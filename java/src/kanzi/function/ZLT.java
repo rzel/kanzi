@@ -26,7 +26,8 @@ import kanzi.IndexedByteArray;
 
 public final class ZLT implements ByteFunction
 {
-   private int copies;
+   private static int ZLT_MAX_RUN = Integer.MAX_VALUE;
+
    private final int size;
 
 
@@ -59,10 +60,11 @@ public final class ZLT implements ByteFunction
       int dstIdx = destination.index;
       final byte[] src = source.array;
       final byte[] dst = destination.array;
-      final int end = (this.size == 0) ? src.length : srcIdx + this.size;
-      int runLength = this.copies;
+      final int srcEnd = (this.size == 0) ? src.length : srcIdx + this.size;
+      final int dstEnd = dst.length;
+      int runLength = 1;
 
-      while ((srcIdx < end) && (dstIdx < dst.length))
+      while ((srcIdx < srcEnd) && (dstIdx < dstEnd))
       {
          int val = src[srcIdx];
 
@@ -71,55 +73,46 @@ public final class ZLT implements ByteFunction
             runLength++;
             srcIdx++;
 
-            if ((srcIdx < end) && (runLength < Integer.MAX_VALUE))
+            if ((srcIdx < srcEnd) && (runLength < ZLT_MAX_RUN))
                 continue;
          }
 
-         if (runLength > 0)
+         if (runLength > 1)
          {
-             // Write length
-            int log2 = 0;
-            final int run = runLength + 1;
+            // Encode length
+            int log2 = 1;
 
-            for (int val2=run; val2>1; val2>>=1)
+            for (int val2=runLength>>1; val2>1; val2>>=1)
                log2++;
 
-            if (dstIdx <= dst.length - log2)
+            if (dstIdx > dstEnd - log2)
             {
-                // Write every bit as a byte except the most significant one
-                while (log2 > 0)
-                {
-                   log2--;
-                   dst[dstIdx++] = (byte) ((run >> log2) & 1);
-                }
-                
-                runLength = 0;
-                continue;
+               source.index = srcIdx;
+               destination.index = dstIdx;
+               return false;
             }
-            else // will reach end of destination array, must truncate block
+
+            // Write every bit as a byte except the most significant one
+            while (log2 > 0)
             {
-                // Can only write the bits that fit into the destination array
-                log2 = dst.length - dstIdx;
-
-                // Write every bit as a byte except the most significant one
-                while (dstIdx < dst.length)
-                   dst[dstIdx++] = (byte) 1;
-
-                // The most significant bit is not encoded, so log2 corresponds
-                // to the max value of (1 << ((log2+1) + 1)) - 1
-                int delta = (1 << (log2 + 2)) - 1;
-                runLength -= delta;
-                srcIdx -= delta;
-                break;
+               log2--;
+               dst[dstIdx++] = (byte) ((runLength >> log2) & 1);
             }
+
+            runLength = 1;
+            continue;
          }
 
          val &= 0xFF;
 
          if (val >= 0xFE)
          {
-            if (dstIdx >= dst.length - 1)
-               break;
+            if (dstIdx > dstEnd - 2)
+            {
+               source.index = srcIdx;
+               destination.index = dstIdx;
+               return false;
+            }
 
             dst[dstIdx++] = (byte) 0xFF;
             dst[dstIdx++] = (byte) (val - 0xFE);
@@ -132,10 +125,9 @@ public final class ZLT implements ByteFunction
          srcIdx++;
       }
 
-      this.copies = runLength;
       source.index = srcIdx;
       destination.index = dstIdx;
-      return true;
+      return ((srcIdx == srcEnd) && (runLength == 1)) ? true : false;
    }
 
 
@@ -147,12 +139,13 @@ public final class ZLT implements ByteFunction
       int dstIdx = destination.index;
       final byte[] src = source.array;
       final byte[] dst = destination.array;
-      final int end = (this.size == 0) ? src.length : srcIdx + this.size;
-      int runLength = this.copies;
+      final int srcEnd = (this.size == 0) ? src.length : srcIdx + this.size;
+      final int dstEnd = dst.length;
+      int runLength = 1;
 
-      while ((srcIdx < end) && (dstIdx < dst.length))
+      while ((srcIdx < srcEnd) && (dstIdx < dstEnd))
       {
-         if (runLength > 0)
+         if (runLength > 1)
          {
             runLength--;
             dst[dstIdx++] = 0;
@@ -164,27 +157,24 @@ public final class ZLT implements ByteFunction
          if (val <= 1)
          {
             // Generate the run length bit by bit (but force MSB)
-            int run = 1;
+            runLength = 1;
 
-            // Exit if no more data to read from source array (incomplete length)
-            // Calling the method again with reset arrays will resume 'correctly'
-            while (val <= 1)
+            do
             {
-               run = (run << 1) | val;
+               runLength = (runLength << 1) | val;
                srcIdx++;
 
-               if (srcIdx >= end)
+               if (srcIdx >= srcEnd)
                    break;
 
                val = src[srcIdx] & 0xFF;
             }
+            while (val <= 1);
 
-            // Update run length
-            runLength = run - 1;
             continue;
          }
 
-         // Regular data processing (not >= !!!)
+         // Regular data processing
          if (val > 0xFE)
          {
             srcIdx++;
@@ -196,14 +186,17 @@ public final class ZLT implements ByteFunction
          srcIdx++;
       }
 
-      int min = (runLength <= (dst.length-dstIdx)) ? runLength : dst.length-dstIdx;
+      // If runLength is not 1, add trailing 0s
+      final int end = dstIdx + runLength - 1;
 
-      while (--min >= 0)
+      if (end > dstEnd)
+         return false;
+      
+      while (dstIdx < end)
          dst[dstIdx++] = 0;
 
-      this.copies = runLength;
       source.index = srcIdx;
       destination.index = dstIdx;
-      return true;
+      return (srcIdx == srcEnd) ? true : false;
    }
 }
