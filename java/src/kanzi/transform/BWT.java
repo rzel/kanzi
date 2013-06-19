@@ -71,28 +71,26 @@ public class BWT implements ByteTransform
     private int size;
     private int[] data;
     private int[] buffer1;
-    private byte[] buffer2;
     private int[] buckets;
     private int primaryIndex;
 
 
     public BWT()
     {
-        this(0);
+       this(0);
     }
 
 
     // Static allocation of memory
     public BWT(int size)
     {
-        if (size < 0)
-            throw new IllegalArgumentException("Invalid size parameter (must be at least 0)");
+       if (size < 0)
+          throw new IllegalArgumentException("Invalid size parameter (must be at least 0)");
 
-        this.size = size;
-        this.data = new int[size];
-        this.buffer1 = new int[size];
-        this.buffer2 = new byte[size];
-        this.buckets = new int[256];
+       this.size = size;
+       this.data = new int[size];
+       this.buffer1 = new int[size];
+       this.buckets = new int[256];
     }
 
 
@@ -143,22 +141,21 @@ public class BWT implements ByteTransform
 
         if (this.buffer1.length < len)
            this.buffer1 = new int[len];
+        
+        final int[] data_ = this.data;
+        
+        for (int i=0; i<len; i++)
+           data_[i] = input[blkptr+i] & 0xFF;
+
+        // Suffix array
+        final int[] sa = this.buffer1;
+        final int pIdx = computeSuffixArray(new IndexedIntArray(this.data, 0), sa, 0, len, 256, true);
 
         for (int i=0; i<len; i++)
-           this.data[i] = input[blkptr+i] & 0xFF;
+           input[blkptr+i] = (byte) sa[i];
 
-        final int[] sa = this.buffer1;
-
-        final int pIdx = computeSuffixArray(new IndexedIntArray(this.data, 0), sa, 0, len, 256, true);
-        input[0] = (byte) this.data[len-1];
-
-        for (int i=0; i<pIdx; i++)
-           input[blkptr+i+1] = (byte) sa[i];
-
-        for (int i=pIdx+1; i<len; i++)
-            input[blkptr+i] = (byte) sa[i];
-
-        this.setPrimaryIndex(pIdx+1);
+        input[blkptr+pIdx] = (byte) this.data[len-1];
+        this.setPrimaryIndex(pIdx);
         return input;
     }
 
@@ -167,47 +164,62 @@ public class BWT implements ByteTransform
     @Override
     public byte[] inverse(byte[] input, int blkptr)
     {
-       int len = (this.size != 0) ? this.size : input.length - blkptr;
+       final int len = (this.size != 0) ? this.size : input.length - blkptr;
+
+       if (len < 2)
+          return input;
 
        // Dynamic memory allocation
        if (this.data.length < len)
           this.data = new int[len];
 
-        if (this.buffer2.length < len)
-           this.buffer2 = new byte[len];
-
-        final int[] buckets_ = this.buckets;
-        final int[] src = this.data;
-
-        for (int i=0; i<256; i++)
-           buckets_[i] = 0;
-
+       // Aliasing
+       final int[] buckets_ = this.buckets;
+       final int[] data_ = this.data;
+       
        // Create histogram
-       for (int i=0; i<len; i++)
-          src[i] = buckets_[input[blkptr+i] & 0xFF]++;
+       for (int i=0; i<256; i++)
+          buckets_[i] = 0;
 
-       // Create cumulative histogram
+       // Build array of packed index + value (assumes block size < 2^24)
+       // Start with the primary index position
+       final int pIdx = this.getPrimaryIndex();
+       int val = input[blkptr+pIdx] & 0xFF;
+       data_[pIdx] = (buckets_[val] << 8) | val;
+       buckets_[val]++;
+       
+       for (int i=0; i<pIdx; i++)
+       {
+          val = input[blkptr+i] & 0xFF;
+          data_[i] = (buckets_[val] << 8) | val;
+          buckets_[val]++;
+       }
+       
+       for (int i=pIdx+1; i<len; i++)
+       {
+          val = input[blkptr+i] & 0xFF;
+          data_[i] = (buckets_[val] << 8) | val;
+          buckets_[val]++;
+       }
+
+        // Create cumulative histogram
        for (int i=0, sum=0; i<256; i++)
        {
-          final int val = buckets_[i];
+          final int tmp = buckets_[i];
           buckets_[i] = sum;
-          sum += val;
+          sum += tmp;
        }
 
-       final int pIdx = this.getPrimaryIndex();
-       final byte[] buffer = this.buffer2;
-
-       for (int i=len-1, val=0; i>=0; i--)
+       // Build inverse
+       for (int i=blkptr+len-1, idx=pIdx; i>=blkptr; i--)
        {
-          final byte idx = input[blkptr+val];
-          buffer[i] = idx;
-          val = src[val] + buckets_[idx & 0xFF];
-          val += ((val - pIdx) >>> 31);
+          final int ptr = data_[idx];
+          input[i] = (byte) ptr;
+          idx = (ptr >> 8) + buckets_[ptr & 0xFF];
        }
 
-       System.arraycopy(buffer, 0, input, blkptr, len);
        return input;
-     }
+    }
 
 
       // find the start or end of each bucket
@@ -217,13 +229,11 @@ public class BWT implements ByteTransform
         final int[] srcArray = src.array;
         final int dstIdx = dst.index;
         final int srcIdx = src.index;
-        final int end1 = dstIdx + k;
-        final int end2 = srcIdx + n;
 
-        for (int i=dstIdx; i<end1; i++)
+        for (int i=dstIdx+k-1; i>=dstIdx; i--)
            dstArray[i] = 0;
 
-        for (int i=srcIdx; i<end2; i++)
+        for (int i=srcIdx+n-1; i>=srcIdx; i--)
            dstArray[dstIdx+srcArray[i]]++;
       }
 
@@ -312,22 +322,22 @@ public class BWT implements ByteTransform
         {
           j = sa[i];
 
-          if (j > 0)
+          if (j <= 0)
+             continue;
+          
+          final int c0 = srcArray[srcIdx+j];
+
+          if (c0 != c1)
           {
-            int c0 = srcArray[srcIdx+j];
-
-            if (c0 != c1)
-            {
-               B.array[B.index+c1] = b;
-               c1 = c0;
-               b = B.array[B.index+c1];
-            }
-
-            j--;
-            b--;
-            sa[b] = (srcArray[srcIdx+j] > c1) ? ~(j + 1) : j;
-            sa[i] = 0;
+             B.array[B.index+c1] = b;
+             c1 = c0;
+             b = B.array[B.index+c1];
           }
+
+          j--;
+          b--;
+          sa[b] = (srcArray[srcIdx+j] > c1) ? ~(j + 1) : j;
+          sa[i] = 0;
         }
       }
 
@@ -349,7 +359,7 @@ public class BWT implements ByteTransform
           j = i;
           i++;
 
-          while (true)
+          do
           {
             final int p = sa[i++];
 
@@ -358,16 +368,15 @@ public class BWT implements ByteTransform
 
             sa[j++] = ~p;
             sa[i-1] = 0;
-
-            if (j == m)
-               break;
           }
+          while (j != m);               
+          
         }
 
         // store the length of all substrings
-        i = n - 1;
+        i = index + n - 1;
         j = n - 1;
-        int c0 = array[index+n-1];
+        int c0 = array[i];
         int c1;
 
         do
@@ -375,29 +384,29 @@ public class BWT implements ByteTransform
           c1 = c0;
           i--;
         }
-        while ((i >= 0) && ((c0 = array[index+i]) >= c1));
+        while ((i >= index) && ((c0 = array[i]) >= c1));
 
-        while (i >= 0)
+        while (i >= index)
         {
           do
           {
             c1 = c0;
             i--;
           }
-          while ((i >= 0) && ((c0 = array[index+i]) <= c1));
+          while ((i >= index) && ((c0 = array[i]) <= c1));
 
-          if (i < 0)
+          if (i < index)
              break;
 
-          sa[m+((i+1)>>1)] = j - i;
-          j = i + 1;
+          sa[m+((i-index+1)>>1)] = j - i + index;
+          j = i - index + 1;
 
           do
           {
             c1 = c0;
             i--;
           }
-          while ((i >= 0) && ((c0 = array[index+i]) >= c1));
+          while ((i >= index) && ((c0 = array[i]) >= c1));
         }
 
         // find the lexicographic names of all substrings
@@ -413,12 +422,13 @@ public class BWT implements ByteTransform
 
           if ((plen == qlen) && ((q + plen) < n))
           {
-            j = 0;
+            int jj = index;
+            final int plen2 = index + plen;
 
-            while ((j<plen) && (array[index+p+j] == array[index+q+j]))
-               j++;
+            while ((jj<plen2) && (array[p+jj] == array[q+jj]))
+               jj++;
 
-            if (j == plen)
+            if (jj == plen2)
                diff = false;
           }
 
@@ -460,20 +470,20 @@ public class BWT implements ByteTransform
           j = sa[i];
           sa[i] = ~j;
 
-          if (j > 0)
+          if (j <= 0)
+             continue;
+          
+          j--;
+          final int c0 = srcArray[srcIdx+j];
+
+          if (c0 != c1)
           {
-            j--;
-            final int c0 = srcArray[srcIdx+j];
-
-            if (c0 != c1)
-            {
-               bufArray[bufIdx+c1] = b;
-               c1 = c0;
-               b = bufArray[bufIdx+c1];
-            }
-
-            sa[b++] = ((j > 0) && (srcArray[srcIdx+j-1] < c1)) ? ~j : j;
+             bufArray[bufIdx+c1] = b;
+             c1 = c0;
+             b = bufArray[bufIdx+c1];
           }
+
+          sa[b++] = ((j > 0) && (srcArray[srcIdx+j-1] < c1)) ? ~j : j;          
         }
 
         // compute sas
@@ -489,23 +499,24 @@ public class BWT implements ByteTransform
         {
           j = sa[i];
 
-          if (j > 0)
+          if (j <= 0)
           {
-            j--;
-            final int c0 = srcArray[srcIdx+j];
-
-            if (c0 != c1)
-            {
-               bufArray[bufIdx+c1] = b;
-               c1 = c0;
-               b = bufArray[bufIdx+c1];
-            }
-
-            b--;
-            sa[b] = ((j == 0) || (srcArray[srcIdx+j-1] > c1)) ? ~j : j;
+             sa[i] = ~j;
+             continue;
           }
-          else
-            sa[i] = ~j;
+          
+          j--;
+          final int c0 = srcArray[srcIdx+j];
+
+          if (c0 != c1)
+          {
+             bufArray[bufIdx+c1] = b;
+             c1 = c0;
+             b = bufArray[bufIdx+c1];
+          }
+
+          b--;
+          sa[b] = ((j == 0) || (srcArray[srcIdx+j-1] > c1)) ? ~j : j;
         }
       }
 
@@ -591,8 +602,9 @@ public class BWT implements ByteTransform
       }
 
 
-      // find the suffix array sa of T[0..n-1] in {0..k-1}^n
-      private int computeSuffixArray(IndexedIntArray data, int[] sa, int fs, int n, int k, boolean isbwt)
+      // Find the suffix array sa of data[0..n-1] in {0..k-1}^n
+      // Return the primary index if isbwt is true (0 otherwise)
+      private int computeSuffixArray(IndexedIntArray data, int[] sa, int fs, int n, int k, boolean isBWT)
       {
         IndexedIntArray C, B;
         int flags;
@@ -634,9 +646,9 @@ public class BWT implements ByteTransform
         }
         else
         {
-          B = new IndexedIntArray(new int[k], 0);
-          C = B;
-          flags = 12;
+           B = new IndexedIntArray(new int[k], 0);
+           C = B;
+           flags = 12;
         }
 
         // stage 1: reduce the problem by at least 1/2, sort all the LMS-substrings
@@ -647,54 +659,55 @@ public class BWT implements ByteTransform
         for (int ii=0; ii<n; ii++)
            sa[ii] = 0;
 
-        int b = -1;
-        int i = n - 1;
-        int j = n;
-        int m = 0;
         final int[] array = data.array;
         final int arrayIdx = data.index;
-        int c0 = array[arrayIdx+n-1];
+        int b = -1;
+        int i = arrayIdx + n - 1;
+        int j = n;
+        int m = 0;
+        int c0 = array[i];
         int c1;
-        int name = 0;
 
         do
         {
            c1 = c0;
            i--;
         }
-        while ((i >= 0) && ((c0 = array[arrayIdx+i]) >= c1));
+        while ((i >= arrayIdx) && ((c0 = array[i]) >= c1));
 
         final int[] buffer = B.array;
         final int bufferIdx = B.index;
 
-        while (i >= 0)
+        while (i >= arrayIdx)
         {
           do
           {
              c1 = c0;
              i--;
           }
-          while ((i >= 0) && ((c0 = array[arrayIdx+i]) <= c1));
+          while ((i >= arrayIdx) && ((c0 = array[i]) <= c1));
 
-          if (i >= 0)
+          if (i < arrayIdx)
+             break;
+          
+          if (b >= 0)
+             sa[b] = j;
+
+          buffer[bufferIdx+c1]--;
+          b = buffer[bufferIdx+c1];
+          j = i - arrayIdx;
+          m++;
+
+          do
           {
-            if (b >= 0)
-               sa[b] = j;
-
-            buffer[bufferIdx+c1]--;
-            b = buffer[bufferIdx+c1];
-            j = i;
-            m++;
-
-            do
-            {
-              c1 = c0;
-              i--;
-            }
-            while((i >= 0) && ((c0 = array[arrayIdx+i]) >= c1));
+            c1 = c0;
+            i--;
           }
+          while ((i >= arrayIdx) && ((c0 = array[i]) >= c1));
         }
 
+        int name = 0;
+        
         if (m > 1)
         {
           sortLMSSuffixes(data, sa, C, B, n, k);
@@ -705,15 +718,14 @@ public class BWT implements ByteTransform
           sa[b] = j + 1;
           name = 1;
         }
-        else
-          name = 0;
+
 
         // stage 2: solve the reduced problem recurse if names are not yet unique
         if (name < m)
         {
           int newfs = (n+fs) - (m+m);
 
-          if ((flags & (13)) == 0)
+          if ((flags & 13) == 0)
           {
             if ((k + name) <= newfs)
               newfs -= k;
@@ -731,37 +743,37 @@ public class BWT implements ByteTransform
 
           computeSuffixArray(new IndexedIntArray(sa, m + newfs), sa, newfs, m, name, false);
 
-          i = n - 1;
+          i = arrayIdx + n - 1;
           j = m + m - 1;
-          c0 = array[arrayIdx+n-1];
+          c0 = array[i];
 
           do
           {
             c1 = c0;
             i--;
           }
-          while ((i >= 0) && ((c0 = array[arrayIdx+i]) >= c1));
+          while ((i >= arrayIdx) && ((c0 = array[i]) >= c1));
 
-          while (i >= 0)
+          while (i >= arrayIdx)
           {
             do
             {
               c1 = c0;
               i--;
             }
-            while ((i >= 0) && ((c0 = array[arrayIdx+i]) <= c1));
+            while ((i >= arrayIdx) && ((c0 = array[i]) <= c1));
 
-            if (i >= 0)
+            if (i < arrayIdx)
+               break;
+            
+            sa[j--] = i - arrayIdx + 1;
+
+            do
             {
-              sa[j--] = i + 1;
-
-              do
-              {
-                c1 = c0;
-                i--;
-              }
-              while ((i >= 0) && ((c0 = array[arrayIdx+i]) >= c1));
+              c1 = c0;
+              i--;
             }
+            while ((i >= arrayIdx) && ((c0 = array[i]) >= c1));
           }
 
           for (int ii=0; ii<m; ii++)
@@ -769,11 +781,11 @@ public class BWT implements ByteTransform
 
           if ((flags & 4) != 0)
           {
-            B = new IndexedIntArray(new int[k], 0);
-            C = B;
+             B = new IndexedIntArray(new int[k], 0);
+             C = B;
           }
-          else if((flags & 2) != 0)
-            B = new IndexedIntArray(new int[k], 0);
+          else if ((flags & 2) != 0)
+             B = new IndexedIntArray(new int[k], 0);
         }
 
         // stage 3: induce the result for the original problem
@@ -793,7 +805,7 @@ public class BWT implements ByteTransform
           do
           {
             c0 = c1;
-            int q = B.array[B.index+c0];
+            final int q = B.array[B.index+c0];
 
             while (q < j)
                sa[--j] = 0;
@@ -808,7 +820,7 @@ public class BWT implements ByteTransform
               p = sa[i];
               c1 = array[arrayIdx+p];
             }
-            while(c1 == c0);
+            while (c1 == c0);
           }
           while (i >= 0);
 
@@ -816,13 +828,12 @@ public class BWT implements ByteTransform
              sa[--j] = 0;
         }
 
-        int pidx = 0;
-
-        if (isbwt == false)
+        if (isBWT == false)
+        {
            induceSuffixArray(data, sa, C, B, n, k);
-        else
-           pidx = computeBWT(data, sa, C, B, n, k);
+           return 0;
+        }
 
-        return pidx;
+        return computeBWT(data, sa, C, B, n, k);
      }
 }

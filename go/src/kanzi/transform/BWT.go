@@ -19,7 +19,6 @@ type BWT struct {
 	size         uint
 	data         []int
 	buffer1      []int
-	buffer2      []byte
 	buckets      []int
 	primaryIndex uint
 }
@@ -29,7 +28,6 @@ func NewBWT(sz uint) (*BWT, error) {
 	this.size = sz
 	this.data = make([]int, sz)
 	this.buffer1 = make([]int, sz)
-	this.buffer2 = make([]byte, sz)
 	this.buckets = make([]int, 256)
 	return this, nil
 }
@@ -75,23 +73,22 @@ func (this *BWT) Forward(input []byte) []byte {
 		this.buffer1 = make([]int, length)
 	}
 
+	data_ := this.data
+
 	for i := 0; i < length; i++ {
-		this.data[i] = int(input[i])
+		data_[i] = int(input[i])
 	}
 
-	sa := this.buffer1 // alias
+	// Suffix array
+	sa := this.buffer1
 	pIdx := computeSuffixArray(this.data, sa, 0, length, 256, true)
-	input[0] = byte(this.data[length-1])
 
-	for i := uint(0); i < pIdx; i++ {
-		input[i+1] = byte(sa[i])
-	}
-
-	for i := pIdx + 1; i < uint(length); i++ {
+	for i := 0; i < length; i++ {
 		input[i] = byte(sa[i])
 	}
 
-	this.SetPrimaryIndex(pIdx + 1)
+	input[pIdx] = byte(this.data[length-1])
+	this.SetPrimaryIndex(pIdx)
 	return input
 }
 
@@ -102,50 +99,61 @@ func (this *BWT) Inverse(input []byte) []byte {
 		length = len(input)
 	}
 
+	if length < 2 {
+		return input
+	}
+
+	// Aliasing
+	buckets_ := this.buckets
+	data_ := this.data
+
 	// Dynamic memory allocation
 	if len(this.data) < length {
-		this.data = make([]int, length)
-	}
-
-	if len(this.buffer2) < length {
-		this.buffer2 = make([]byte, length)
-	}
-
-	for i := range this.buckets {
-		this.buckets[i] = 0
+		data_ = make([]int, length)
 	}
 
 	// Create histogram
-	for i := 0; i < length; i++ {
-		idx := int(input[i])
-		this.data[i] = this.buckets[idx]
-		this.buckets[idx]++
+	for i := range this.buckets {
+		buckets_[i] = 0
+	}
+
+	// Build array of packed index + value (assumes block size < 2^24)
+	// Start with the primary index position
+	pIdx := int(this.PrimaryIndex())
+	val := int(input[pIdx])
+	data_[pIdx] = (buckets_[val] << 8) | val
+	buckets_[val]++
+
+	for i := 0; i < pIdx; i++ {
+		val = int(input[i])
+		data_[i] = (buckets_[val] << 8) | val
+		buckets_[val]++
+	}
+
+	for i := pIdx + 1; i < length; i++ {
+		val = int(input[i])
+		data_[i] = (buckets_[val] << 8) | val
+		buckets_[val]++
 	}
 
 	sum := 0
 
 	// Create cumulative histogram
-	for i := range this.buckets {
-		val := this.buckets[i]
-		this.buckets[i] = sum
-		sum += val
+	for i := range buckets_ {
+		tmp := buckets_[i]
+		buckets_[i] = sum
+		sum += tmp
 	}
 
-	pIdx := int(this.PrimaryIndex())
-	buffer := this.buffer2 // alias
-	val := 0
+	idx := pIdx
 
+	// Build inverse
 	for i := length - 1; i >= 0; i-- {
-		idx := input[val]
-		buffer[i] = idx
-		val = this.data[val] + this.buckets[int(idx)]
-
-		if val < pIdx {
-			val++
-		}
+		ptr := data_[idx]
+		input[i] = byte(ptr)
+		idx = (ptr >> 8) + buckets_[ptr&0xFF]
 	}
 
-	copy(input, buffer[0:length])
 	return input
 }
 
@@ -244,26 +252,28 @@ func sortLMSSuffixes(src []int, sa []int, ptrC *[]int, ptrB *[]int, n, k int) {
 	for i := n - 1; i >= 0; i-- {
 		j = sa[i]
 
-		if j > 0 {
-			c0 := src[j]
-
-			if c0 != c1 {
-				B[c1] = b
-				c1 = c0
-				b = B[c1]
-			}
-
-			j--
-			b--
-
-			if src[j] > c1 {
-				sa[b] = ^(j + 1)
-			} else {
-				sa[b] = j
-			}
-
-			sa[i] = 0
+		if j <= 0 {
+			continue
 		}
+
+		c0 := src[j]
+
+		if c0 != c1 {
+			B[c1] = b
+			c1 = c0
+			b = B[c1]
+		}
+
+		j--
+		b--
+
+		if src[j] > c1 {
+			sa[b] = ^(j + 1)
+		} else {
+			sa[b] = j
+		}
+
+		sa[i] = 0
 	}
 }
 
@@ -282,7 +292,7 @@ func postProcessLMS(src []int, sa []int, n, m int) int {
 		j = i
 		i++
 
-		for true {
+		for {
 			p := sa[i]
 			i++
 
@@ -306,11 +316,15 @@ func postProcessLMS(src []int, sa []int, n, m int) int {
 	c0 := src[n-2]
 	c1 := src[n-1]
 
-	for i >= 0 && c0 >= c1 {
-		c1 = c0
-		i--
+	if i >= 0 {
+		for c0 >= c1 {
+			c1 = c0
+			i--
 
-		if i >= 0 {
+			if i < 0 {
+				break
+			}
+
 			c0 = src[i]
 		}
 	}
@@ -319,17 +333,21 @@ func postProcessLMS(src []int, sa []int, n, m int) int {
 		c1 = c0
 		i--
 
-		if i >= 0 {
-			c0 = src[i]
+		if i < 0 {
+			break
 		}
 
-		for i >= 0 && c0 <= c1 {
+		c0 = src[i]
+
+		for c0 <= c1 {
 			c1 = c0
 			i--
 
-			if i >= 0 {
-				c0 = src[i]
+			if i < 0 {
+				break
 			}
+
+			c0 = src[i]
 		}
 
 		if i < 0 {
@@ -343,13 +361,15 @@ func postProcessLMS(src []int, sa []int, n, m int) int {
 
 		if i >= 0 {
 			c0 = src[i]
-		}
 
-		for i >= 0 && c0 >= c1 {
-			c1 = c0
-			i--
+			for c0 >= c1 {
+				c1 = c0
+				i--
 
-			if i >= 0 {
+				if i < 0 {
+					break
+				}
+
 				c0 = src[i]
 			}
 		}
@@ -417,24 +437,26 @@ func induceSuffixArray(src []int, sa []int, ptrBuf1 *[]int, ptrBuf2 *[]int, n in
 		j = sa[i]
 		sa[i] = ^j
 
-		if j > 0 {
-			j--
-			c0 := src[j]
-
-			if c0 != c1 {
-				buf2[c1] = b
-				c1 = c0
-				b = buf2[c1]
-			}
-
-			if j > 0 && src[j-1] < c1 {
-				sa[b] = ^j
-			} else {
-				sa[b] = j
-			}
-
-			b++
+		if j <= 0 {
+			continue
 		}
+
+		j--
+		c0 := src[j]
+
+		if c0 != c1 {
+			buf2[c1] = b
+			c1 = c0
+			b = buf2[c1]
+		}
+
+		if j > 0 && src[j-1] < c1 {
+			sa[b] = ^j
+		} else {
+			sa[b] = j
+		}
+
+		b++
 	}
 
 	// compute sas
@@ -450,25 +472,26 @@ func induceSuffixArray(src []int, sa []int, ptrBuf1 *[]int, ptrBuf2 *[]int, n in
 	for i := n - 1; i >= 0; i-- {
 		j = sa[i]
 
-		if j > 0 {
-			j--
-			c0 := src[j]
-
-			if c0 != c1 {
-				buf2[c1] = b
-				c1 = c0
-				b = buf2[c1]
-			}
-
-			b--
-
-			if j == 0 || src[j-1] > c1 {
-				sa[b] = ^j
-			} else {
-				sa[b] = j
-			}
-		} else {
+		if j <= 0 {
 			sa[i] = ^j
+			continue
+		}
+
+		j--
+		c0 := src[j]
+
+		if c0 != c1 {
+			buf2[c1] = b
+			c1 = c0
+			b = buf2[c1]
+		}
+
+		b--
+
+		if j == 0 || src[j-1] > c1 {
+			sa[b] = ^j
+		} else {
+			sa[b] = j
 		}
 	}
 }
@@ -564,7 +587,8 @@ func computeBWT(data []int, sa []int, ptrBuf1 *[]int, ptrBuf2 *[]int, n int, k i
 	return pidx
 }
 
-// find the suffix array sa of T[0..n-1] in {0..k-1}^n
+// Find the suffix array sa of data[0..n-1] in {0..k-1}^n
+// Return the primary index if isbwt is true (0 otherwise)
 func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) uint {
 	var B, C []int
 	var ptrB, ptrC *[]int
@@ -624,61 +648,59 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 	m := 0
 	c0 := data[n-1]
 	c1 := c0
-	i--
 
-	if i >= 0 {
+	for c0 >= c1 {
+		c1 = c0
+		i--
+
+		if i < 0 {
+			break
+		}
+
 		c0 = data[i]
 	}
 
-	for i >= 0 && c0 >= c1 {
-		c1 = c0
-		i--
-
-		if i >= 0 {
-			c0 = data[i]
-		}
-	}
-
 	for i >= 0 {
-		c1 = c0
-		i--
+		for {
+			c1 = c0
+			i--
 
-		if i >= 0 {
+			if i < 0 {
+				break
+			}
+
 			c0 = data[i]
-		}
 
-		for i >= 0 && c0 <= c1 {
-			c1 = c0
-			i--
-
-			if i >= 0 {
-				c0 = data[i]
+			if c0 > c1 {
+				break
 			}
 		}
 
-		if i >= 0 {
-			if b >= 0 {
-				sa[b] = j
-			}
+		if i < 0 {
+			break
+		}
 
-			B[c1]--
-			b = B[c1]
-			j = i
-			m++
+		if b >= 0 {
+			sa[b] = j
+		}
+
+		B[c1]--
+		b = B[c1]
+		j = i
+		m++
+
+		for {
 			c1 = c0
 			i--
 
-			if i >= 0 {
-				c0 = data[i]
+			if i < 0 {
+				break
 			}
 
-			for i >= 0 && c0 >= c1 {
-				c1 = c0
-				i--
+			c0 = data[i]
 
-				if i >= 0 {
-					c0 = data[i]
-				}
+			if c0 < c1 {
+				break
 			}
 		}
 	}
@@ -697,7 +719,7 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 	if name < m {
 		newfs := (n + fs) - (m + m)
 
-		if (flags & 13) == 0 {
+		if flags&13 == 0 {
 			if k+name <= newfs {
 				newfs -= k
 			} else {
@@ -716,54 +738,60 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 
 		computeSuffixArray(sa[m+newfs:], sa, newfs, m, name, false)
 
-		i = n - 2
+		i = n - 1
 		j = m + m - 1
-		c1 = data[n-1]
-		c0 = data[n-2]
+		c0 = data[i]
 
-		for i >= 0 && c0 >= c1 {
+		for {
 			c1 = c0
 			i--
 
-			if i >= 0 {
-				c0 = data[i]
+			if i < 0 {
+				break
+			}
+
+			c0 = data[i]
+
+			if c0 < c1 {
+				break
 			}
 		}
 
 		for i >= 0 {
-			c1 = c0
-			i--
+			for {
+				c1 = c0
+				i--
 
-			if i >= 0 {
+				if i < 0 {
+					break
+				}
+
 				c0 = data[i]
-			}
 
-			for i >= 0 && c0 <= c1 {
-				c1 = c0
-				i--
-
-				if i >= 0 {
-					c0 = data[i]
+				if c0 > c1 {
+					break
 				}
 			}
 
-			if i >= 0 {
-				sa[j] = i + 1
-				j--
+			if i < 0 {
+				break
+			}
+
+			sa[j] = i + 1
+			j--
+
+			for {
 				c1 = c0
 				i--
 
-				if i >= 0 {
-					c0 = data[i]
+				if i < 0 {
+					break
 				}
 
-				for i >= 0 && c0 >= c1 {
-					c1 = c0
-					i--
+				c0 = data[i]
 
-					if i >= 0 {
-						c0 = data[i]
-					}
+				if c0 < c1 {
+					break
 				}
 			}
 		}
@@ -772,19 +800,19 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 			sa[ii] = sa[m+sa[ii]]
 		}
 
-		if (flags & 4) != 0 {
+		if flags&4 != 0 {
 			B = make([]int, k)
 			ptrB = &B
 			ptrC = ptrB
 			C = *ptrC
-		} else if (flags & 2) != 0 {
+		} else if flags&2 != 0 {
 			B = make([]int, k)
 			ptrB = &B
 		}
 	}
 
 	// stage 3: induce the result for the original problem
-	if (flags & 8) != 0 {
+	if flags&8 != 0 {
 		getCounts(data, C, n, k)
 	}
 
@@ -797,7 +825,7 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 		p := sa[m-1]
 		c1 = data[p]
 
-		for true {
+		for {
 			c0 = c1
 			q := B[c0]
 
@@ -806,9 +834,7 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 				sa[j] = 0
 			}
 
-			firstIter := true
-
-			for firstIter == true || c1 == c0 {
+			for {
 				j--
 				sa[j] = p
 				i--
@@ -819,7 +845,10 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 
 				p = sa[i]
 				c1 = data[p]
-				firstIter = false
+
+				if c1 != c0 {
+					break
+				}
 			}
 
 			if i < 0 {
@@ -833,13 +862,11 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 		}
 	}
 
-	pidx := 0
-
 	if isbwt == false {
 		induceSuffixArray(data, sa, ptrC, ptrB, n, k)
-	} else {
-		pidx = computeBWT(data, sa, ptrC, ptrB, n, k)
+		return uint(0)
 	}
 
+	pidx := computeBWT(data, sa, ptrC, ptrB, n, k)
 	return uint(pidx)
 }
