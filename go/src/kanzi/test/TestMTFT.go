@@ -35,7 +35,7 @@ func main() {
 			input = make([]byte, 32)
 
 			for i := 0; i < len(input); i++ {
-				input[i] = byte(65 + rnd.Intn(64))
+				input[i] = byte(65 + rnd.Intn(3*ii))
 			}
 		}
 
@@ -89,10 +89,10 @@ func main() {
 	// Speed Test
 	iter := 20000
 	size := 10000
-	fmt.Printf("\n\nSpeed test\n")
-	fmt.Printf("Iterations: %v\n", iter)
+	fmt.Printf("\n\nSpeed test")
+	fmt.Printf("\nIterations: %v", iter)
 
-	for jj := 0; jj < 3; jj++ {
+	for jj := 0; jj < 4; jj++ {
 		input := make([]byte, size)
 		var output []byte
 		var reverse []byte
@@ -100,9 +100,33 @@ func main() {
 		delta1 := int64(0)
 		delta2 := int64(0)
 
+		if jj == 0 {
+			fmt.Printf("\n\nPurely random input")
+		}
+
+		if jj == 2 {
+			fmt.Printf("\n\nSemi random input")
+		}
+
 		for ii := 0; ii < iter; ii++ {
 			for i := 0; i < len(input); i++ {
-				input[i] = byte(rand.Intn(64))
+				n := 128
+
+				if jj < 2 {
+					// Pure random
+					input[i] = byte(rand.Intn(256))
+				} else {
+					// Semi random (a bit more realistic input)
+					rng := 5
+
+					if i&7 == 0 {
+						rng = 128
+					}
+
+					p := (rand.Intn(rng) - rng/2 + n) & 0xFF
+					input[i] = byte(p)
+					n = p
+				}
 			}
 
 			before := time.Now()

@@ -31,7 +31,8 @@ public final class MTFT implements ByteTransform
     private final Payload[] heads; // linked lists
     private final int[] lengths; // length of linked list
     private final byte[] buckets; // index of list
-
+    private final Payload anchor;
+    
 
     public MTFT()
     {
@@ -50,28 +51,34 @@ public final class MTFT implements ByteTransform
         this.buckets = new byte[256];
 
         // Initialize the linked lists: 1 item in bucket 0 and 17 in each other
-        Payload previous = new Payload((byte) 0);
+        Payload[] array = new Payload[256];
+        array[0] = new Payload((byte) 0);
+        Payload previous = array[0];
         this.heads[0] = previous;
         this.lengths[0] = 1;
         this.buckets[0] = 0;
         byte listIdx = 0;
-
+                
         for (int i=1; i<256; i++)
         {
-           Payload current = new Payload((byte) i);
+           array[i] = new Payload((byte) i);
 
            if ((i-1) % 17 == 0)
            {
               listIdx++;
-              this.heads[listIdx] = current;
+              this.heads[listIdx] = array[i];
               this.lengths[listIdx] = 17;
            }
 
            this.buckets[i] = listIdx;
-           previous.next = current;
-           current.previous = previous;
-           previous = current;
+           previous.next = array[i];
+           array[i].previous = previous;
+           previous = array[i];
         }
+ 
+        // Create a fake end payload so that every payload in every list has a successor
+        this.anchor = new Payload((byte) 0);
+        previous.next = this.anchor;
     }
 
 
@@ -81,7 +88,7 @@ public final class MTFT implements ByteTransform
         this.balanceLists(true);
         final int end = (this.size == 0) ? input.length : blkptr + this.size;
 
-        // This section is on the critical speed path
+        // This code is on the critical speed path
         return this.moveToFront(input, blkptr, end);
     }
 
@@ -99,11 +106,16 @@ public final class MTFT implements ByteTransform
         for (int i=blkptr; i<end; i++)
         {
            final int idx = input[i] & 0xFF;
+           
+           if (idx == 0)
+           {
+              // Shortcut
+              input[i] = indexes[0];
+              continue;
+           }
+           
            final byte value = indexes[idx];
            input[i] = value;
-
-           if (idx == 0)
-              continue;
 
            if (idx < 16)
            {
@@ -140,7 +152,7 @@ public final class MTFT implements ByteTransform
 
 
     // Recreate one list with 1 item and 15 lists with 17 items
-    // Update lengths and buckets accordingly. This is a time consuming operation
+    // Update lengths and buckets accordingly. 
     private void balanceLists(boolean resetValues)
     {
        this.lengths[0] = 1;
@@ -191,7 +203,7 @@ public final class MTFT implements ByteTransform
 
           for (int i=0; i<listIdx; i++)
              idx += this.lengths[i];
-
+          
           // Find index in list (less than RESET_THRESHOLD iterations)
           while (p.value != current)
           {
@@ -201,26 +213,22 @@ public final class MTFT implements ByteTransform
 
           values[ii] = (byte) idx;
 
-          // Unlink
-          if (p.previous != null)
-              p.previous.next = p.next;
-
-          if (p.next != null)
-              p.next.previous = p.previous;
-
-          // Update head if needed
-          if (p == this.heads[listIdx])
-             this.heads[listIdx] = p.next;
+          // Unlink (the end anchor ensures p.next != null)
+          p.previous.next = p.next;
+          p.next.previous = p.previous;
 
           // Add to head of first list
-          final Payload q = this.heads[0];
-          q.previous = p;
-          p.next = q;
+          p.next = this.heads[0];
+          p.next.previous = p;
           this.heads[0] = p;
 
           // Update list information
           if (listIdx != 0)
           {
+             // Update head if needed
+             if (p == this.heads[listIdx])
+                this.heads[listIdx] = p.previous.next;
+             
              this.lengths[listIdx]--;
              this.lengths[0]++;
              this.buckets[current & 0xFF] = 0;

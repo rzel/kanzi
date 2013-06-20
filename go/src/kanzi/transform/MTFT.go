@@ -30,6 +30,7 @@ type MTFT struct {
 	lengths []int      // size 16
 	buckets []byte     // size 256
 	heads   []*Payload // size 16
+	anchor  *Payload
 }
 
 func NewMTFT(sz uint) (*MTFT, error) {
@@ -40,27 +41,32 @@ func NewMTFT(sz uint) (*MTFT, error) {
 	this.buckets = make([]byte, 256)
 
 	// Initialize the linked lists: 1 item in bucket 0 and 17 in each other
-	previous := &Payload{value: 0}
+	array := make([]*Payload, 256)
+	array[0] = &Payload{value: 0}
+	previous := array[0]
 	this.heads[0] = previous
 	this.lengths[0] = 1
 	this.buckets[0] = 0
 	listIdx := byte(0)
 
 	for i := 1; i < 256; i++ {
-		current := &Payload{value: byte(i)}
+		array[i] = &Payload{value: byte(i)}
 
 		if (i-1)%17 == 0 {
 			listIdx++
-			this.heads[listIdx] = current
+			this.heads[listIdx] = array[i]
 			this.lengths[listIdx] = 17
 		}
 
 		this.buckets[i] = listIdx
-		previous.next = current
-		current.previous = previous
-		previous = current
+		previous.next = array[i]
+		array[i].previous = previous
+		previous = array[i]
 	}
 
+	// Create a fake end payload so that every payload in every list has a successor
+	this.anchor = &Payload{value: 0}
+	previous.next = this.anchor
 	return this, nil
 }
 
@@ -75,13 +81,13 @@ func (this *MTFT) SetSize(sz uint) bool {
 
 func (this *MTFT) Forward(input []byte) []byte {
 	this.balanceLists(true)
-	end := uint(len(input))
+	end := len(input)
 
 	if this.size != 0 {
-		end = this.size
+		end = int(this.size)
 	}
 
-	// This section is on the critical speed path
+	// This code is on the critical speed path
 	return this.moveToFront(input, end)
 }
 
@@ -92,29 +98,39 @@ func (this *MTFT) Inverse(input []byte) []byte {
 		indexes[i] = byte(i)
 	}
 
-	end := uint(len(input))
+	end := len(input)
 
 	if this.size != 0 {
-		end = this.size
+		end = int(this.size)
 	}
 
-	for i := uint(0); i < end; i++ {
+	for i := 0; i < end; i++ {
 		idx := input[i]
+
+		if idx == 0 {
+			input[i] = indexes[0]
+			continue
+		}
+
 		value := indexes[idx]
 		input[i] = value
 
-		if idx != 0 {
+		if idx < 16 {
+			for j := int(idx - 1); j >= 0; j-- {
+				indexes[j+1] = indexes[j]
+			}
+		} else {
 			copy(indexes[1:], indexes[0:idx])
-			indexes[0] = value
 		}
 
+		indexes[0] = value
 	}
 
 	return input
 }
 
 // Recreate one list with 1 item and 15 lists with 17 items
-// Update lengths and buckets accordingly. This is a time consuming operation
+// Update lengths and buckets accordingly.
 func (this *MTFT) balanceLists(resetValues bool) {
 	this.lengths[0] = 1
 	p := this.heads[0].next
@@ -141,10 +157,10 @@ func (this *MTFT) balanceLists(resetValues bool) {
 	}
 }
 
-func (this *MTFT) moveToFront(values []byte, end uint) []byte {
+func (this *MTFT) moveToFront(values []byte, end int) []byte {
 	previous := this.heads[0].value
 
-	for ii := uint(0); ii < end; ii++ {
+	for ii := 0; ii < end; ii++ {
 		current := values[ii]
 
 		if current == previous {
@@ -154,7 +170,6 @@ func (this *MTFT) moveToFront(values []byte, end uint) []byte {
 
 		// Find list index
 		listIdx := int(this.buckets[int(current)])
-
 		p := this.heads[listIdx]
 		idx := 0
 
@@ -170,28 +185,22 @@ func (this *MTFT) moveToFront(values []byte, end uint) []byte {
 
 		values[ii] = byte(idx)
 
-		// Unlink
-		if p.previous != nil {
-			p.previous.next = p.next
-		}
-
-		if p.next != nil {
-			p.next.previous = p.previous
-		}
-
-		// Update head if needed
-		if p == this.heads[listIdx] {
-			this.heads[listIdx] = p.next
-		}
+		// Unlink (the end anchor ensures p.next != nil)
+		p.previous.next = p.next
+		p.next.previous = p.previous
 
 		// Add to head of first list
-		q := this.heads[0]
-		q.previous = p
-		p.next = q
+		p.next = this.heads[0]
+		p.next.previous = p
 		this.heads[0] = p
 
 		// Update list information
 		if listIdx != 0 {
+			// Update head if needed
+			if p == this.heads[listIdx] {
+				this.heads[listIdx] = p.previous.next
+			}
+
 			this.lengths[listIdx]--
 			this.lengths[0]++
 			this.buckets[int(current)] = 0
