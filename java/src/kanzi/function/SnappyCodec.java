@@ -32,12 +32,12 @@ public class SnappyCodec implements ByteFunction
    private static final int TAG_DEC_LEN2   = 61;
    private static final int TAG_DEC_LEN3   = 62;
    private static final int TAG_DEC_LEN4   = 63;
-   private static final int TAG_ENC_LEN1   = (TAG_DEC_LEN1<<2) | TAG_LITERAL;
-   private static final int TAG_ENC_LEN2   = (TAG_DEC_LEN2<<2) | TAG_LITERAL;
-   private static final int TAG_ENC_LEN3   = (TAG_DEC_LEN3<<2) | TAG_LITERAL;
-   private static final int TAG_ENG_LEN4   = (TAG_DEC_LEN4<<2) | TAG_LITERAL;
+   private static final byte TAG_ENC_LEN1  = (byte) ((TAG_DEC_LEN1<<2) | TAG_LITERAL);
+   private static final byte TAG_ENC_LEN2  = (byte) ((TAG_DEC_LEN2<<2) | TAG_LITERAL);
+   private static final byte TAG_ENC_LEN3  = (byte) ((TAG_DEC_LEN3<<2) | TAG_LITERAL);
+   private static final byte TAG_ENG_LEN4  = (byte) ((TAG_DEC_LEN4<<2) | TAG_LITERAL);
    private static final int MAX_TABLE_SIZE = 16384;
-   private static final byte B0 = (byte) ((63 << 2) | TAG_COPY2);
+   private static final byte B0            = (byte) ((TAG_DEC_LEN4 << 2) | TAG_COPY2);
    private static final long HASH_SEED     = 0x1e35a7bd;
 
    private int size;
@@ -79,62 +79,64 @@ public class SnappyCodec implements ByteFunction
    // emitLiteral writes a literal chunk and returns the number of bytes written.
    private static int emitLiteral(IndexedByteArray source, IndexedByteArray destination, int len)
    {
-     int inc;
      int srcIdx = source.index;
      int dstIdx = destination.index;
      final byte[] src = source.array;
      final byte[] dst = destination.array;
      final int n = len - 1;
+     final int res;
 
      if (n < 60)
      {
-        inc = 1;
         dst[dstIdx] = (byte) ((n<<2) | TAG_LITERAL);
+        dstIdx++;
+        res = len + 1;
+        
+        if (len < 16)
+        {
+	   for (int i=0; i<len; i++)
+	      dst[dstIdx+i] = src[srcIdx+i];
+
+           return res;
+        }
      }
      else if (n < 0x0100)
      {
-        inc = 2;
-        dst[dstIdx]   = (byte) TAG_ENC_LEN1;
-        dst[dstIdx+1] = (byte) (n & 0xFF);
+        dst[dstIdx]   = TAG_ENC_LEN1;
+        dst[dstIdx+1] = (byte) n;
+        dstIdx += 2;
+        res = len + 2;
      }
      else if (n < 0x010000)
      {
-        inc = 3;
-        dst[dstIdx]   = (byte) TAG_ENC_LEN2;
-        dst[dstIdx+1] = (byte) (n & 0xFF);
-        dst[dstIdx+2] = (byte) ((n >> 8) & 0xFF);
+        dst[dstIdx]   = TAG_ENC_LEN2;
+        dst[dstIdx+1] = (byte) n;
+        dst[dstIdx+2] = (byte) (n >> 8);
+        dstIdx += 3;
+        res = len + 3;
      }
      else if (n < 0x01000000)
      {
-        inc = 4;
-        dst[dstIdx]   = (byte) TAG_ENC_LEN3;
-        dst[dstIdx+1] = (byte) (n & 0xFF);
-        dst[dstIdx+2] = (byte) ((n >> 8)  & 0xFF);
-        dst[dstIdx+3] = (byte) ((n >> 16) & 0xFF);
+        dst[dstIdx]   = TAG_ENC_LEN3;
+        dst[dstIdx+1] = (byte) n;
+        dst[dstIdx+2] = (byte) (n >> 8);
+        dst[dstIdx+3] = (byte) (n >> 16);
+        dstIdx += 4;
+        res = len + 4;
      }
      else
      {
-        inc = 5;
-        dst[dstIdx]   = (byte) TAG_ENG_LEN4;
-        dst[dstIdx+1] = (byte) (n & 0xFF);
-        dst[dstIdx+2] = (byte) ((n >> 8)  & 0xFF);
-        dst[dstIdx+3] = (byte) ((n >> 16) & 0xFF);
-        dst[dstIdx+4] = (byte) ((n >> 24) & 0xFF);
+        dst[dstIdx]   = TAG_ENG_LEN4;
+        dst[dstIdx+1] = (byte) n;
+        dst[dstIdx+2] = (byte) (n >> 8);
+        dst[dstIdx+3] = (byte) (n >> 16);
+        dst[dstIdx+4] = (byte) (n >> 24);
+        dstIdx += 5;
+        res = len + 5;
      }
 
-     dstIdx += inc;
-
-     if (len < 16)
-     {
-	for (int i=0; i<len; i++)
-	   dst[dstIdx++] = src[srcIdx++];
-     }
-     else
-     {
-        System.arraycopy(src, srcIdx, dst, dstIdx, len);
-     }
-
-     return inc + len;
+     System.arraycopy(src, srcIdx, dst, dstIdx, len);
+     return res;
   }
 
 
@@ -227,7 +229,7 @@ public class SnappyCodec implements ByteFunction
      // Iterate over the source bytes
      int s = srcIdx; // The iterator position
      int lit = srcIdx; // The start position of any pending literal bytes
-     final int ends = count - 3;
+     final int ends = srcIdx + count - 3;
      
      while (s < ends)
      {
@@ -399,19 +401,19 @@ public class SnappyCodec implements ByteFunction
      final byte[] src = source.array;
      final byte[] dst = destination.array;
      
-     // Get decoded length, modify source index
+     // Get decoded length (modifies source index)
      final int dLen = getDecodedLength(source);
     
      if ((dLen < 0) || (dst.length - dstIdx < dLen)) 
         return false;
      
-     final int count = (this.size > 0) ? this.size : src.length - srcIdx;
+     final int ends = (this.size > 0) ? srcIdx + this.size : src.length;
      int s = source.index;
      int d = dstIdx;
      int offset;
      int length;
 
-     while (s < count) 
+     while (s < ends) 
      {       
         switch (src[s] & 0x03)
         {
@@ -425,7 +427,7 @@ public class SnappyCodec implements ByteFunction
               {
                  s += 2;
                   
-                 if (s > count)
+                 if (s > ends)
                     return false;
                   
                  x = src[s-1] & 0xFF;
@@ -434,7 +436,7 @@ public class SnappyCodec implements ByteFunction
               {
                  s += 3;
 
-                 if (s > count)
+                 if (s > ends)
                     return false;
                   
                  x = (src[s-2] & 0xFF) | ((src[s-1] & 0xFF) << 8);
@@ -443,7 +445,7 @@ public class SnappyCodec implements ByteFunction
               {
                  s += 4;
 
-                 if (s > count)
+                 if (s > ends)
                     return false;
                   
                  x = (src[s-3] & 0xFF) | ((src[s-2] & 0xFF) << 8) | 
@@ -453,7 +455,7 @@ public class SnappyCodec implements ByteFunction
               {
                  s += 5;
 
-                 if (s > count)
+                 if (s > ends)
                     return false;
 
                  x = (src[s-4] & 0xFF) | ((src[s-3] & 0xFF) << 8) |
@@ -462,21 +464,21 @@ public class SnappyCodec implements ByteFunction
                  
               length = x + 1;
                 
-              if ((length <= 0) || (length > dst.length-d) || (length > count-s))
+              if ((length <= 0) || (length > dst.length-d) || (length > ends-s))
                  return false;
 
               if (length < 16)
               {
                  for (int i=0; i<length; i++)
-                    dst[d++] = src[s++]; 
+                    dst[d+i] = src[s+i];
               }
               else
               {
                  System.arraycopy(src, s, dst, d, length);
-                 d += length;
-                 s += length;
               }
               
+              d += length;
+              s += length;
               continue;
            }
 
@@ -484,7 +486,7 @@ public class SnappyCodec implements ByteFunction
            {
               s += 2;
 
-              if (s > count)
+              if (s > ends)
                  return false;
 
               length = 4 + (((src[s-2] & 0xFF) >> 2) & 0x07);
@@ -496,7 +498,7 @@ public class SnappyCodec implements ByteFunction
            {
               s += 3;
                
-              if (s > count) 
+              if (s > ends) 
                  return false;
 
               length = 1 + ((src[s-3] & 0xFF) >> 2);
@@ -517,11 +519,8 @@ public class SnappyCodec implements ByteFunction
            dst[d] = dst[d-offset];
      }
 
-     if (d - dstIdx != dLen)
-        return false;
-       
-     source.index = srcIdx + count;
+     source.index = ends;
      destination.index = d;
-     return true;
+     return (d - dstIdx != dLen) ? false : true;
   }
 }
