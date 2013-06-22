@@ -48,23 +48,22 @@ import kanzi.IndexedIntArray;
 //
 // E.G.
 // Source: mississippi\0
-// Suffixes:
-// mississippi\0 0
-//  ississippi\0 1
-//   ssissippi\0 2
-//    sissippi\0 3
-//     issippi\0 4
-//      ssippi\0 5
-//       sippi\0 6
-//        ippi\0 7
-//         ppi\0 8
-//          pi\0 9
-//           i\0 10
-// Suffix array        10 7 4 1 0 9 8 6 3 5 2 => ipssm\0pissii (+ primary index 5)
+// Suffixes:    rank  sorted
+// mississippi\0  0  -> 4
+//  ississippi\0  1  -> 3
+//   ssissippi\0  2  -> 10
+//    sissippi\0  3  -> 8
+//     issippi\0  4  -> 2
+//      ssippi\0  5  -> 9
+//       sippi\0  6  -> 7
+//        ippi\0  7  -> 1
+//         ppi\0  8  -> 6
+//          pi\0  9  -> 5
+//           i\0  10 -> 0
+// Suffix array        10 7 4 1 0 9 8 6 3 5 2 => ipss\0mpissii (+ primary index 4)                 
 // The suffix array and permutation vector are equal when the input is 0 terminated
-// In this example, for a non \0 terminated string the permutation vector is pssmipissii.
+// In this example, for a non \0 terminated string the output is pssmipissii.
 // The insertion of a guard is done internally and is entirely transparent.
-//
 
 public class BWT implements ByteTransform
 {
@@ -150,11 +149,14 @@ public class BWT implements ByteTransform
         // Suffix array
         final int[] sa = this.buffer1;
         final int pIdx = computeSuffixArray(new IndexedIntArray(this.data, 0), sa, 0, len, 256, true);
+        input[blkptr] = (byte) this.data[len-1];
 
-        for (int i=0; i<len; i++)
+        for (int i=0; i<pIdx; i++)
+           input[blkptr+i+1] = (byte) sa[i];
+
+        for (int i=pIdx+1; i<len; i++)
            input[blkptr+i] = (byte) sa[i];
 
-        input[blkptr+pIdx] = (byte) this.data[len-1];
         this.setPrimaryIndex(pIdx);
         return input;
     }
@@ -184,13 +186,13 @@ public class BWT implements ByteTransform
        // Build array of packed index + value (assumes block size < 2^24)
        // Start with the primary index position
        final int pIdx = this.getPrimaryIndex();
-       int val = input[blkptr+pIdx] & 0xFF;
+       int val = input[blkptr] & 0xFF;
        data_[pIdx] = (buckets_[val] << 8) | val;
        buckets_[val]++;
        
        for (int i=0; i<pIdx; i++)
        {
-          val = input[blkptr+i] & 0xFF;
+          val = input[blkptr+i+1] & 0xFF;
           data_[i] = (buckets_[val] << 8) | val;
           buckets_[val]++;
        }
@@ -281,8 +283,10 @@ public class BWT implements ByteTransform
         int j = n - 1;
         final int[] srcArray = src.array;
         final int srcIdx = src.index;
+        final int[] array = B.array;
+        final int bIdx = B.index;
         int c1 = srcArray[srcIdx+j];
-        int b = B.array[B.index+c1];
+        int b = array[bIdx+c1];
         j--;
         sa[b++] = (srcArray[srcIdx+j] < c1) ? ~j : j;
 
@@ -292,13 +296,13 @@ public class BWT implements ByteTransform
 
           if (j > 0)
           {
-            int c0 = srcArray[srcIdx+j];
+            final int c0 = srcArray[srcIdx+j];
 
             if (c0 != c1)
             {
-               B.array[B.index+c1] = b;
+               array[bIdx+c1] = b;
                c1 = c0;
-               b = B.array[B.index+c1];
+               b = array[bIdx+c1];
             }
 
             j--;
@@ -316,7 +320,7 @@ public class BWT implements ByteTransform
         // find ends of buckets
         getBuckets(C, B, k, true);
         c1 = 0;
-        b = B.array[B.index+c1];
+        b = array[bIdx+c1];
 
         for (int i=n-1; i>=0; i--)
         {
@@ -329,9 +333,9 @@ public class BWT implements ByteTransform
 
           if (c0 != c1)
           {
-             B.array[B.index+c1] = b;
+             array[bIdx+c1] = b;
              c1 = c0;
-             b = B.array[B.index+c1];
+             b = array[bIdx+c1];
           }
 
           j--;
@@ -719,8 +723,7 @@ public class BWT implements ByteTransform
           name = 1;
         }
 
-
-        // stage 2: solve the reduced problem recurse if names are not yet unique
+        // stage 2: solve the reduced problem, recurse if names are not yet unique
         if (name < m)
         {
           int newfs = (n+fs) - (m+m);

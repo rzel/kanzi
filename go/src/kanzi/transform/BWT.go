@@ -15,6 +15,52 @@ limitations under the License.
 
 package transform
 
+// The Burrows-Wheeler Transform is a reversible transform based on
+// permutation of the data in the original message to reduce the entropy.
+
+// The initial text can be found here:
+// Burrows M and Wheeler D, [A block sorting lossless data compression algorithm]
+// Technical Report 124, Digital Equipment Corporation, 1994
+
+// See also Peter Fenwick, [Block sorting text compression - final report]
+// Technical Report 130, 1996
+
+// This implementation replaces the 'slow' sorting of permutation strings
+// with the construction of a suffix array (faster but more complex).
+// The suffix array contains the indexes of the sorted suffixes.
+//
+// This implementation is based on the SA_IS (Suffix Array Induction Sorting) algorithm.
+// This is a port of sais.c by Yuta Mori (http://sites.google.com/site/yuta256/sais)
+// See original publication of the algorithm here:
+// [Ge Nong, Sen Zhang and Wai Hong Chan, Two Efficient Algorithms for
+// Linear Suffix Array Construction, 2008]
+// Another good read: http://labh-curien.univ-st-etienne.fr/~bellet/misc/SA_report.pdf
+//
+// Overview of the algorithm:
+// Step 1 - Problem reduction: the input string is reduced into a smaller string.
+// Step 2 - Recursion: the suffix array of the reduced problem is recursively computed.
+// Step 3 - Problem induction: based on the suffix array of the reduced problem, that of the
+//          unreduced problem is induced
+//
+// E.G.
+// Source: mississippi\0
+// Suffixes:    rank  sorted
+// mississippi\0  0  -> 4
+//  ississippi\0  1  -> 3
+//   ssissippi\0  2  -> 10
+//    sissippi\0  3  -> 8
+//     issippi\0  4  -> 2
+//      ssippi\0  5  -> 9
+//       sippi\0  6  -> 7
+//        ippi\0  7  -> 1
+//         ppi\0  8  -> 6
+//          pi\0  9  -> 5
+//           i\0  10 -> 0
+// Suffix array        10 7 4 1 0 9 8 6 3 5 2 => ipss\0mpissii (+ primary index 4)                 
+// The suffix array and permutation vector are equal when the input is 0 terminated
+// In this example, for a non \0 terminated string the output is pssmipissii.
+// The insertion of a guard is done internally and is entirely transparent.
+
 type BWT struct {
 	size         uint
 	data         []int
@@ -82,12 +128,16 @@ func (this *BWT) Forward(input []byte) []byte {
 	// Suffix array
 	sa := this.buffer1
 	pIdx := computeSuffixArray(this.data, sa, 0, length, 256, true)
+	input[0] = byte(this.data[length-1])
 
-	for i := 0; i < length; i++ {
+	for i := uint(0); i < pIdx; i++ {
+		input[i+1] = byte(sa[i])
+	}
+
+	for i := int(pIdx+1); i < length; i++ {
 		input[i] = byte(sa[i])
 	}
 
-	input[pIdx] = byte(this.data[length-1])
 	this.SetPrimaryIndex(pIdx)
 	return input
 }
@@ -120,12 +170,12 @@ func (this *BWT) Inverse(input []byte) []byte {
 	// Build array of packed index + value (assumes block size < 2^24)
 	// Start with the primary index position
 	pIdx := int(this.PrimaryIndex())
-	val := int(input[pIdx])
+	val := int(input[0])
 	data_[pIdx] = (buckets_[val] << 8) | val
 	buckets_[val]++
 
 	for i := 0; i < pIdx; i++ {
-		val = int(input[i])
+		val = int(input[i+1])
 		data_[i] = (buckets_[val] << 8) | val
 		buckets_[val]++
 	}
@@ -715,7 +765,7 @@ func computeSuffixArray(data []int, sa []int, fs int, n int, k int, isbwt bool) 
 		name = 1
 	}
 
-	// stage 2: solve the reduced problem recurse if names are not yet unique
+	// stage 2: solve the reduced problem, recurse if names are not yet unique
 	if name < m {
 		newfs := (n + fs) - (m + m)
 
