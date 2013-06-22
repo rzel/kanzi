@@ -406,119 +406,104 @@ public class SnappyCodec implements ByteFunction
     
      if ((dLen < 0) || (dst.length - dstIdx < dLen)) 
         return false;
-     
+
      final int ends = (this.size > 0) ? srcIdx + this.size : src.length;
      int s = source.index;
      int d = dstIdx;
-     int offset;
-     int length;
+    
+     try
+     {     
+        int offset;
+        int length;
 
-     while (s < ends) 
-     {       
-        switch (src[s] & 0x03)
-        {
-           case TAG_LITERAL:
+        while (s < ends) 
+        {       
+           switch (src[s] & 0x03)
            {
-              int x = (src[s] & 0xFF) >> 2;
-              
-              if (x < TAG_DEC_LEN1)
-                  s++;
-              else if (x == TAG_DEC_LEN1)
+              case TAG_LITERAL:
               {
-                 s += 2;
-                  
-                 if (s > ends)
-                    return false;
-                  
-                 x = src[s-1] & 0xFF;
-              }
-              else if (x == TAG_DEC_LEN2)
-              {
-                 s += 3;
+                int x = (src[s] & 0xFF) >> 2;
 
-                 if (s > ends)
-                    return false;
-                  
-                 x = (src[s-2] & 0xFF) | ((src[s-1] & 0xFF) << 8);
-              }
-              else if (x == TAG_DEC_LEN3)
-              {
-                 s += 4;
+                if (x < TAG_DEC_LEN1)
+                    s++;
+                else if (x == TAG_DEC_LEN1)
+                {
+                   s += 2;
+                   x = src[s-1] & 0xFF;
+                }
+                else if (x == TAG_DEC_LEN2)
+                {
+                   s += 3;  
+                   x = (src[s-2] & 0xFF) | ((src[s-1] & 0xFF) << 8);
+                }
+                else if (x == TAG_DEC_LEN3)
+                {
+                   s += 4; 
+                   x = (src[s-3] & 0xFF) | ((src[s-2] & 0xFF) << 8) | 
+                      ((src[s-1]) & 0xFF) << 16;
+                }
+                else if (x == TAG_DEC_LEN4)
+                {
+                   s += 5;
+                   x = (src[s-4] & 0xFF) | ((src[s-3] & 0xFF) << 8) |
+                       ((src[s-2] & 0xFF) << 16) | ((src[s-1] & 0xFF) << 24);
+                }   
 
-                 if (s > ends)
-                    return false;
-                  
-                 x = (src[s-3] & 0xFF) | ((src[s-2] & 0xFF) << 8) | 
-                     ((src[s-1]) & 0xFF) << 16;
-              }
-              else if (x == TAG_DEC_LEN4)
-              {
-                 s += 5;
+                length = x + 1;
 
-                 if (s > ends)
-                    return false;
+                if ((length <= 0) || (length > dst.length-d) || (length > ends-s))
+                   return false;
 
-                 x = (src[s-4] & 0xFF) | ((src[s-3] & 0xFF) << 8) |
-                     ((src[s-2] & 0xFF) << 16) | ((src[s-1] & 0xFF) << 24);
-              }   
-                 
-              length = x + 1;
-                
-              if ((length <= 0) || (length > dst.length-d) || (length > ends-s))
-                 return false;
+                if (length < 16)
+                {
+                   for (int i=0; i<length; i++)
+                      dst[d+i] = src[s+i];
+                }
+                else
+                {
+                   System.arraycopy(src, s, dst, d, length);
+                }
+ 
+                d += length;
+                s += length;
+                continue;
+             }
 
-              if (length < 16)
-              {
-                 for (int i=0; i<length; i++)
-                    dst[d+i] = src[s+i];
-              }
-              else
-              {
-                 System.arraycopy(src, s, dst, d, length);
-              }
-              
-              d += length;
-              s += length;
-              continue;
-           }
+             case TAG_COPY1:
+             {
+                s += 2;
+                length = 4 + (((src[s-2] & 0xFF) >> 2) & 0x07);
+                offset = ((src[s-2] & 0xE0) << 3) | (src[s-1] & 0xFF);
+                break;
+             }
 
-           case TAG_COPY1:
-           {
-              s += 2;
+             case TAG_COPY2:
+             {
+                s += 3;
+                length = 1 + ((src[s-3] & 0xFF) >> 2);
+                offset = (src[s-2] & 0xFF) | ((src[s-1] & 0xFF) << 8);
+                break;
+             }
 
-              if (s > ends)
-                 return false;
+             default:
+                return false;
+          }
 
-              length = 4 + (((src[s-2] & 0xFF) >> 2) & 0x07);
-              offset = ((src[s-2] & 0xE0) << 3) | (src[s-1] & 0xFF);
-              break;
-           }
-               
-           case TAG_COPY2:
-           {
-              s += 3;
-               
-              if (s > ends) 
-                 return false;
+          final int end = d + length;
 
-              length = 1 + ((src[s-3] & 0xFF) >> 2);
-              offset = (src[s-2] & 0xFF) | ((src[s-1] & 0xFF) << 8);
-              break;
-           }
-              
-           default:
-              return false;
+          if ((offset > d) || (end > dst.length))
+             return false;
+
+          for ( ; d<end; d++)
+             dst[d] = dst[d-offset];
         }
-          
-        final int end = d + length;
-            
-        if ((offset > d) || (end > dst.length))
-           return false;
-
-        for ( ; d<end; d++)
-           dst[d] = dst[d-offset];
      }
-
+     catch (ArrayIndexOutOfBoundsException e)
+     {
+        // Catch incorrectly formatted input
+        // Fall through
+     }
+          
      source.index = ends;
      destination.index = d;
      return (d - dstIdx != dLen) ? false : true;
