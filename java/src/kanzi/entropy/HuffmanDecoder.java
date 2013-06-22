@@ -26,6 +26,7 @@ import kanzi.entropy.HuffmanTree.Node;
 public class HuffmanDecoder extends AbstractDecoder
 {
     public static final int DECODING_BATCH_SIZE = 10; // in bits
+    private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
     private static final Key ZERO_KEY = new Key(0, 0);
 
     private final InputBitStream bitstream;
@@ -34,18 +35,36 @@ public class HuffmanDecoder extends AbstractDecoder
     private Node root;
     private CacheData[] decodingCache;
     private CacheData current;
+    private final int chunkSize;
 
 
     public HuffmanDecoder(InputBitStream bitstream) throws BitStreamException
     {
+       this(bitstream, DEFAULT_CHUNK_SIZE);
+    }
+    
+    
+    // The chunk size indicates how many bytes are encoded (per block) before 
+    // resetting the frequency stats. 0 means that frequencies calculated at the
+    // beginning of the block apply to the whole block.
+    // The default chunk size is 65536 bytes.
+    public HuffmanDecoder(InputBitStream bitstream, int chunkSize) throws BitStreamException
+    {
         if (bitstream == null)
             throw new NullPointerException("Invalid null bitstream parameter");
       
+        if ((chunkSize != 0) && (chunkSize < 1024))
+           throw new IllegalArgumentException("The chunk size must be a least 1024");
+
+        if (chunkSize > 1<<30)
+           throw new IllegalArgumentException("The chunk size must be a least most 2^30");
+
         this.bitstream = bitstream;
         this.sizes = new int[256];
         this.codes = new int[256];
         this.decodingCache = new CacheData[1 << DECODING_BATCH_SIZE];
-
+        this.chunkSize = chunkSize;
+        
         // Default lengths
         for (int i=0; i<256; i++)
            this.sizes[i] = 8;
@@ -157,9 +176,9 @@ public class HuffmanDecoder extends AbstractDecoder
     public boolean readLengths() throws BitStreamException
     {
         final int[] buf = this.sizes;
-        int maxSize = 1;
         ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
-        buf[0] = maxSize + egdec.decodeByte();       
+        buf[0] = 1 + egdec.decodeByte();       
+        int maxSize = buf[0];
         
         // Read lengths
         for (int i=1; i<256; i++)
@@ -181,31 +200,45 @@ public class HuffmanDecoder extends AbstractDecoder
     }
 
 
-    // Rebuild the Huffman tree for each block of data before decoding
+    // Rebuild the Huffman tree for each chunk of data in the block
+    // Use fastDecodeByte until the near end of chunk or block. 
     @Override
     public int decode(byte[] array, int blkptr, int len)
     {
        if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
          return -1;
 
-       this.readLengths();
-       final int end2 = blkptr + len;
-       final int end1 = end2 - DECODING_BATCH_SIZE;
-       int i = blkptr;
+       final int sz = (this.chunkSize == 0) ? len : this.chunkSize;
+       int startChunk = blkptr;
+       final int end = blkptr + len;
+       int sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
+       int endChunk = startChunk + sizeChunk;
 
-       try
-       {       
-          // Decode fast by reading several bits at a time from the bitstream
-          while (i < end1)
-             array[i++] = this.fastDecodeByte();
-
-          // Regular decoding by reading one bit at a time from the bitstream
-          while (i < end2)
-             array[i++] = this.decodeByte();
-       }
-       catch (BitStreamException e)
+       while (startChunk < end)
        {
-          return i - blkptr;
+          // Reinitialize the Huffman tree
+          this.readLengths();
+          final int endChunk1 = endChunk - DECODING_BATCH_SIZE;
+          int i = startChunk;
+
+          try
+          {       
+             // Fast decoding by reading several bits at a time from the bitstream
+             for ( ; i<endChunk1; i++)
+                array[i] = this.fastDecodeByte();
+
+             // Regular decoding by reading one bit at a time from the bitstream
+             for ( ; i<endChunk; i++)
+                array[i] = this.decodeByte();
+          }
+          catch (BitStreamException e)
+          {
+             return i - blkptr;
+          }
+          
+          startChunk = endChunk;
+          sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
+          endChunk = startChunk + sizeChunk;
        }
 
        return len;
@@ -232,7 +265,7 @@ public class HuffmanDecoder extends AbstractDecoder
 
 
     // DECODING_BATCH_SIZE bits must be available in the bitstream
-    /*package*/ final byte fastDecodeByte()
+    protected final byte fastDecodeByte()
     {
        Node currNode = this.current.value;
 
@@ -260,8 +293,7 @@ public class HuffmanDecoder extends AbstractDecoder
     {
        return this.bitstream;
     }
-    
-    
+        
     
     private static class Key implements Comparable<Key>
     {

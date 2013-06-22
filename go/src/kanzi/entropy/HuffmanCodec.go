@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	DECODING_BATCH_SIZE = 10 // in bits
+	DECODING_BATCH_SIZE        = 10            // in bits
+	DEFAULT_HUFFMAN_CHUNK_SIZE = uint(1 << 16) // 64 KB by default
 )
 
 // ---- Utilities
@@ -123,12 +124,36 @@ type HuffmanEncoder struct {
 	buffer    []uint
 	codes     []uint
 	sizes     []uint
+	chunkSize int
 }
 
-func NewHuffmanEncoder(bs kanzi.OutputBitStream) (*HuffmanEncoder, error) {
+// The chunk size indicates how many bytes are encoded (per block) before
+// resetting the frequency stats. 0 means that frequencies calculated at the
+// beginning of the block apply to the whole block
+// Since the number of args is variable, this function can be called like this:
+// NewHuffmanEncoder(bs) or NewHuffmanEncoder(bs, 16384)
+// The default chunk size is 65536 bytes.
+func NewHuffmanEncoder(bs kanzi.OutputBitStream, chunkSizes ...uint) (*HuffmanEncoder, error) {
 	if bs == nil {
-		err := errors.New("Invalid null bitstream parameter")
-		return nil, err
+		return nil, errors.New("Invalid null bitstream parameter")
+	}
+
+	if len(chunkSizes) > 1 {
+		return nil, errors.New("At most one chunk size can be provided")
+	}
+
+	chkSize := DEFAULT_HUFFMAN_CHUNK_SIZE
+
+	if len(chunkSizes) == 1 {
+		chkSize = chunkSizes[0]
+	}
+
+	if chkSize != 0 && chkSize < 1024 {
+		return nil, errors.New("The chunk size must be a least 1024")
+	}
+
+	if chkSize > 1<<30 {
+		return nil, errors.New("The chunk size must be a least most 2^30")
 	}
 
 	this := new(HuffmanEncoder)
@@ -136,9 +161,10 @@ func NewHuffmanEncoder(bs kanzi.OutputBitStream) (*HuffmanEncoder, error) {
 	this.buffer = make([]uint, 256)
 	this.codes = make([]uint, 256)
 	this.sizes = make([]uint, 256)
+	this.chunkSize = int(chkSize)
 
 	// Default frequencies, sizes and codes
-	for i := 1; i < 256; i++ {
+	for i := 0; i < 256; i++ {
 		this.buffer[i] = 1
 		this.sizes[i] = 8
 		this.codes[i] = uint(i)
@@ -232,10 +258,10 @@ func fillTree(node *HuffmanNode, depth uint, sizes_ []uint) {
 	}
 }
 
+// Rebuild Huffman tree
 func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 	if frequencies == nil || len(frequencies) != 256 {
-		err := errors.New("Invalid null frequencies parameter")
-		return err
+		return errors.New("Invalid frequencies parameter")
 	}
 
 	// Create tree from frequencies
@@ -253,40 +279,67 @@ func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 	// Transmit code lengths only, frequencies and codes do not matter
 	// Unary encode the length difference
 	for i := 0; i < 256; i++ {
-		nextSize := this.sizes[i]
-
-		// The encoder is sign aware ...
-		egenc.EncodeByte(byte(nextSize - prevSize))
-		prevSize = nextSize
+		egenc.EncodeByte(byte(this.sizes[i] - prevSize))
+		prevSize = this.sizes[i]
 	}
 
 	return nil
 }
 
-// Dynamically compute the frequencies of the input data
+// Dynamically compute the frequencies for every chunk of data in the block
 func (this *HuffmanEncoder) Encode(block []byte) (int, error) {
 	if block == nil {
 		return 0, errors.New("Invalid null block parameter")
 	}
 
-	buf := this.buffer // alias
+	buf := this.buffer // aliasing
+	end := len(block)
+	startChunk := 0
+	sizeChunk := this.chunkSize
 
-	for i := range buf {
-		buf[i] = 0
+	if sizeChunk == 0 {
+		sizeChunk = end
 	}
 
-	for i := range block {
-		buf[block[i]]++
+	if startChunk+sizeChunk >= end {
+		sizeChunk = end - startChunk
 	}
 
-	this.UpdateFrequencies(buf)
-	return EntropyEncodeArray(this, block)
+	endChunk := startChunk + sizeChunk
+
+	for startChunk < end {
+		for i := range buf {
+			buf[i] = 0
+		}
+
+		for i := startChunk; i < endChunk; i++ {
+			buf[block[i]]++
+		}
+
+		// Rebuild Huffman tree
+		this.UpdateFrequencies(buf)
+
+		for i := startChunk; i < endChunk; i++ {
+			if err := this.EncodeByte(block[i]); err != nil {
+				return i, err
+			}
+		}
+
+		startChunk = endChunk
+
+		if startChunk+sizeChunk >= end {
+			sizeChunk = end - startChunk
+		}
+
+		endChunk = startChunk + sizeChunk
+	}
+
+	return len(block), nil
 }
 
 // Frequencies of the data block must have been previously set
 func (this *HuffmanEncoder) EncodeByte(val byte) error {
-	idx := val
-	_, err := this.bitstream.WriteBits(uint64(this.codes[idx]), this.sizes[idx])
+	_, err := this.bitstream.WriteBits(uint64(this.codes[val]), this.sizes[val])
 	return err
 }
 
@@ -307,12 +360,36 @@ type HuffmanDecoder struct {
 	root          *HuffmanNode
 	decodingCache []*HuffmanCacheData
 	current       *HuffmanCacheData
+	chunkSize     int
 }
 
-func NewHuffmanDecoder(bs kanzi.InputBitStream) (*HuffmanDecoder, error) {
+// The chunk size indicates how many bytes are encoded (per block) before
+// resetting the frequency stats. 0 means that frequencies calculated at the
+// beginning of the block apply to the whole block
+// Since the number of args is variable, this function can be called like this:
+// NewHuffmanDecoder(bs) or NewHuffmanDecoder(bs, 16384)
+// The default chunk size is 65536 bytes.
+func NewHuffmanDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*HuffmanDecoder, error) {
 	if bs == nil {
-		err := errors.New("Invalid null bitstream parameter")
-		return nil, err
+		return nil, errors.New("Invalid null bitstream parameter")
+	}
+
+	if len(chunkSizes) > 1 {
+		return nil, errors.New("At most one chunk size can be provided")
+	}
+
+	chkSize := DEFAULT_HUFFMAN_CHUNK_SIZE
+
+	if len(chunkSizes) == 1 {
+		chkSize = chunkSizes[0]
+	}
+
+	if chkSize != 0 && chkSize < 1024 {
+		return nil, errors.New("The chunk size must be a least 1024")
+	}
+
+	if chkSize > 1<<30 {
+		return nil, errors.New("The chunk size must be a least most 2^30")
 	}
 
 	this := new(HuffmanDecoder)
@@ -320,6 +397,7 @@ func NewHuffmanDecoder(bs kanzi.InputBitStream) (*HuffmanDecoder, error) {
 	this.sizes = make([]uint, 256)
 	this.codes = make([]uint, 256)
 	this.decodingCache = make([]*HuffmanCacheData, 1<<DECODING_BATCH_SIZE)
+	this.chunkSize = int(chkSize)
 
 	// Default lengths
 	for i := range this.sizes {
@@ -440,7 +518,6 @@ func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
 
 func (this *HuffmanDecoder) ReadLengths() error {
 	buf := this.sizes // alias
-	maxSize := uint(1)
 
 	egdec, err := NewExpGolombDecoder(this.bitstream, true)
 
@@ -454,13 +531,12 @@ func (this *HuffmanDecoder) ReadLengths() error {
 		return err
 	}
 
-	buf[0] = uint(int8(maxSize) + int8(szDelta))
+	buf[0] = uint(int8(1) + int8(szDelta))
+	maxSize := buf[0]
 
 	// Read lengths
-	for i := 1; i < len(buf); i++ {
-		szDelta, err := egdec.DecodeByte()
-
-		if err != nil {
+	for i := 1; i < 256; i++ {
+		if szDelta, err = egdec.DecodeByte(); err != nil {
 			return err
 		}
 
@@ -482,37 +558,62 @@ func (this *HuffmanDecoder) ReadLengths() error {
 	return nil
 }
 
-// Rebuild the Huffman tree for each block of data before decoding
+// Rebuild the Huffman tree for each chunk of data in the block
+// Use fastDecodeByte until the near end of chunk or block.
 func (this *HuffmanDecoder) Decode(block []byte) (int, error) {
 	if block == nil {
 		return 0, errors.New("Invalid null block parameter")
 	}
 
-	this.ReadLengths()
-	end2 := len(block)
-	end1 := end2 - DECODING_BATCH_SIZE
-	i := 0
-	var err error
+	end := len(block)
+	startChunk := 0
+	sizeChunk := this.chunkSize
 
-	for i < end1 {
-		// Fast decoding by reading several bits at a time from the bitstream
-		if block[i], err = this.fastDecodeByte(); err != nil {
-			return i, err
-		}
-
-		i++
+	if sizeChunk == 0 {
+		sizeChunk = len(block)
 	}
 
-	for i < end2 {
-		// Regular decoding by reading one bit at a time from the bitstream
-		if block[i], err = this.DecodeByte(); err != nil {
-			return i, err
-		}
-
-		i++
+	if startChunk+sizeChunk >= end {
+		sizeChunk = end - startChunk
 	}
 
-	return end2, nil
+	endChunk := startChunk + sizeChunk
+
+	for startChunk < end {
+		// Reinitialize the Huffman tree
+		this.ReadLengths()
+		endChunk1 := endChunk - DECODING_BATCH_SIZE
+		i := startChunk
+		var err error
+
+		for i < endChunk1 {
+			// Fast decoding by reading several bits at a time from the bitstream
+			if block[i], err = this.fastDecodeByte(); err != nil {
+				return i, err
+			}
+
+			i++
+		}
+
+		for i < endChunk {
+			// Regular decoding by reading one bit at a time from the bitstream
+			if block[i], err = this.DecodeByte(); err != nil {
+				return i, err
+			}
+
+			i++
+		}
+
+		startChunk = endChunk
+
+		if startChunk+sizeChunk >= end {
+			sizeChunk = end - startChunk
+		}
+
+		endChunk = startChunk + sizeChunk
+	}
+
+	return len(block), nil
 }
 
 func (this *HuffmanDecoder) DecodeByte() (byte, error) {

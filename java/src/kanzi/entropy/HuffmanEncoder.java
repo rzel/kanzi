@@ -25,21 +25,41 @@ import kanzi.util.sort.QuickSort;
 
 public class HuffmanEncoder extends AbstractEncoder
 {
+    private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
+    
     private final OutputBitStream bitstream;
     private final int[] buffer;
     private final int[] codes;
     private final int[] sizes; // Cache for speed purpose
+    private final int chunkSize;
 
 
     public HuffmanEncoder(OutputBitStream bitstream) throws BitStreamException
     {
+       this(bitstream, DEFAULT_CHUNK_SIZE);
+    }
+    
+    
+    // The chunk size indicates how many bytes are encoded (per block) before 
+    // resetting the frequency stats. 0 means that frequencies calculated at the
+    // beginning of the block apply to the whole block.
+    // The default chunk size is 65536 bytes.
+    public HuffmanEncoder(OutputBitStream bitstream, int chunkSize) throws BitStreamException
+    {
         if (bitstream == null)
            throw new NullPointerException("Invalid null bitstream parameter");
+
+        if ((chunkSize != 0) && (chunkSize < 1024))
+           throw new IllegalArgumentException("The chunk size must be a least 1024");
+
+        if (chunkSize > 1<<30)
+           throw new IllegalArgumentException("The chunk size must be a least most 2^30");
 
         this.bitstream = bitstream;
         this.buffer = new int[256]; 
         this.sizes = new int[256];
         this.codes = new int[256];
+        this.chunkSize = chunkSize;
         
         // Default frequencies, sizes and codes
         for (int i=0; i<256; i++) 
@@ -47,10 +67,11 @@ public class HuffmanEncoder extends AbstractEncoder
            this.buffer[i] = 1;
            this.sizes[i] = 8;
            this.codes[i] = i;
-        }
+        }        
     }
 
     
+    // Rebuild Huffman tree
     public boolean updateFrequencies(int[] frequencies) throws BitStreamException
     {              
         if ((frequencies == null) || (frequencies.length != 256))
@@ -64,35 +85,55 @@ public class HuffmanEncoder extends AbstractEncoder
         int prevSize = 1;
         ExpGolombEncoder egenc = new ExpGolombEncoder(this.bitstream, true);
        
-        // Transmit code lengths only, frequencies and code do not matter
+        // Transmit code lengths only, frequencies and codes do not matter
         // Unary encode the length difference
         for (int i=0; i<256; i++)
         {
-           final int nextSize = this.sizes[i];
-           egenc.encodeByte((byte) (nextSize - prevSize));
-           prevSize = nextSize;
+           egenc.encodeByte((byte) (this.sizes[i] - prevSize));
+           prevSize = this.sizes[i];
         }
         
         return true;
     }
 
     
-    // Do a dynamic computation of the frequencies of the input data
+    // Dynamically compute the frequencies for every chunk of data in the block
     @Override
     public int encode(byte[] array, int blkptr, int len)
     {
+       if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
+          return -1;
+        
        final int[] frequencies = this.buffer;
-
-       for (int i=0; i<256; i++)
-          frequencies[i] = 0;
-
        final int end = blkptr + len;
+       final int sz = (this.chunkSize == 0) ? len : this.chunkSize;
+       int startChunk = blkptr;
+       int sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
+       int endChunk = startChunk + sizeChunk;
 
-       for (int i=blkptr; i<end; i++)
-          frequencies[array[i] & 0xFF]++;
+       while (startChunk < end)
+       {
+          for (int i=0; i<256; i++)
+             frequencies[i] = 0;
 
-       this.updateFrequencies(frequencies);
-       return super.encode(array, blkptr, len);
+          for (int i=startChunk; i<endChunk; i++)
+             frequencies[array[i] & 0xFF]++;
+
+          // Rebuild Huffman tree
+          this.updateFrequencies(frequencies); 
+
+          for (int i=startChunk; i<endChunk; i++)
+          {
+             if (this.encodeByte(array[i]) == false)
+                return i - blkptr;
+          }
+                      
+          startChunk = endChunk;
+          sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
+          endChunk = startChunk + sizeChunk;
+       }
+       
+       return len;
     }
 
     
