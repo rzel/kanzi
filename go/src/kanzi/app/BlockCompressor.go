@@ -241,13 +241,13 @@ func (this *BlockCompressor) call() (int, uint64) {
 	delta := after.Sub(before).Nanoseconds() / 1000000 // convert to ms
 
 	printOut("", !this.silent)
-	msg = fmt.Sprintf("Encoding:         %d ms", delta)
+	msg = fmt.Sprintf("Encoding:          %d ms", delta)
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Input size:       %d", read)
+	msg = fmt.Sprintf("Input size:        %d", read)
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Output size:      %d", cos.GetWritten())
+	msg = fmt.Sprintf("Output size:       %d", cos.GetWritten())
 	printOut(msg, !this.silent)
-	msg = fmt.Sprintf("Ratio:            %f", float64(cos.GetWritten())/float64(read))
+	msg = fmt.Sprintf("Ratio:             %f", float64(cos.GetWritten())/float64(read))
 	printOut(msg, !this.silent)
 
 	if delta > 0 {
