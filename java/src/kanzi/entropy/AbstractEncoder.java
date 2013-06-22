@@ -29,6 +29,7 @@ public abstract class AbstractEncoder implements EntropyEncoder
     @Override
     public abstract OutputBitStream getBitStream();
 
+    
     // Default implementation: fallback to encodeByte
     // Some implementations should be able to use an optimized algorithm
     @Override
@@ -37,17 +38,15 @@ public abstract class AbstractEncoder implements EntropyEncoder
         if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
            return -1;
 
-        int end = blkptr + len;
+        final int end = blkptr + len;
         int i = blkptr;
 
         try
         {
-           while (i < end)
+           for ( ; i<end; i++)
            {            
               if (this.encodeByte(array[i]) == false)
-                 return i;
-
-              i++;
+                 return i - blkptr;
            }
         }
         catch (BitStreamException e)
@@ -63,5 +62,4 @@ public abstract class AbstractEncoder implements EntropyEncoder
     public void dispose()
     {
     }
-
 }
