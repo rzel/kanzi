@@ -165,7 +165,7 @@ public class CompressedInputStream extends InputStream
          if (this.iba1.index >= this.maxIdx)
          {
             this.maxIdx = this.processBlock();
-
+            
             if (this.maxIdx == 0) // Reached end of stream
                return -1;
          }
@@ -198,7 +198,7 @@ public class CompressedInputStream extends InputStream
       if (len == 0)
          return 0;
 
-      int c = read();
+      int c = this.read();
 
       if (c == -1)
          return -1;
@@ -208,7 +208,7 @@ public class CompressedInputStream extends InputStream
 
       for (; i<len ; i++)
       {
-         c = read();
+         c = this.read();
 
          if (c == -1)
             break;
@@ -277,6 +277,7 @@ public class CompressedInputStream extends InputStream
    }
 
 
+   // Return the number of bytes read so far
    public long getRead()
    {
       return (this.ibs.read() + 7) >> 3;
@@ -323,7 +324,7 @@ public class CompressedInputStream extends InputStream
             checksum1 = (int) bs.readBits(32);
 
          if (this.transformType == 'N')
-            this.iba2.array = data.array; // share
+            this.iba2.array = data.array; // share buffers if no transform
          else if (this.iba2.array.length < this.blockSize)
              this.iba2.array = new byte[this.blockSize];
 
@@ -357,6 +358,7 @@ public class CompressedInputStream extends InputStream
 
          final int decoded = data.index - savedIdx;
 
+         // Print info if debug stream is not null
          if (this.ds != null)
          {
             this.ds.print("Block "+this.blockId+": "+

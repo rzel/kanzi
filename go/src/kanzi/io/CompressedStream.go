@@ -259,6 +259,10 @@ func (this *CompressedOutputStream) Close() error {
 	// End block of size 0
 	this.obs.WriteBits(SMALL_BLOCK_MASK, 8)
 	this.obs.Close()
+	
+	// Release resources
+	this.buffer1 = EMPTY_BYTE_SLICE
+	this.buffer2 = EMPTY_BYTE_SLICE
 	return nil
 }
 
@@ -284,6 +288,7 @@ func (this *CompressedOutputStream) processBlock() error {
 	return nil
 }
 
+// Return the number of bytes written so far
 func (this *CompressedOutputStream) GetWritten() uint64 {
 	return (this.obs.Written() + 7) >> 3
 }
@@ -292,7 +297,7 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 	blockLength := uint(len(data))
 
 	if this.transformType == 'N' {
-		this.buffer2 = data // share
+		this.buffer2 = data // share buffers if no transform
 	} else if len(this.buffer2) < int(blockLength*5/4) { // ad-hoc size
 		this.buffer2 = make([]byte, blockLength*5/4)
 	}
@@ -381,6 +386,7 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 		return NewIOError(err.Error(), ERR_PROCESS_BLOCK)
 	}
 
+	// Print info if debug writer is not nil
 	if this.debugWriter != nil {
 		fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d (%d%%)", this.blockId,
 			blockLength, encoded, (bs.Written()-written)/8,
@@ -540,8 +546,8 @@ func (this *CompressedInputStream) Close() error {
 	}
 
 	// Release resources
-	this.buffer1 = make([]byte, 0)
-	this.buffer2 = make([]byte, 0)
+	this.buffer1 = EMPTY_BYTE_SLICE
+	this.buffer2 = EMPTY_BYTE_SLICE
 	this.maxIdx = 0
 	return nil
 }
@@ -608,6 +614,7 @@ func (this *CompressedInputStream) processBlock() (int, error) {
 	return decoded, nil
 }
 
+// Return the number of bytes read so far
 func (this *CompressedInputStream) GetRead() uint64 {
 	return (this.ibs.Read() + 7) >> 3
 }
@@ -669,7 +676,7 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 	}
 
 	if this.transformType == 'N' {
-		this.buffer2 = data // share
+		this.buffer2 = data // share buffers if no transform
 	} else if len(this.buffer2) < int(this.blockSize) {
 		this.buffer2 = make([]byte, this.blockSize)
 	}
@@ -706,7 +713,8 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 		}
 
 		decoded = int(oIdx)
-
+		
+		// Print info if debug writer is not nil
 		if this.debugWriter != nil {
 			fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d", this.blockId,
 				(bs.Read()-read)/8, compressedLength, decoded)

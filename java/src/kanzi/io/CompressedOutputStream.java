@@ -148,7 +148,7 @@ public class CompressedOutputStream extends OutputStream
    @Override
    public void write(int b) throws IOException
    {
-      this.iba1.array[this.iba1.index++] = (byte) (b & 0xFF);
+      this.iba1.array[this.iba1.index++] = (byte) b;
 
       // If the buffer is full, time to encode
       if (this.iba1.index >= this.iba1.array.length)
@@ -203,7 +203,10 @@ public class CompressedOutputStream extends OutputStream
       // End block of size 0
       this.obs.writeBits(SMALL_BLOCK_MASK, 8);
       this.obs.close();
-      this.iba1.array = new byte[0];
+      
+      // Release resources
+      this.iba1.array = EMPTY_BYTE_ARRAY;
+      this.iba2.array = EMPTY_BYTE_ARRAY;
       super.close();
    }
 
@@ -238,6 +241,7 @@ public class CompressedOutputStream extends OutputStream
    }
 
 
+   // Return the number of bytes written so far
    public long getWritten()
    {
       return (this.obs.written() + 7) >> 3;
@@ -252,8 +256,8 @@ public class CompressedOutputStream extends OutputStream
       try
       {
          if (this.transformType == 'N')
-            this.iba2.array = data.array; //share
-         else if (this.iba2.array.length < blockLength*5/4) //ad-hoc size
+            this.iba2.array = data.array; // share buffers if no transform
+         else if (this.iba2.array.length < blockLength*5/4) // ad-hoc size
              this.iba2.array = new byte[blockLength*5/4];
 
          ByteFunction transform = new FunctionFactory().newFunction(blockLength,
@@ -326,6 +330,7 @@ public class CompressedOutputStream extends OutputStream
          // Entropy encode block
          final int encoded = ee.encode(this.iba2.array, 0, compressedLength);
 
+         // Print info if debug stream is not null
          if (this.ds != null)
          {
             this.ds.print("Block "+this.blockId+": "+
