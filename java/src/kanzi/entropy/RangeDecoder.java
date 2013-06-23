@@ -31,8 +31,10 @@ public final class RangeDecoder extends AbstractDecoder
     private static final long BOTTOM    = (1L << 40) - 1;
     private static final long MAX_RANGE = BOTTOM + 1;
     private static final long MASK      = 0x00FFFFFFFFFFFFFFL;
-
+    
+    private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
     private static final int NB_SYMBOLS = 257; //256 + EOF
+    private static final int BASE_LEN = NB_SYMBOLS>>4;
     private static final int LAST = NB_SYMBOLS - 1;
 
     private long code;
@@ -42,52 +44,92 @@ public final class RangeDecoder extends AbstractDecoder
     private final int[] deltaFreq;
     private final InputBitStream bitstream;
     private boolean initialized;
+    private final int chunkSize;
 
 
     public RangeDecoder(InputBitStream bitstream)
     {
+       this(bitstream, DEFAULT_CHUNK_SIZE);
+    }
+    
+    
+    // The chunk size indicates how many bytes are encoded (per block) before 
+    // resetting the frequency stats. 0 means that frequencies calculated at the
+    // beginning of the block apply to the whole block.
+    // The default chunk size is 65536 bytes.
+    public RangeDecoder(InputBitStream bitstream, int chunkSize)
+    {
         if (bitstream == null)
             throw new NullPointerException("Invalid null bitstream parameter");
 
+        if ((chunkSize != 0) && (chunkSize < 1024))
+           throw new IllegalArgumentException("The chunk size must be a least 1024");
+
+        if (chunkSize > 1<<30)
+           throw new IllegalArgumentException("The chunk size must be a least most 2^30");
+
         this.range = (TOP << 8) - 1;
         this.bitstream = bitstream;
+        this.chunkSize = chunkSize;
         
         // Since the frequency update after each byte decoded is the bottleneck,
         // split the frequency table into an array of absolute frequencies (with
         // indexes multiple of 16) and delta frequencies (relative to the previous
         // absolute frequency) with indexes in the [0..15] range
         this.deltaFreq = new int[NB_SYMBOLS+1];
-        this.baseFreq = new int[(NB_SYMBOLS>>4)+1];
-
-        for (int i=0; i<this.deltaFreq.length; i++)
-            this.deltaFreq[i] = i & 15; // DELTA
-
-        for (int i=0; i<this.baseFreq.length; i++)
-            this.baseFreq[i] = i << 4; // BASE
+        this.baseFreq = new int[BASE_LEN+1];
+        this.resetFrequencies();
     }
 
     
+    public final void resetFrequencies()
+    {
+       for (int i=0; i<=NB_SYMBOLS; i++)
+          this.deltaFreq[i] = i & 15; // DELTA
+
+       for (int i=0; i<=BASE_LEN; i++)
+          this.baseFreq[i] = i << 4; // BASE  
+    }
+    
+    
+    // Initialize once (if necessary) at the beginning, the use the faster decodeByte_()
+    // Reset frequency stats for each chunk of data in the block
     @Override
     public int decode(byte[] array, int blkptr, int len)
     {
       if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
          return -1;
 
-      final int end = blkptr + len;
-      int i = blkptr;
+      // Deferred initialization: the bistream may not be ready at build time
+      // Initialize 'current' with bytes read from the bitstream
       this.initialize();
+      final int sz = (this.chunkSize == 0) ? len : this.chunkSize;
+      int startChunk = blkptr;
+      final int end = blkptr + len;
+      int sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
+      int endChunk = startChunk + sizeChunk;
 
-      try
+      while (startChunk < end)
       {
-         while (i < end)
-            array[i++] = this.decodeByte_();
-      }
-      catch (BitStreamException e)
-      {
-         // Fallback
+         this.resetFrequencies();
+         int i = startChunk;
+        
+         try
+         {
+            for ( ; i<endChunk; i++)
+               array[i] = this.decodeByte_();             
+         }
+         catch (BitStreamException e)
+         {
+            return i - blkptr;
+         }
+         
+         startChunk = endChunk;
+         sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
+         endChunk = startChunk + sizeChunk;      
       }
 
-      return i - blkptr;
+      return len;
     }
 
     
@@ -117,14 +159,14 @@ public final class RangeDecoder extends AbstractDecoder
        return this.decodeByte_();
     }
     
-    
+
     // This method is on the speed critical path (called for each byte)
     // The speed optimization is focused on reducing the frequency table update
     private byte decodeByte_()
     {
        final int[] bfreq = this.baseFreq;
        final int[] dfreq = this.deltaFreq;        
-       this.range /= (bfreq[NB_SYMBOLS>>4] + dfreq[NB_SYMBOLS]);
+       this.range /= (bfreq[BASE_LEN] + dfreq[NB_SYMBOLS]);
        final int count = (int) ((this.code - this.low) / this.range);
 
        // Find first frequency less than 'count'
@@ -165,7 +207,7 @@ public final class RangeDecoder extends AbstractDecoder
        return (byte) (value & 0xFF);
     }
 
-    
+     
     private int findSymbol(int freq)
     {
        final int[] bfreq = this.baseFreq;
@@ -173,31 +215,28 @@ public final class RangeDecoder extends AbstractDecoder
 
        // Find first frequency less than 'count'
        int value = (freq < bfreq[bfreq.length/2]) ? bfreq.length/2 - 1 : bfreq.length - 1;
-        
+       
        while ((value > 0) && (freq < bfreq[value]))
           value--;
-
+       
        freq -= bfreq[value];
        value <<= 4;
-
+       
        if (freq > 0)
        {
           final int end = value;
-           
+    
           if (freq < dfreq[value+8])
           {
-             value = (freq < dfreq[value+4]) ? value + 3 : value + 7;
+             value += (freq < dfreq[value+4]) ? 3 : 7;
           }
           else
           {
-             value = (freq < dfreq[value+12]) ? value + 11 : value + 15;
-              
-             if (value > NB_SYMBOLS)
-                value = NB_SYMBOLS;
-          }
-
-          while ((value >= end) && (freq < dfreq[value]))
-            value--;
+             value += (freq < dfreq[value+12]) ? 11 : 15;
+          }       
+          
+          while ((value > end) && (freq < dfreq[value]))
+             value--;
        }
      
        return value;
@@ -209,18 +248,12 @@ public final class RangeDecoder extends AbstractDecoder
         final int start = (value + 15) >> 4;
 
         // Update absolute frequencies
-        for (int j=this.baseFreq.length-1; j>=start; j--)
+        for (int j=start; j<=BASE_LEN; j++)
             this.baseFreq[j]++;
 
         // Update relative frequencies (in the 'right' segment only)
-        for (int j=(start<<4)-1; j>=value; j--)
+        for (int j=value; j<(start<<4); j++)
             this.deltaFreq[j]++;
-    }
-
-
-    @Override
-    public void dispose()
-    {
     }
 
 

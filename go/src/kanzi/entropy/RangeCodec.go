@@ -22,12 +22,14 @@ import (
 )
 
 const (
-	TOP        = int64(1 << 48)
-	BOTTOM     = int64((1 << 40) - 1)
-	MAX_RANGE  = BOTTOM + 1
-	MASK       = int64(0x00FFFFFFFFFFFFFF)
-	NB_SYMBOLS = 257 //256 + EOF
-	LAST       = NB_SYMBOLS - 1
+	TOP                      = int64(1 << 48)
+	BOTTOM                   = int64((1 << 40) - 1)
+	MAX_RANGE                = BOTTOM + 1
+	MASK                     = int64(0x00FFFFFFFFFFFFFF)
+	NB_SYMBOLS               = 257           //256 + EOF
+	DEFAULT_RANGE_CHUNK_SIZE = uint(1 << 16) // 64 KB by default
+	LAST                     = NB_SYMBOLS - 1
+	BASE_LEN                 = NB_SYMBOLS >> 4
 )
 
 type RangeEncoder struct {
@@ -38,33 +40,62 @@ type RangeEncoder struct {
 	deltaFreq []int64
 	bitstream kanzi.OutputBitStream
 	written   bool
+	chunkSize int
 }
 
-func NewRangeEncoder(bs kanzi.OutputBitStream) (*RangeEncoder, error) {
+// The chunk size indicates how many bytes are encoded (per block) before
+// resetting the frequency stats. 0 means that frequencies calculated at the
+// beginning of the block apply to the whole block.
+// Since the number of args is variable, this function can be called like this:
+// NewRangeEncoder(bs) or NewRangeEncoder(bs, 16384)
+// The default chunk size is 65536 bytes.
+func NewRangeEncoder(bs kanzi.OutputBitStream, chunkSizes ...uint) (*RangeEncoder, error) {
 	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
+		return nil, errors.New("Invalid null bitstream parameter")
+	}
+
+	if len(chunkSizes) > 1 {
+		return nil, errors.New("At most one chunk size can be provided")
+	}
+
+	chkSize := DEFAULT_RANGE_CHUNK_SIZE
+
+	if len(chunkSizes) == 1 {
+		chkSize = chunkSizes[0]
+	}
+
+	if chkSize != 0 && chkSize < 1024 {
+		return nil, errors.New("The chunk size must be a least 1024")
+	}
+
+	if chkSize > 1<<30 {
+		return nil, errors.New("The chunk size must be a least most 2^30")
 	}
 
 	this := new(RangeEncoder)
 	this.range_ = (TOP << 8) - 1
 	this.bitstream = bs
+	this.chunkSize = int(chkSize)
 
 	// Since the frequency update after each byte encoded is the bottleneck,
 	// split the frequency table into an array of absolute frequencies (with
 	// indexes multiple of 16) and delta frequencies (relative to the previous
 	// absolute frequency) with indexes in the [0..15] range
 	this.deltaFreq = make([]int64, NB_SYMBOLS+1)
-	this.baseFreq = make([]int64, (NB_SYMBOLS>>4)+1)
+	this.baseFreq = make([]int64, BASE_LEN+1)
+	this.ResetFrequencies()
+	return this, nil
+}
 
-	for i := range this.deltaFreq {
+func (this *RangeEncoder) ResetFrequencies() {
+	for i := 0; i <= NB_SYMBOLS; i++ {
 		this.deltaFreq[i] = int64(i & 15) // DELTA
 	}
 
-	for i := range this.baseFreq {
+	for i := 0; i <= BASE_LEN; i++ {
 		this.baseFreq[i] = int64(i << 4) // BASE
 	}
 
-	return this, nil
 }
 
 // This method is on the speed critical path (called for each byte)
@@ -73,7 +104,7 @@ func (this *RangeEncoder) EncodeByte(b byte) error {
 	value := int(b)
 	symbolLow := this.baseFreq[value>>4] + this.deltaFreq[value]
 	symbolHigh := this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1]
-	this.range_ /= (this.baseFreq[NB_SYMBOLS>>4] + this.deltaFreq[NB_SYMBOLS])
+	this.range_ /= (this.baseFreq[BASE_LEN] + this.deltaFreq[NB_SYMBOLS])
 
 	// Encode symbol
 	this.low += (symbolLow * this.range_)
@@ -95,7 +126,6 @@ func (this *RangeEncoder) EncodeByte(b byte) error {
 		this.low <<= 8
 	}
 
-	// Update frequencies: computational bottleneck !!!
 	this.updateFrequencies(int(value + 1))
 	this.written = true
 	return nil
@@ -105,18 +135,54 @@ func (this *RangeEncoder) updateFrequencies(value int) {
 	start := (value + 15) >> 4
 
 	// Update absolute frequencies
-	for j := len(this.baseFreq) - 1; j >= start; j-- {
+	for j := start; j <= BASE_LEN; j++ {
 		this.baseFreq[j]++
 	}
 
 	// Update relative frequencies (in the 'right' segment only)
-	for j := (start << 4) - 1; j >= value; j-- {
+	for j := value; j < (start << 4); j++ {
 		this.deltaFreq[j]++
 	}
 }
 
 func (this *RangeEncoder) Encode(block []byte) (int, error) {
-	return EntropyEncodeArray(this, block)
+	if block == nil {
+		return 0, errors.New("Invalid null block parameter")
+	}
+
+	end := len(block)
+	startChunk := 0
+	sizeChunk := this.chunkSize
+
+	if sizeChunk == 0 {
+		sizeChunk = end
+	}
+
+	if startChunk+sizeChunk >= end {
+		sizeChunk = end - startChunk
+	}
+
+	endChunk := startChunk + sizeChunk
+
+	for startChunk < end {
+		this.ResetFrequencies()
+
+		for i := startChunk; i < endChunk; i++ {
+			if err := this.EncodeByte(block[i]); err != nil {
+				return i, err
+			}
+		}
+
+		startChunk = endChunk
+
+		if startChunk+sizeChunk >= end {
+			sizeChunk = end - startChunk
+		}
+
+		endChunk = startChunk + sizeChunk
+	}
+
+	return len(block), nil
 }
 
 func (this *RangeEncoder) BitStream() kanzi.OutputBitStream {
@@ -145,33 +211,63 @@ type RangeDecoder struct {
 	deltaFreq   []int64
 	initialized bool
 	bitstream   kanzi.InputBitStream
+	chunkSize   int
 }
 
-func NewRangeDecoder(bs kanzi.InputBitStream) (*RangeDecoder, error) {
+// The chunk size indicates how many bytes are encoded (per block) before
+// resetting the frequency stats. 0 means that frequencies calculated at the
+// beginning of the block apply to the whole block
+// Since the number of args is variable, this function can be called like this:
+// NewRangeDecoder(bs) or NewRangeDecoder(bs, 16384)
+// The default chunk size is 65536 bytes.
+func NewRangeDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*RangeDecoder, error) {
 	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
+		return nil, errors.New("Invalid null bitstream parameter")
+	}
+
+	if len(chunkSizes) > 1 {
+		return nil, errors.New("At most one chunk size can be provided")
+	}
+
+	chkSize := DEFAULT_RANGE_CHUNK_SIZE
+
+	if len(chunkSizes) == 1 {
+		chkSize = chunkSizes[0]
+	}
+
+	if chkSize != 0 && chkSize < 1024 {
+		return nil, errors.New("The chunk size must be a least 1024")
+	}
+
+	if chkSize > 1<<30 {
+		return nil, errors.New("The chunk size must be a least most 2^30")
 	}
 
 	this := new(RangeDecoder)
 	this.range_ = (TOP << 8) - 1
 	this.bitstream = bs
+	this.chunkSize = int(chkSize)
 
 	// Since the frequency update after each byte encoded is the bottleneck,
 	// split the frequency table into an array of absolute frequencies (with
 	// indexes multiple of 16) and delta frequencies (relative to the previous
 	// absolute frequency) with indexes in the [0..15] range
 	this.deltaFreq = make([]int64, NB_SYMBOLS+1)
-	this.baseFreq = make([]int64, (NB_SYMBOLS>>4)+1)
+	this.baseFreq = make([]int64, BASE_LEN+1)
+	this.ResetFrequencies()
 
-	for i := range this.deltaFreq {
+	return this, nil
+}
+
+func (this *RangeDecoder) ResetFrequencies() {
+	for i := 0; i <= NB_SYMBOLS; i++ {
 		this.deltaFreq[i] = int64(i & 15) // DELTA
 	}
 
-	for i := range this.baseFreq {
+	for i := 0; i <= BASE_LEN; i++ {
 		this.baseFreq[i] = int64(i << 4) // BASE
 	}
 
-	return this, nil
 }
 
 func (this *RangeDecoder) Initialized() bool {
@@ -208,7 +304,7 @@ func (this *RangeDecoder) DecodeByte() (byte, error) {
 func (this *RangeDecoder) decodeByte_() (byte, error) {
 	bfreq := this.baseFreq  // alias
 	dfreq := this.deltaFreq // alias
-	this.range_ /= (bfreq[NB_SYMBOLS>>4] + dfreq[NB_SYMBOLS])
+	this.range_ /= (bfreq[BASE_LEN] + dfreq[NB_SYMBOLS])
 	count := (this.code - this.low) / this.range_
 
 	// Find first frequency less than 'count'
@@ -257,7 +353,6 @@ func (this *RangeDecoder) decodeByte_() (byte, error) {
 		this.low <<= 8
 	}
 
-	// Update frequencies: computational bottleneck !!!
 	this.updateFrequencies(int(value + 1))
 	return byte(value & 0xFF), nil
 }
@@ -296,13 +391,9 @@ func (this *RangeDecoder) findSymbol(freq int64) int {
 			} else {
 				value += 15
 			}
-
-			if value > NB_SYMBOLS {
-				value = NB_SYMBOLS
-			}
 		}
 
-		for value >= end && freq < dfreq[value] {
+		for value > end && freq < dfreq[value] {
 			value--
 		}
 	}
@@ -314,31 +405,62 @@ func (this *RangeDecoder) updateFrequencies(value int) {
 	start := (value + 15) >> 4
 
 	// Update absolute frequencies
-	for j := len(this.baseFreq) - 1; j >= start; j-- {
+	for j := start; j <= BASE_LEN; j++ {
 		this.baseFreq[j]++
 	}
 
 	// Update relative frequencies (in the 'right' segment only)
-	for j := (start << 4) - 1; j >= value; j-- {
+	for j := value; j < (start << 4); j++ {
 		this.deltaFreq[j]++
 	}
 }
 
+// Initialize once (if necessary) at the beginning, the use the faster decodeByte_()
+// Reset frequency stats for each chunk of data in the block
 func (this *RangeDecoder) Decode(block []byte) (int, error) {
-	err := error(nil)
+	if block == nil {
+		return 0, errors.New("Invalid null block parameter")
+	}
 
 	// Deferred initialization: the bistream may not be ready at build time
 	// Initialize 'current' with bytes read from the bitstream
 	if this.Initialized() == false {
-		if err = this.Initialize(); err != nil {
+		if err := this.Initialize(); err != nil {
 			return 0, err
 		}
 	}
 
-	for i := range block {
-		if block[i], err = this.decodeByte_(); err != nil {
-			return i, err
+	end := len(block)
+	startChunk := 0
+	sizeChunk := this.chunkSize
+
+	if sizeChunk == 0 {
+		sizeChunk = len(block)
+	}
+
+	if startChunk+sizeChunk >= end {
+		sizeChunk = end - startChunk
+	}
+
+	endChunk := startChunk + sizeChunk
+
+	for startChunk < end {
+		this.ResetFrequencies()
+		var err error
+
+		for i := startChunk; i < endChunk; i++ {
+			if block[i], err = this.decodeByte_(); err != nil {
+				return i, err
+			}
 		}
+
+		startChunk = endChunk
+
+		if startChunk+sizeChunk >= end {
+			sizeChunk = end - startChunk
+		}
+
+		endChunk = startChunk + sizeChunk
 	}
 
 	return len(block), nil

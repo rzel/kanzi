@@ -30,8 +30,10 @@ public final class RangeEncoder extends AbstractEncoder
     private static final long BOTTOM    = (1L << 40) - 1;
     private static final long MAX_RANGE = BOTTOM + 1;
     private static final long MASK      = 0x00FFFFFFFFFFFFFFL;
-
+    
+    private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
     private static final int NB_SYMBOLS = 257; //256 + EOF
+    private static final int BASE_LEN = NB_SYMBOLS>>4;
 
     private long low;
     private long range;
@@ -40,31 +42,86 @@ public final class RangeEncoder extends AbstractEncoder
     private final int[] deltaFreq;
     private final OutputBitStream bitstream;
     private boolean written;
+    private final int chunkSize;
 
 
     public RangeEncoder(OutputBitStream bitstream)
     {
+       this(bitstream, DEFAULT_CHUNK_SIZE);
+    }
+    
+    
+    // The chunk size indicates how many bytes are encoded (per block) before 
+    // resetting the frequency stats. 0 means that frequencies calculated at the
+    // beginning of the block apply to the whole block.
+    // The default chunk size is 65536 bytes.
+    public RangeEncoder(OutputBitStream bitstream, int chunkSize)
+    {
         if (bitstream == null)
             throw new NullPointerException("Invalid null bitstream parameter");
 
+        if ((chunkSize != 0) && (chunkSize < 1024))
+           throw new IllegalArgumentException("The chunk size must be a least 1024");
+
+        if (chunkSize > 1<<30)
+           throw new IllegalArgumentException("The chunk size must be a least most 2^30");
+
         this.range = (TOP << 8) - 1;
         this.bitstream = bitstream;
+        this.chunkSize = chunkSize;
 
         // Since the frequency update after each byte encoded is the bottleneck,
         // split the frequency table into an array of absolute frequencies (with
         // indexes multiple of 16) and delta frequencies (relative to the previous
         // absolute frequency) with indexes in the [0..15] range
         this.deltaFreq = new int[NB_SYMBOLS+1];
-        this.baseFreq = new int[(NB_SYMBOLS>>4)+1];
-
-        for (int i=0; i<this.deltaFreq.length; i++)
-            this.deltaFreq[i] = i & 15; // DELTA
-
-        for (int i=0; i<this.baseFreq.length; i++)
-            this.baseFreq[i] = i << 4; // BASE
+        this.baseFreq = new int[BASE_LEN+1];
+        this.resetFrequencies();
     }
 
+    
+    public final void resetFrequencies()
+    {
+       for (int i=0; i<=NB_SYMBOLS; i++)
+          this.deltaFreq[i] = i & 15; // DELTA
 
+       for (int i=0; i<=BASE_LEN; i++)
+          this.baseFreq[i] = i << 4; // BASE  
+    }
+
+    
+    // Reset frequency stats for each chunk of data in the block
+    @Override
+    public int encode(byte[] array, int blkptr, int len)
+    {
+       if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
+          return -1;
+        
+       final int end = blkptr + len;
+       final int sz = (this.chunkSize == 0) ? len : this.chunkSize;
+       int startChunk = blkptr;
+       int sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
+       int endChunk = startChunk + sizeChunk;
+
+       while (startChunk < end)
+       {         
+          this.resetFrequencies(); 
+          
+          for (int i=startChunk; i<endChunk; i++)
+          {
+             if (this.encodeByte(array[i]) == false)
+                return i - blkptr;
+          }
+         
+          startChunk = endChunk;
+          sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
+          endChunk = startChunk + sizeChunk;
+       }
+       
+       return len;
+    }
+    
+    
     // This method is on the speed critical path (called for each byte)
     // The speed optimization is focused on reducing the frequency table update
     @Override
@@ -73,13 +130,13 @@ public final class RangeEncoder extends AbstractEncoder
         final int value = b & 0xFF;
         final int symbolLow = this.baseFreq[value>>4] + this.deltaFreq[value];
         final int symbolHigh = this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1];
-        this.range /= (this.baseFreq[NB_SYMBOLS>>4] + this.deltaFreq[NB_SYMBOLS]);
+        this.range /= (this.baseFreq[BASE_LEN] + this.deltaFreq[NB_SYMBOLS]);
 
         // Encode symbol
         this.low += (symbolLow * this.range);
         this.range *= (symbolHigh - symbolLow);
 
-       // If the left-most digits are the same throughout the range, write bits to bitstream
+        // If the left-most digits are the same throughout the range, write bits to bitstream
         while (true)
         {                       
             if (((this.low ^ (this.low + this.range)) & MASK) >= TOP)
@@ -95,7 +152,6 @@ public final class RangeEncoder extends AbstractEncoder
             this.low <<= 8;
         }
 
-        // Update frequencies: computational bottleneck !!!
         this.updateFrequencies(value+1);
         this.written = true;
         return true;
@@ -104,15 +160,15 @@ public final class RangeEncoder extends AbstractEncoder
 
     private void updateFrequencies(int value)
     {
-        final int start = (value + 15) >> 4;
+       final int start = (value + 15) >> 4;
 
-        // Update absolute frequencies
-        for (int j=this.baseFreq.length-1; j>=start; j--)
-            this.baseFreq[j]++;
+       // Update absolute frequencies
+       for (int j=start; j<=BASE_LEN; j++)
+          this.baseFreq[j]++;
 
-        // Update relative frequencies (in the 'right' segment only)
-        for (int j=(start<<4)-1; j>=value; j--)
-            this.deltaFreq[j]++;
+       // Update relative frequencies (in the 'right' segment only)
+       for (int j=value; j<(start<<4); j++)
+          this.deltaFreq[j]++;
     }
 
 
