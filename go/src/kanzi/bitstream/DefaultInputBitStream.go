@@ -16,8 +16,8 @@ limitations under the License.
 package bitstream
 
 import (
-	"kanzi"
 	"errors"
+	"kanzi"
 )
 
 type DefaultInputBitStream struct {
@@ -39,16 +39,12 @@ func NewDefaultInputBitStream(stream kanzi.InputStream, bufferSize uint) (*Defau
 		return nil, errors.New("Invalid buffer size parameter (must be at least 1024 bytes)")
 	}
 
-	if bufferSize > 16*1024*1024 {
-		return nil, errors.New("Invalid buffer size parameter (must be at most 16 MB)")
-	}
-
 	this := new(DefaultInputBitStream)
 	this.buffer = make([]byte, bufferSize)
 	this.is = stream
 	this.bitIndex = 7
-	this.position = -1
-	this.maxPosition = -1
+	this.position = 0
+	this.maxPosition = 0
 	return this, nil
 }
 
@@ -58,14 +54,10 @@ func (this *DefaultInputBitStream) ReadBit() (int, error) {
 	if this.bitIndex == 7 {
 		this.position++
 
-		for this.position > this.maxPosition {
-			_, err = ReadFromInputStream(this, len(this.buffer))
-
-			if err != nil {
+		if this.position > this.maxPosition {
+			if _, err = ReadFromInputStream(this, len(this.buffer)); err != nil {
 				return 0, err
 			}
-
-			this.position++
 		}
 	}
 
@@ -81,62 +73,58 @@ func (this *DefaultInputBitStream) ReadBits(length uint) (uint64, error) {
 	}
 
 	remaining := length
-	err := error(nil)
 	res := uint64(0)
 
 	// Extract bits from the current location in buffer
 	if this.bitIndex != 7 {
-		idx := uint(this.bitIndex)
-		sz := remaining
+		idx := this.bitIndex + 1
+		var sz uint
 
-		if remaining > idx+1 {
-			sz = idx + 1
+		if remaining > idx {
+			sz = idx
+		} else {
+			sz = remaining
 		}
 
 		remaining -= sz
-		bits := uint64(this.buffer[this.position]>>(idx+1-sz)) & ((1 << sz) - 1)
+		idx -= sz
+		bits := uint64(this.buffer[this.position]>>idx) & ((1 << sz) - 1)
 		res |= (bits << remaining)
-		idx = (idx + 8 - sz) & 7
 		this.read += uint64(sz)
-		this.bitIndex = idx
+		this.bitIndex = (idx + 7) & 7
 	}
 
-	// Need to read more bits ?
-	if this.bitIndex == 7 {
+	for remaining >= 8 {
+		// Fast track, progress byte by byte
+		this.position++
 
-		// We are byte aligned, fast track
-		for remaining >= 8 {
-			this.position++
-
-			for this.position > this.maxPosition {
-				ReadFromInputStream(this, len(this.buffer))
-				this.position++
+		if this.position > this.maxPosition {
+			if _, err := ReadFromInputStream(this, len(this.buffer)); err != nil {
+				return res, err
 			}
-
-			value := uint64(this.buffer[this.position] & 0xFF)
-			remaining -= 8
-			this.read += 8
-			res |= (value << remaining)
 		}
 
-		// Extract last bits from the current location in buffer
-		if remaining > 0 {
-			this.position++
-
-			for this.position > this.maxPosition {
-				ReadFromInputStream(this, len(this.buffer))
-				this.position++
-			}
-
-			value := uint64(this.buffer[this.position] & 0xFF)
-			bits := (value >> (8 - remaining)) & ((1 << remaining) - 1)
-			res |= bits
-			this.read += uint64(remaining)
-			this.bitIndex -= remaining
-		}
+		remaining -= 8
+		this.read += 8
+		res |= (uint64(this.buffer[this.position]) << remaining)
 	}
 
-	return res, err
+	// Extract last bits from the current location in buffer
+	if remaining > 0 {
+		this.position++
+
+		if this.position > this.maxPosition {
+			if _, err := ReadFromInputStream(this, len(this.buffer)); err != nil {
+				return res, err
+			}
+		}
+
+		this.read += uint64(remaining)
+		this.bitIndex -= remaining
+		res |= (uint64(this.buffer[this.position]) >> (8 - remaining))
+	}
+
+	return res, nil
 }
 
 func ReadFromInputStream(this *DefaultInputBitStream, length int) (int, error) {
@@ -147,7 +135,7 @@ func ReadFromInputStream(this *DefaultInputBitStream, length int) (int, error) {
 	size, err := this.is.Read(this.buffer[0:length])
 
 	if err == nil && size >= 0 {
-		this.position = -1
+		this.position = 0
 		this.maxPosition = size - 1
 	}
 
@@ -176,8 +164,8 @@ func (this *DefaultInputBitStream) Close() (bool, error) {
 	// on readBit() or readBits()
 	this.closed = true
 	this.bitIndex = 7
-	this.position = -1
-	this.maxPosition = -1
+	this.position = 0
+	this.maxPosition = 0
 
 	err := this.is.Close()
 	return true, err

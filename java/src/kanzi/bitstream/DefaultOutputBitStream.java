@@ -33,18 +33,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
    public DefaultOutputBitStream(OutputStream os, int bufferSize)
    {
-      if (os == null)
-         throw new NullPointerException("Invalid null output stream parameter");
-   
-      if (bufferSize < 1024)
-         throw new IllegalArgumentException("Invalid buffer size parameter (must be at least 1024 bytes)");
-
-      if (bufferSize > 16*1024*1024)
-         throw new IllegalArgumentException("Invalid buffer size parameter (must be at most 16 MB)");
-
-      this.os = os;
-      this.buffer = new byte[bufferSize];
-      this.bitIndex = 7;
+      this(os, new byte[bufferSize]);
    }
 
    
@@ -58,7 +47,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
       if (buffer.length < 64)
          throw new IllegalArgumentException("Invalid buffer size (must be at least 64)");
-
+      
       this.os = os;
       this.buffer = buffer;
       this.bitIndex = 7;
@@ -95,11 +84,11 @@ public final class DefaultOutputBitStream implements OutputBitStream
    @Override
    public synchronized int writeBits(long value, int length)
    {
-      if (length > 64)
-        throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
-
       if (length == 0)
           return 0;
+
+      if (length > 64)
+        throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
 
       try
       {
@@ -108,43 +97,39 @@ public final class DefaultOutputBitStream implements OutputBitStream
          // Pad the current position in buffer
          if (this.bitIndex != 7)
          {
-            int idx = this.bitIndex;
-            final int len = (remaining <= idx + 1) ? remaining : idx + 1;
-            remaining -= len;
-            final int bits = (int) ((value >> remaining) & ((1 << len) - 1));
-            this.buffer[this.position] |= (bits << (idx + 1 - len));
-            idx = (idx + 8 - len) & 7;
-            this.written += len;
-            this.bitIndex = idx;
+            int idx = this.bitIndex + 1;            
+            final int sz = (remaining <= idx) ? remaining : idx;
+            remaining -= sz;
+            idx -= sz;
+            final long bits = (value >>> remaining) & ((1 << sz) - 1);
+            this.buffer[this.position] |= (bits << idx);
+            this.written += sz;
+            this.bitIndex = (idx + 7) & 7;
 
-            if (idx == 7)
+            if (this.bitIndex == 7)
             {
                if (++this.position >= this.buffer.length)
                   this.flush();
             }
          }
 
-         if (this.bitIndex == 7)
+         while (remaining >= 8)
          {
-            // Progress byte by byte
-            while (remaining >= 8)
-            {
-               remaining -= 8;
-               this.buffer[this.position] = (byte) ((value >> remaining) & 0xFF);
-               this.written += 8;
+            // Fast track, progress byte by byte
+            remaining -= 8;
+            this.written += 8;
+            this.buffer[this.position] = (byte) (value >>> remaining);
 
-               if (++this.position >= this.buffer.length)
-                  this.flush();
-            }
+            if (++this.position >= this.buffer.length)
+               this.flush();
+         }
 
-            // Process remaining bits
-            if (remaining > 0)
-            {
-               final int bits = (int) (value & ((1 << remaining) - 1));
-               this.buffer[this.position] |= (bits << (8 - remaining));
-               this.written += remaining;
-               this.bitIndex -= remaining;
-            }
+         // Process remaining bits
+         if (remaining > 0)
+         {
+            this.bitIndex -= remaining;
+            this.written += remaining;
+            this.buffer[this.position] = (byte) (value << (8 - remaining));
          }
 
          return length;

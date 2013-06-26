@@ -24,7 +24,7 @@ type DefaultOutputBitStream struct {
 	closed   bool
 	written  uint64
 	position int
-	bitIndex int
+	bitIndex uint
 	os       kanzi.OutputStream
 	buffer   []byte
 }
@@ -36,10 +36,6 @@ func NewDefaultOutputBitStream(stream kanzi.OutputStream, bufferSize uint) (*Def
 
 	if bufferSize < 1024 {
 		return nil, errors.New("Invalid buffer size parameter (must be at least 1024 bytes)")
-	}
-
-	if bufferSize > 16*1024*1024 {
-		return nil, errors.New("Invalid buffer size parameter (must be at most 16 MB)")
 	}
 
 	this := new(DefaultOutputBitStream)
@@ -67,73 +63,67 @@ func (this *DefaultOutputBitStream) WriteBit(bit int) error {
 }
 
 func (this *DefaultOutputBitStream) WriteBits(value uint64, length uint) (uint, error) {
-	if length > 64 {
-		return 0, errors.New("Length must be less than 64")
-	}
-
 	if length == 0 {
 		return 0, nil
 	}
 
+	if length > 64 {
+		return 0, errors.New("Length must be less than 64")
+	}
+
 	remaining := length
-	err := error(nil)
 
 	// Pad the current position in buffer
 	if this.bitIndex != 7 {
-		idx := uint(this.bitIndex)
-		sz := uint(remaining)
+		idx := this.bitIndex + 1
+		var sz uint
 
-		if remaining > idx+1 {
-			sz = idx + 1
+		if remaining > idx {
+			sz = idx
+		} else {
+			sz = remaining
 		}
 
 		remaining -= sz
+		idx -= sz
 		bits := ((value >> remaining) & ((1 << sz) - 1))
-		this.buffer[this.position] |= byte(bits << (idx + 1 - sz))
-		idx = (idx + 8 - sz) & 7
+		this.buffer[this.position] |= byte(bits << idx)
 		this.written += uint64(sz)
-		this.bitIndex = int(idx)
+		this.bitIndex = (idx + 7) & 7
 
-		if idx == 7 {
+		if this.bitIndex == 7 {
 			this.position++
 
 			if this.position >= len(this.buffer) {
-				err = this.Flush()
-
-				if err != nil {
+				if err := this.Flush(); err != nil {
 					return length - remaining, err
 				}
 			}
 		}
 	}
 
-	if this.bitIndex == 7 {
-		// Progress byte by byte
-		for remaining >= 8 {
-			remaining -= 8
-			this.buffer[this.position] = byte((value >> remaining) & 0xFF)
-			this.written += 8
-			this.position++
+	for remaining >= 8 {
+		// Fast track, progress byte by byte
+		remaining -= 8
+		this.written += 8
+		this.buffer[this.position] = byte(value >> remaining)
+		this.position++
 
-			if this.position >= len(this.buffer) {
-				err = this.Flush()
-
-				if err != nil {
-					return length - remaining, err
-				}
+		if this.position >= len(this.buffer) {
+			if err := this.Flush(); err != nil {
+				return length - remaining, err
 			}
-		}
-
-		// Process remaining bits
-		if remaining > 0 {
-			bits := int(value & ((1 << remaining) - 1))
-			this.buffer[this.position] |= byte(bits << (8 - remaining))
-			this.written += uint64(remaining)
-			this.bitIndex -= int(remaining)
 		}
 	}
 
-	return length, err
+	// Process remaining bits
+	if remaining > 0 {
+		this.bitIndex -= remaining
+		this.written += uint64(remaining)
+		this.buffer[this.position] |= byte(value << (8 - remaining))
+	}
+
+	return length, nil
 }
 
 func (this *DefaultOutputBitStream) Flush() error {
@@ -142,9 +132,7 @@ func (this *DefaultOutputBitStream) Flush() error {
 	}
 
 	if this.position > 0 {
-		_, err := this.os.Write(this.buffer[0:this.position])
-
-		if err != nil {
+		if _, err := this.os.Write(this.buffer[0:this.position]); err != nil {
 			return err
 		}
 
@@ -180,9 +168,7 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 		this.position++
 
 		if this.position >= len(this.buffer) {
-			err := this.Flush()
-
-			if err != nil {
+			if err := this.Flush(); err != nil {
 				return false, err
 			}
 
