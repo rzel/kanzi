@@ -304,6 +304,7 @@ public class PAQPredictor implements Predictor
    }
 
 
+   // Return the split value representing the probability of 1 in the [0..4095] range. 
    @Override
    public int get()
    {

@@ -28,6 +28,7 @@ public class BinaryEntropyDecoder extends AbstractDecoder
    private long high;
    private long current;
    private final InputBitStream bitstream;
+   private boolean initialized;
 
    
    public BinaryEntropyDecoder(InputBitStream bitstream, Predictor predictor)
@@ -40,7 +41,7 @@ public class BinaryEntropyDecoder extends AbstractDecoder
 
       // Defer stream reading. We are creating the object, we should not do any I/O
       this.low = 0L;
-      this.high = 0xFFFFFFFFL;
+      this.high = 0xFFFFFFFFFFFFFFL;
       this.bitstream = bitstream;
       this.predictor = predictor;
       this.current = -1;
@@ -66,7 +67,7 @@ public class BinaryEntropyDecoder extends AbstractDecoder
      }
      catch (BitStreamException e)
      {
-        // Fallback
+        // Fall through
      }
 
      return i - blkptr;
@@ -96,16 +97,21 @@ public class BinaryEntropyDecoder extends AbstractDecoder
    }
 
    
+   // Not thread safe
    public boolean isInitialized()
    {
-      return (this.current != -1);
+      return this.initialized;
    }
 
    
+   // Not thread safe
    public void initialize()
    {
-      if (this.current == -1)
-         this.current = this.bitstream.readBits(32);
+      if (this.initialized == true)
+         return;
+      
+      this.current = this.bitstream.readBits(56);
+      this.initialized = true;
    }
    
 
@@ -132,8 +138,8 @@ public class BinaryEntropyDecoder extends AbstractDecoder
        // Update predictor
       this.predictor.update(bit);
 
-      // Read from bitstream
-      while (((this.low ^ this.high) & 0xFF000000L) == 0)
+      // Read 32 bits from bitstream
+      while (((this.low ^ this.high) & 0xFFFFFFFF000000L) == 0)
          this.read();
      
       return bit;
@@ -142,9 +148,9 @@ public class BinaryEntropyDecoder extends AbstractDecoder
    
    protected void read()
    {
-      this.low = (this.low << 8) & 0xFFFFFFFFL;
-      this.high = ((this.high << 8) | 255) & 0xFFFFFFFFL;      
-      this.current = ((this.current << 8) | this.bitstream.readBits(8)) & 0xFFFFFFFFL;
+      this.low = (this.low << 32) & 0xFFFFFFFFFFFFFFL;
+      this.high = ((this.high << 32) | 0xFFFFFFFFL) & 0xFFFFFFFFFFFFFFL;      
+      this.current = ((this.current << 32) | this.bitstream.readBits(32)) & 0xFFFFFFFFFFFFFFL;
    }
    
    

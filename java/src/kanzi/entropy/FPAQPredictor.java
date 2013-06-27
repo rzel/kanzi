@@ -17,14 +17,13 @@ package kanzi.entropy;
 
 
 // Port of fpaq1 - Simple (and fast) adaptive order 0 entropy coder predictor
-// ! Requires the coder to extend input bytes to 9-bit symbols !
 public class FPAQPredictor implements Predictor
 {
    private static final int THRESHOLD = 200;
    private static final int SHIFT = 1;
    
    private final short[][] states; // 512 frequency contexts for each bit
-   private int ctxIdx; // previous 9 bits
+   private int ctxIdx; // previous bits
      
    public FPAQPredictor()
    {
@@ -32,7 +31,7 @@ public class FPAQPredictor implements Predictor
       this.states = new short[512][];
       
       for (int i=this.states.length-1; i>=0; i--)
-        this.states[i] = new short[2];      
+         this.states[i] = new short[2];      
    }
    
    
@@ -51,7 +50,7 @@ public class FPAQPredictor implements Predictor
    }
 
    
-   // Assume stream of 9-bit symbols   
+   // Return the split value representing the probability of 1 in the [0..4095] range. 
    @Override
    public int get()
    {

@@ -24,9 +24,8 @@ type Predictor interface {
 	// Used to update the probability model
 	Update(bit byte)
 
-	// Return the split value representing the  probability for each symbol
-	// in the [0..4095] range.
-	// E.G. 410 represents roughly a probability of 10% for 0
+	// Return the split value representing the probability of 1 in the [0..4095] range.
+	// E.G. 410 represents roughly a probability of 10% for 1
 	Get() uint
 }
 
@@ -49,7 +48,7 @@ func NewBinaryEntropyEncoder(bs kanzi.OutputBitStream, predictor Predictor) (*Bi
 	this := new(BinaryEntropyEncoder)
 	this.predictor = predictor
 	this.low = 0
-	this.high = uint64(0xFFFFFFFF)
+	this.high = 0xFFFFFFFFFFFFFF
 	this.bitstream = bs
 	return this, nil
 }
@@ -72,7 +71,7 @@ func (this *BinaryEntropyEncoder) EncodeBit(bit byte) error {
 	xmid := this.low + ((this.high-this.low)>>12)*uint64(prediction)
 
 	// Update fields with new interval bounds
-	if (bit & 1) == 1 {
+	if bit&1 == 1 {
 		this.high = xmid
 	} else {
 		this.low = xmid + 1
@@ -81,8 +80,8 @@ func (this *BinaryEntropyEncoder) EncodeBit(bit byte) error {
 	// Update predictor
 	this.predictor.Update(bit)
 
-	// Write unchanged first 8 bits to bitstream
-	for ((this.low ^ this.high) & uint64(0xFF000000)) == 0 {
+	// Write unchanged first 32 bits to bitstream
+	for (this.low^this.high)&0xFFFFFFFF000000 == 0 {
 		this.Flush()
 	}
 
@@ -94,9 +93,9 @@ func (this *BinaryEntropyEncoder) Encode(block []byte) (int, error) {
 }
 
 func (this *BinaryEntropyEncoder) Flush() {
-	this.bitstream.WriteBits(this.high>>24, 8)
-	this.low <<= 8
-	this.high = (this.high << 8) | uint64(255)
+	this.bitstream.WriteBits(this.high>>24, 32)
+	this.low <<= 32
+	this.high = (this.high << 32) | 0xFFFFFFFF
 }
 
 func (this *BinaryEntropyEncoder) BitStream() kanzi.OutputBitStream {
@@ -104,7 +103,7 @@ func (this *BinaryEntropyEncoder) BitStream() kanzi.OutputBitStream {
 }
 
 func (this *BinaryEntropyEncoder) Dispose() {
-	this.bitstream.WriteBits(this.low|uint64(0xFFFFFF), 32)
+	this.bitstream.WriteBits(this.low|0xFFFFFF, 56)
 	this.bitstream.Flush()
 }
 
@@ -130,7 +129,7 @@ func NewBinaryEntropyDecoder(bs kanzi.InputBitStream, predictor Predictor) (*Bin
 	this := new(BinaryEntropyDecoder)
 	this.predictor = predictor
 	this.low = 0
-	this.high = uint64(0xFFFFFFFF)
+	this.high = 0xFFFFFFFFFFFFFF
 	this.current = 0
 	this.initialized = false
 	this.bitstream = bs
@@ -157,7 +156,7 @@ func (this *BinaryEntropyDecoder) decodeByte_() (byte, error) {
 			return 0, err
 		}
 
-		res |= bit << uint(i)
+		res |= (bit << uint(i))
 	}
 
 	return byte(res), nil
@@ -168,17 +167,18 @@ func (this *BinaryEntropyDecoder) Initialized() bool {
 }
 
 func (this *BinaryEntropyDecoder) Initialize() error {
-	if this.initialized == false {
-		read, err := this.bitstream.ReadBits(32)
-
-		if err != nil {
-			return err
-		}
-
-		this.current = uint64(read)
-		this.initialized = true
+	if this.initialized == true {
+		return nil
 	}
 
+	read, err := this.bitstream.ReadBits(56)
+
+	if err != nil {
+		return err
+	}
+
+	this.current = read
+	this.initialized = true
 	return nil
 }
 
@@ -201,8 +201,8 @@ func (this *BinaryEntropyDecoder) DecodeBit() (int, error) {
 	// Update predictor
 	this.predictor.Update(byte(bit))
 
-	// Read from bitstream
-	for ((this.low ^ this.high) & uint64(0xFF000000)) == 0 {
+	// Read 32 bits from bitstream
+	for (this.low^this.high)&0xFFFFFFFF000000 == 0 {
 		if err := this.Read(); err != nil {
 			return 0, err
 		}
@@ -212,12 +212,12 @@ func (this *BinaryEntropyDecoder) DecodeBit() (int, error) {
 }
 
 func (this *BinaryEntropyDecoder) Read() error {
-	this.low = uint64(this.low << 8)
-	this.high = uint64((this.high << 8) | 255)
-	read, err := this.bitstream.ReadBits(8)
+	this.low = this.low << 32
+	this.high = (this.high << 32) | 0xFFFFFFFF
+	read, err := this.bitstream.ReadBits(32)
 
 	if err == nil {
-		this.current = uint64((this.current << 8) | read)
+		this.current = (this.current << 32) | read
 	}
 
 	return err

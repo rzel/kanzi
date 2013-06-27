@@ -37,7 +37,7 @@ public class BinaryEntropyEncoder extends AbstractEncoder
          throw new NullPointerException("Invalid null predictor parameter");
 
       this.low = 0L;
-      this.high = 0xFFFFFFFFL;
+      this.high = 0xFFFFFFFFFFFFFFL;
       this.bitstream = bitstream;
       this.predictor = predictor;
    }
@@ -72,8 +72,8 @@ public class BinaryEntropyEncoder extends AbstractEncoder
       // Update predictor
       this.predictor.update(bit);
 
-      // Write unchanged first 8 bits to bitstream
-      while (((this.low ^ this.high) & 0xFF000000L) == 0)
+      // Write unchanged first 32 bits to bitstream
+      while (((this.low ^ this.high) & 0xFFFFFFFF000000L) == 0)
          flush();
 
       return true;
@@ -82,9 +82,9 @@ public class BinaryEntropyEncoder extends AbstractEncoder
    
    protected void flush()
    {
-      this.bitstream.writeBits(this.high >> 24, 8);
-      this.low <<= 8;
-      this.high = (this.high << 8) | 255;
+      this.bitstream.writeBits(this.high >>> 24, 32);
+      this.low <<= 32;
+      this.high = (this.high << 32) | 0xFFFFFFFFL;
    }
 
    
@@ -98,7 +98,7 @@ public class BinaryEntropyEncoder extends AbstractEncoder
    @Override
    public void dispose()
    {
-      this.bitstream.writeBits(this.low | 0xFFFFFF, 32);
+      this.bitstream.writeBits(this.low | 0xFFFFFFL, 56);
       this.bitstream.flush();
    }
 }

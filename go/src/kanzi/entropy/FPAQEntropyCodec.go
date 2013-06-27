@@ -26,7 +26,7 @@ const (
 
 // Based on fpaq1 by Matt Mahoney - Stationary order 0 binary entropy encoder/decoder
 type FPAQPredictor struct {
-	ctxIdx int          // previous 9 bits
+	ctxIdx int          // previous bits
 	states [512][]int16 // 512 frequency contexts for each bit
 }
 
@@ -59,10 +59,7 @@ func (this *FPAQPredictor) Update(bit byte) {
 	}
 }
 
-// Return the split value representing the probability for each symbol
-// in the [0..4095] range.
-// E.G. 410 represents roughly a probability of 10% for 0
-// Assume stream of 9-bit symbols
+// Return the split value representing the probability of 1 in the [0..4095] range.
 func (this *FPAQPredictor) Get() uint {
 	st := this.states[this.ctxIdx]
 	num := uint(st[1]+1) << 12
@@ -147,7 +144,7 @@ func (this *FPAQEntropyDecoder) DecodeByte() (byte, error) {
 }
 
 func (this *FPAQEntropyDecoder) decodeByte_() (byte, error) {
-    return this.super.decodeByte_()
+	return this.super.decodeByte_()
 }
 
 func (this *FPAQEntropyDecoder) DecodeBit() (int, error) {

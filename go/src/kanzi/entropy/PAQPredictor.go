@@ -220,7 +220,7 @@ func initStretch() []int {
 var STRETCH = initStretch()
 
 type PAQPredictor struct {
-	pr     int       // next predicted value (0-4095)
+	pr     uint      // next predicted value (0-4095)
 	c0     uint      // bitwise context: last 0-7 bits with a leading 1 (1-255)
 	c4     uint      // last 4 whole bytes, last is in low 8 bits
 	bpos   uint      // number of bits in c0 (0-7)
@@ -251,7 +251,7 @@ func NewPAQPredictor() (*PAQPredictor, error) {
 		this.apm4, err = newAdaptiveProbMap(256)
 	}
 
-	// Disable APM5 for now. Seems like a good trade off speed/compression ratio     
+	// Disable APM5 for now. Seems like a good trade off speed/compression ratio
 	//this.apm5 = newAdaptiveProbMap(2048)
 
 	if err == nil {
@@ -304,15 +304,16 @@ func (this *PAQPredictor) Update(bit byte) {
 	pred = this.apm3.get(y, pred, this.runCtx, 8)
 	//     ctx := int(this.c0 ^ (((this.c4*uint64(123456791)) & uint64(0xFFFFFFFF)) >> 21)))
 	//     pred = (this.apm5.get(y, pred, ctx, 7) + pred + 1) >> 1
-	this.pr = (this.apm4.get(y, pred, this.c0, 7) + pred + 1) >> 1
+	this.pr = uint(this.apm4.get(y, pred, this.c0, 7) + pred + 1) >> 1
 }
 
+// Return the split value representing the probability of 1 in the [0..4095] range.
 func (this *PAQPredictor) Get() uint {
 	if this.pr >= 2048 {
-		return uint(this.pr)
+		return this.pr
 	}
 
-	return uint(this.pr + 1)
+	return this.pr + 1
 }
 
 // return p = 1/(1 + exp(-d)), d scaled by 8 bits, p scaled by 12 bits
@@ -341,7 +342,7 @@ func squash(d int) int {
 // Counter state -> probability * 256
 //////////////////////////////////////////////////////////////////
 type StateMap struct {
-	ctx  uint
+	ctx  int
 	data []int
 }
 
@@ -369,7 +370,7 @@ func newStateMap() (*StateMap, error) {
 
 func (this *StateMap) get(y int, cx int) int {
 	this.data[this.ctx] += (((y << 16) - this.data[this.ctx] + 128) >> 8)
-	this.ctx = uint(cx)
+	this.ctx = cx
 	return this.data[this.ctx] >> 4
 }
 
