@@ -76,7 +76,7 @@ func TestCorrectness(filename string) {
 		dbgbs.ShowByte(true)
 		dbgbs.Mark(true)
 		predictor1, _ := entropy.NewFPAQPredictor()
-		fpc, _ := entropy.NewFPAQEntropyEncoder(dbgbs, predictor1)
+		fpc, _ := entropy.NewBinaryEntropyEncoder(dbgbs, predictor1)
 		_, err = fpc.Encode(values)
 
 		if err != nil {
@@ -102,7 +102,7 @@ func TestCorrectness(filename string) {
 		//dbgbs2.Mark(true)
 
 		predictor2, _ := entropy.NewFPAQPredictor()
-		fpd, _ := entropy.NewFPAQEntropyDecoder(dbgbs2, predictor2)
+		fpd, _ := entropy.NewBinaryEntropyDecoder(dbgbs2, predictor2)
 
 		ok := true
 		values2 := make([]byte, len(values))
@@ -166,10 +166,10 @@ func TestSpeed(filename string) {
 		values2 := make([]byte, size)
 		predictor1, _ := entropy.NewFPAQPredictor()
 		obs, _ := bitstream.NewDefaultOutputBitStream(oFile, 16384)
-		rc, _ := entropy.NewFPAQEntropyEncoder(obs, predictor1)
+		rc, _ := entropy.NewBinaryEntropyEncoder(obs, predictor1)
 		predictor2, _ := entropy.NewFPAQPredictor()
 		ibs, _ := bitstream.NewDefaultInputBitStream(iFile, 16384)
-		rd, _ := entropy.NewFPAQEntropyDecoder(ibs, predictor2)
+		rd, _ := entropy.NewBinaryEntropyDecoder(ibs, predictor2)
 
 		for ii := 0; ii < iter; ii++ {
 			idx := jj

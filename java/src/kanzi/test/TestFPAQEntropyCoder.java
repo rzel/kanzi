@@ -25,10 +25,7 @@ import kanzi.OutputBitStream;
 import kanzi.bitstream.DebugOutputBitStream;
 import kanzi.bitstream.DefaultInputBitStream;
 import kanzi.bitstream.DefaultOutputBitStream;
-import kanzi.entropy.FPAQEntropyDecoder;
-import kanzi.entropy.FPAQEntropyEncoder;
 import kanzi.entropy.FPAQPredictor;
-import kanzi.entropy.PAQPredictor;
 
 
 public class TestFPAQEntropyCoder
@@ -71,14 +68,14 @@ public class TestFPAQEntropyCoder
                 OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out);
                 dbgbs.showByte(true);
-                FPAQEntropyEncoder fpec = new FPAQEntropyEncoder(dbgbs, new FPAQPredictor());
+                BinaryEntropyEncoder fpec = new BinaryEntropyEncoder(dbgbs, new FPAQPredictor());
                 fpec.encode(values, 0, values.length);
                 
                 //dbgbs.flush();
                 fpec.dispose();
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1024);
-                FPAQEntropyDecoder fped = new FPAQEntropyDecoder(bs2, new FPAQPredictor());
+                BinaryEntropyDecoder fped = new BinaryEntropyDecoder(bs2, new FPAQPredictor());
                 System.out.println("\nDecoded:");
                 boolean ok = true;
                 byte[] values2 = new byte[values.length];
@@ -146,7 +143,7 @@ public class TestFPAQEntropyCoder
                 // Encode
                 ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
                 OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
-                BinaryEntropyEncoder bec = new BinaryEntropyEncoder(bs, new PAQPredictor());
+                BinaryEntropyEncoder bec = new BinaryEntropyEncoder(bs, new FPAQPredictor());
                 long before1 = System.nanoTime();
                 
                 if (bec.encode(values1, 0, values1.length) < 0)
@@ -163,7 +160,7 @@ public class TestFPAQEntropyCoder
                 // Decode
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
-                BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new PAQPredictor());
+                BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new FPAQPredictor());
                 long before2 = System.nanoTime();
                 
                 if (bed.decode(values2, 0, values2.length) < 0)

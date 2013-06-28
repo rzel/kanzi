@@ -15,20 +15,21 @@ limitations under the License.
 package kanzi.entropy;
 
 
-
-// Port of fpaq1 - Simple (and fast) adaptive order 0 entropy coder predictor
+// Based on fpaq1 by Matt Mahoney
+// Simple (and fast) adaptive order 0 entropy coder predictor
 public class FPAQPredictor implements Predictor
 {
    private static final int THRESHOLD = 200;
    private static final int SHIFT = 1;
    
-   private final short[][] states; // 512 frequency contexts for each bit
+   private final short[][] states; // 256 frequency contexts for each bit
    private int ctxIdx; // previous bits
      
+   
    public FPAQPredictor()
    {
       this.ctxIdx = 1;
-      this.states = new short[512][];
+      this.states = new short[256][];
       
       for (int i=this.states.length-1; i>=0; i--)
          this.states[i] = new short[2];      
@@ -38,6 +39,7 @@ public class FPAQPredictor implements Predictor
    @Override
    public void update(int bit)
    {
+      // Find the number of registered 0 & 1 given the previous bits (in this.ctxIdx)
       final short[] st = this.states[this.ctxIdx];
     
       if (++st[bit] >= THRESHOLD) 
@@ -46,7 +48,8 @@ public class FPAQPredictor implements Predictor
          st[1] >>= SHIFT;
       }
       
-      this.ctxIdx = (this.ctxIdx < 256) ? (this.ctxIdx << 1) | bit : 1;
+      // Update context by registering the current bit (or wrapping after 8 bits)
+      this.ctxIdx = (this.ctxIdx < 128) ? (this.ctxIdx << 1) | bit : 1;
    }
 
    

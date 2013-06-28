@@ -35,6 +35,7 @@ func NewEntropyDecoder(ibs kanzi.InputBitStream, entropyType byte) (kanzi.Entrop
 	}
 
 	switch entropyType {
+	
 	case HUFFMAN_TYPE:
 		return NewHuffmanDecoder(ibs)
 
@@ -47,11 +48,12 @@ func NewEntropyDecoder(ibs kanzi.InputBitStream, entropyType byte) (kanzi.Entrop
 
 	case FPAQ_TYPE:
 		predictor, _ := NewFPAQPredictor()
-		return NewFPAQEntropyDecoder(ibs, predictor)
+		return NewBinaryEntropyDecoder(ibs, predictor)
 
 	case NONE_TYPE:
 		return NewNullEntropyDecoder(ibs)
 	}
+	
 	errMsg := fmt.Sprintf("Unsupported entropy codec type: '%c'", entropyType)
 	return nil, errors.New(errMsg)
 }
@@ -62,6 +64,7 @@ func NewEntropyEncoder(obs kanzi.OutputBitStream, entropyType byte) (kanzi.Entro
 	}
 
 	switch byte(entropyType) {
+	
 	case HUFFMAN_TYPE:
 		return NewHuffmanEncoder(obs)
 
@@ -74,7 +77,7 @@ func NewEntropyEncoder(obs kanzi.OutputBitStream, entropyType byte) (kanzi.Entro
 
 	case FPAQ_TYPE:
 		predictor, _ := NewFPAQPredictor()
-		return NewFPAQEntropyEncoder(obs, predictor)
+		return NewBinaryEntropyEncoder(obs, predictor)
 
 	case NONE_TYPE:
 		return NewNullEntropyEncoder(obs)
@@ -87,6 +90,7 @@ func NewEntropyEncoder(obs kanzi.OutputBitStream, entropyType byte) (kanzi.Entro
 
 func GetEntropyCodecName(entropyType byte) (string, error) {
 	switch byte(entropyType) {
+	
 	case HUFFMAN_TYPE:
 		return "HUFFMAN", nil
 

@@ -46,7 +46,7 @@ public class EntropyCodecFactory
          case PAQ_TYPE:
             return new BinaryEntropyDecoder(ibs, new PAQPredictor());
          case FPAQ_TYPE:
-            return new FPAQEntropyDecoder(ibs, new FPAQPredictor());
+            return new BinaryEntropyDecoder(ibs, new FPAQPredictor());
          case NONE_TYPE:
             return new NullEntropyDecoder(ibs);
          default:
@@ -69,7 +69,7 @@ public class EntropyCodecFactory
          case PAQ_TYPE:
             return new BinaryEntropyEncoder(obs, new PAQPredictor());
          case FPAQ_TYPE:
-            return new FPAQEntropyEncoder(obs, new FPAQPredictor());
+            return new BinaryEntropyEncoder(obs, new FPAQPredictor());
          case NONE_TYPE:
             return new NullEntropyEncoder(obs);
          default :
