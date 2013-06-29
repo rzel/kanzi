@@ -79,23 +79,27 @@ public class NullFunction implements ByteFunction
       if (source.array == destination.array)
       {
          final int len8 = len & - 8;
+         final byte[] srcArray = source.array;
+         final byte[] dstArray = destination.array;
+         int srcIdx = source.index;
+         int dstIdx = destination.index;
          
          for (int i=0; i<len8; i+=8)   
          {
-            final int srcIdx = i + source.index;
-            final int dstIdx = i + destination.index;
-            destination.array[dstIdx]   = source.array[srcIdx];
-            destination.array[dstIdx+1] = source.array[srcIdx+1];
-            destination.array[dstIdx+2] = source.array[srcIdx+2];
-            destination.array[dstIdx+3] = source.array[srcIdx+3];
-            destination.array[dstIdx+4] = source.array[srcIdx+4];
-            destination.array[dstIdx+5] = source.array[srcIdx+5];
-            destination.array[dstIdx+6] = source.array[srcIdx+6];
-            destination.array[dstIdx+7] = source.array[srcIdx+7];                       
+            dstArray[dstIdx]   = srcArray[srcIdx];
+            dstArray[dstIdx+1] = srcArray[srcIdx+1];
+            dstArray[dstIdx+2] = srcArray[srcIdx+2];
+            dstArray[dstIdx+3] = srcArray[srcIdx+3];
+            dstArray[dstIdx+4] = srcArray[srcIdx+4];
+            dstArray[dstIdx+5] = srcArray[srcIdx+5];
+            dstArray[dstIdx+6] = srcArray[srcIdx+6];
+            dstArray[dstIdx+7] = srcArray[srcIdx+7]; 
+            srcIdx += 8;
+            dstIdx += 8;
          }
          
          for (int i=len8; i<len; i++)
-            destination.array[destination.index+i] = source.array[source.index+i];
+            dstArray[destination.index+i] = srcArray[source.index+i];
       }
       else
       {
