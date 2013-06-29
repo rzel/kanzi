@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	TOP                      = int64(1 << 48)
-	BOTTOM                   = int64((1 << 40) - 1)
+	TOP                      = uint64(1<<56) - 1
+	BOTTOM                   = uint64(1<<40) - 1
 	MAX_RANGE                = BOTTOM + 1
-	MASK                     = int64(0x00FFFFFFFFFFFFFF)
+	MASK                     = uint64(0x00FF000000000000)
 	NB_SYMBOLS               = 257           //256 + EOF
 	DEFAULT_RANGE_CHUNK_SIZE = uint(1 << 16) // 64 KB by default
 	LAST                     = NB_SYMBOLS - 1
@@ -33,11 +33,11 @@ const (
 )
 
 type RangeEncoder struct {
-	low       int64
-	range_    int64
+	low       uint64
+	range_    uint64
 	flushed   bool
-	baseFreq  []int64
-	deltaFreq []int64
+	baseFreq  []int
+	deltaFreq []int
 	bitstream kanzi.OutputBitStream
 	written   bool
 	chunkSize int
@@ -73,7 +73,7 @@ func NewRangeEncoder(bs kanzi.OutputBitStream, chunkSizes ...uint) (*RangeEncode
 	}
 
 	this := new(RangeEncoder)
-	this.range_ = (TOP << 8) - 1
+	this.range_ = TOP
 	this.bitstream = bs
 	this.chunkSize = int(chkSize)
 
@@ -81,19 +81,19 @@ func NewRangeEncoder(bs kanzi.OutputBitStream, chunkSizes ...uint) (*RangeEncode
 	// split the frequency table into an array of absolute frequencies (with
 	// indexes multiple of 16) and delta frequencies (relative to the previous
 	// absolute frequency) with indexes in the [0..15] range
-	this.deltaFreq = make([]int64, NB_SYMBOLS+1)
-	this.baseFreq = make([]int64, BASE_LEN+1)
+	this.deltaFreq = make([]int, NB_SYMBOLS+1)
+	this.baseFreq = make([]int, BASE_LEN+1)
 	this.ResetFrequencies()
 	return this, nil
 }
 
 func (this *RangeEncoder) ResetFrequencies() {
 	for i := 0; i <= NB_SYMBOLS; i++ {
-		this.deltaFreq[i] = int64(i & 15) // DELTA
+		this.deltaFreq[i] = i & 15 // DELTA
 	}
 
 	for i := 0; i <= BASE_LEN; i++ {
-		this.baseFreq[i] = int64(i << 4) // BASE
+		this.baseFreq[i] = i << 4 // BASE
 	}
 
 }
@@ -102,9 +102,9 @@ func (this *RangeEncoder) ResetFrequencies() {
 // The speed optimization is focused on reducing the frequency table update
 func (this *RangeEncoder) EncodeByte(b byte) error {
 	value := int(b)
-	symbolLow := this.baseFreq[value>>4] + this.deltaFreq[value]
-	symbolHigh := this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1]
-	this.range_ /= (this.baseFreq[BASE_LEN] + this.deltaFreq[NB_SYMBOLS])
+	symbolLow := uint64(this.baseFreq[value>>4] + this.deltaFreq[value])
+	symbolHigh := uint64(this.baseFreq[(value+1)>>4] + this.deltaFreq[value+1])
+	this.range_ /= uint64(this.baseFreq[BASE_LEN] + this.deltaFreq[NB_SYMBOLS])
 
 	// Encode symbol
 	this.low += (symbolLow * this.range_)
@@ -112,16 +112,16 @@ func (this *RangeEncoder) EncodeByte(b byte) error {
 
 	// If the left-most digits are the same throughout the range, write bits to bitstream
 	for {
-		if (this.low^(this.low+this.range_))&MASK >= TOP {
+		if (this.low^(this.low+this.range_))&MASK != 0 {
 			if this.range_ >= MAX_RANGE {
 				break
 			} else {
 				// Normalize
-				this.range_ = (-this.low & MASK) & BOTTOM
+				this.range_ = -this.low & BOTTOM
 			}
 		}
 
-		this.bitstream.WriteBits(uint64((this.low>>48)&0xFF), 8)
+		this.bitstream.WriteBits(this.low>>48, 8)
 		this.range_ <<= 8
 		this.low <<= 8
 	}
@@ -195,7 +195,7 @@ func (this *RangeEncoder) Dispose() {
 		this.flushed = true
 
 		for i := 0; i < 7; i++ {
-			this.bitstream.WriteBits(uint64((this.low>>48)&0xFF), 8)
+			this.bitstream.WriteBits(this.low>>48, 8)
 			this.low <<= 8
 		}
 
@@ -204,11 +204,11 @@ func (this *RangeEncoder) Dispose() {
 }
 
 type RangeDecoder struct {
-	code        int64
-	low         int64
-	range_      int64
-	baseFreq    []int64
-	deltaFreq   []int64
+	code        uint64
+	low         uint64
+	range_      uint64
+	baseFreq    []int
+	deltaFreq   []int
 	initialized bool
 	bitstream   kanzi.InputBitStream
 	chunkSize   int
@@ -244,7 +244,7 @@ func NewRangeDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*RangeDecoder
 	}
 
 	this := new(RangeDecoder)
-	this.range_ = (TOP << 8) - 1
+	this.range_ = TOP
 	this.bitstream = bs
 	this.chunkSize = int(chkSize)
 
@@ -252,8 +252,8 @@ func NewRangeDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*RangeDecoder
 	// split the frequency table into an array of absolute frequencies (with
 	// indexes multiple of 16) and delta frequencies (relative to the previous
 	// absolute frequency) with indexes in the [0..15] range
-	this.deltaFreq = make([]int64, NB_SYMBOLS+1)
-	this.baseFreq = make([]int64, BASE_LEN+1)
+	this.deltaFreq = make([]int, NB_SYMBOLS+1)
+	this.baseFreq = make([]int, BASE_LEN+1)
 	this.ResetFrequencies()
 
 	return this, nil
@@ -261,11 +261,11 @@ func NewRangeDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*RangeDecoder
 
 func (this *RangeDecoder) ResetFrequencies() {
 	for i := 0; i <= NB_SYMBOLS; i++ {
-		this.deltaFreq[i] = int64(i & 15) // DELTA
+		this.deltaFreq[i] = i & 15 // DELTA
 	}
 
 	for i := 0; i <= BASE_LEN; i++ {
-		this.baseFreq[i] = int64(i << 4) // BASE
+		this.baseFreq[i] = i << 4 // BASE
 	}
 
 }
@@ -283,7 +283,7 @@ func (this *RangeDecoder) Initialize() error {
 	read, err := this.bitstream.ReadBits(56)
 
 	if err == nil {
-		this.code = int64(read)
+		this.code = read
 	}
 
 	return err
@@ -304,8 +304,8 @@ func (this *RangeDecoder) DecodeByte() (byte, error) {
 func (this *RangeDecoder) decodeByte_() (byte, error) {
 	bfreq := this.baseFreq  // alias
 	dfreq := this.deltaFreq // alias
-	this.range_ /= (bfreq[BASE_LEN] + dfreq[NB_SYMBOLS])
-	count := (this.code - this.low) / this.range_
+	this.range_ /= uint64(bfreq[BASE_LEN] + dfreq[NB_SYMBOLS])
+	count := int((this.code - this.low) / this.range_)
 
 	// Find first frequency less than 'count'
 	value := this.findSymbol(count)
@@ -325,20 +325,20 @@ func (this *RangeDecoder) decodeByte_() (byte, error) {
 		return 0, errors.New(errMsg)
 	}
 
-	symbolLow := bfreq[value>>4] + dfreq[value]
-	symbolHigh := bfreq[(value+1)>>4] + dfreq[value+1]
+	symbolLow := uint64(bfreq[value>>4] + dfreq[value])
+	symbolHigh := uint64(bfreq[(value+1)>>4] + dfreq[value+1])
 
 	// Decode symbol
 	this.low += (symbolLow * this.range_)
 	this.range_ *= (symbolHigh - symbolLow)
 
 	for {
-		if (this.low^(this.low+this.range_))&MASK >= TOP {
+		if (this.low^(this.low+this.range_))&MASK != 0 {
 			if this.range_ >= MAX_RANGE {
 				break
 			} else {
 				// Normalize
-				this.range_ = (-this.low & MASK) & BOTTOM
+				this.range_ = -this.low & BOTTOM
 			}
 		}
 
@@ -348,17 +348,16 @@ func (this *RangeDecoder) decodeByte_() (byte, error) {
 			return 0, err
 		}
 
-		this.code = (this.code << 8) | int64(read)
+		this.code = (this.code << 8) | read
 		this.range_ <<= 8
 		this.low <<= 8
 	}
 
-	this.updateFrequencies(int(value + 1))
-	return byte(value & 0xFF), nil
+	this.updateFrequencies(value + 1)
+	return byte(value), nil
 }
 
-func (this *RangeDecoder) findSymbol(freq int64) int {
-	// Find first frequency less than 'count'
+func (this *RangeDecoder) findSymbol(freq int) int {
 	bfreq := this.baseFreq  // alias
 	dfreq := this.deltaFreq // alias
 	var value int

@@ -145,14 +145,13 @@ public class TestZLT
                input[n++] = val;
          }
          
-         ZLT zlt = new ZLT();
          long before, after;
          long delta1 = 0;
          long delta2 = 0;
          
          for (int ii = 0; ii < iter; ii++)
          {
-            zlt = new ZLT(); 
+            ZLT zlt = new ZLT(); 
             iba1.index = 0;
             iba2.index = 0;
             before = System.nanoTime();
@@ -169,7 +168,7 @@ public class TestZLT
          
          for (int ii = 0; ii < iter; ii++)
          {
-            zlt = new ZLT(iba2.index); 
+            ZLT zlt = new ZLT(iba2.index); 
             iba2.index = 0;
             iba3.index = 0;
             before = System.nanoTime();

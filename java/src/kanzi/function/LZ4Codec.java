@@ -395,8 +395,8 @@ public class LZ4Codec implements ByteFunction
       }
 
       destination.index = dstIdx - dstIdx0;
-      source.index = srcEnd;
-      return true;
+      source.index = srcIdx;
+      return (srcIdx == srcEnd) ? true : false;
    }
 
 

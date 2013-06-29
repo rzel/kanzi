@@ -82,7 +82,8 @@ public final class NullEntropyEncoder extends AbstractEncoder
     
     private boolean encodeLong(byte[] array, int offset)
     {
-        long val = ((long) (array[offset] & 0xFF)) << 56;
+        long val;
+        val  = ((long) (array[offset]   & 0xFF)) << 56;
         val |= ((long) (array[offset+1] & 0xFF) << 48);
         val |= ((long) (array[offset+2] & 0xFF) << 40);
         val |= ((long) (array[offset+3] & 0xFF) << 32);
@@ -94,12 +95,6 @@ public final class NullEntropyEncoder extends AbstractEncoder
     }
 
     
-    @Override
-    public void dispose()
-    {
-    }
-
-
     @Override
     public OutputBitStream getBitStream()
     {

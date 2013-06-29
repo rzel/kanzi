@@ -16,7 +16,6 @@ limitations under the License.
 package function
 
 import (
-	"bytes"
 	"errors"
 )
 
@@ -35,25 +34,22 @@ func (this *NullFunction) Size() uint {
 }
 
 func doCopy(src, dst []byte, sz uint) (uint, uint, error) {
-	length := sz
+	length := int(sz)
 
 	if length == 0 {
-		length = uint(len(src))
+		length = len(src)
 	}
 
-	if length > uint(len(src)) {
+	if length > len(src) {
 		return uint(0), uint(0), errors.New("Source buffer too small")
 	}
 
-	if length > uint(len(dst)) {
+	if length > len(dst) {
 		return uint(0), uint(0), errors.New("Destination buffer too small")
 	}
-
-	if !bytes.Equal(src, dst) {
-		copy(dst, src[0:length])
-	}
-
-	return length, length, nil
+	
+	copy(dst, src[0:length])
+	return uint(length), uint(length), nil
 }
 
 func (this *NullFunction) Forward(src, dst []byte) (uint, uint, error) {

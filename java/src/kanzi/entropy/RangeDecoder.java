@@ -27,14 +27,14 @@ import kanzi.BitStreamException;
 // Not thread safe
 public final class RangeDecoder extends AbstractDecoder
 {
-    private static final long TOP       = 1L << 48;
+    private static final long TOP       = (1L << 56) - 1;
     private static final long BOTTOM    = (1L << 40) - 1;
     private static final long MAX_RANGE = BOTTOM + 1;
-    private static final long MASK      = 0x00FFFFFFFFFFFFFFL;
+    private static final long MASK      = 0x00FF000000000000L;
     
     private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
     private static final int NB_SYMBOLS = 257; //256 + EOF
-    private static final int BASE_LEN = NB_SYMBOLS>>4;
+    private static final int BASE_LEN = NB_SYMBOLS >> 4;
     private static final int LAST = NB_SYMBOLS - 1;
 
     private long code;
@@ -68,7 +68,7 @@ public final class RangeDecoder extends AbstractDecoder
         if (chunkSize > 1<<30)
            throw new IllegalArgumentException("The chunk size must be a least most 2^30");
 
-        this.range = (TOP << 8) - 1;
+        this.range = TOP;
         this.bitstream = bitstream;
         this.chunkSize = chunkSize;
         
@@ -146,7 +146,7 @@ public final class RangeDecoder extends AbstractDecoder
        
        // Reading the bitstream is deferred (not in constructor)
        this.initialized = true;
-       this.code = this.bitstream.readBits(56) & 0xFFFFFFFF;
+       this.code = this.bitstream.readBits(56);
     }
    
     
@@ -189,22 +189,22 @@ public final class RangeDecoder extends AbstractDecoder
 
        while (true)
        {                       
-          if (((this.low ^ (this.low + this.range)) & MASK) >= TOP)
+          if (((this.low ^ (this.low + this.range)) & MASK) != 0)
           {
              if (this.range >= MAX_RANGE)
                 break;
              else // Normalize
-                this.range = (-this.low & MASK) & BOTTOM;
+                this.range = -this.low & BOTTOM;
           }
 
-          this.code = (this.code << 8) | (this.bitstream.readBits(8) & 0xFF);
+          this.code = (this.code << 8) | this.bitstream.readBits(8);
           this.range <<= 8;
           this.low <<= 8;
        }
 
        // Update frequencies: computational bottleneck !!!
        this.updateFrequencies(value+1);     
-       return (byte) (value & 0xFF);
+       return (byte) value;
     }
 
      
@@ -212,8 +212,6 @@ public final class RangeDecoder extends AbstractDecoder
     {
        final int[] bfreq = this.baseFreq;
        final int[] dfreq = this.deltaFreq;        
-
-       // Find first frequency less than 'count'
        int value = (freq < bfreq[bfreq.length/2]) ? bfreq.length/2 - 1 : bfreq.length - 1;
        
        while ((value > 0) && (freq < bfreq[value]))

@@ -39,22 +39,10 @@ public class TestDefaultBitStream
       // Test correctness (byte aligned)
       {
         int[] values = new int[] { 1, 7, -9, 123, 0, 12, -63, -64, 275, -555, 100000, 123 };
-        byte[] input = new byte[values.length * 4];
-//        Random rnd = new Random();
-        
-//        for (int i=0; i<4*values.length; i+=4)
-//        {
-//            values[i/4] = rnd.nextInt();
-//            input[i]   = (byte) (values[i/4] & 0xFF000000);
-//            input[i+1] = (byte) (values[i/4] & 0x00FF0000);
-//            input[i+2] = (byte) (values[i/4] & 0x0000FF00);
-//            input[i+3] = (byte) (values[i/4] & 0x000000FF);
-//        }
+        System.out.println("Initial");
 
-         System.out.println("Initial");
-
-         for (int i=0; i<values.length; i++)
-             System.out.print(" "+values[i]);
+        for (int i=0; i<values.length; i++)
+           System.out.print(" "+values[i]);
 
         System.out.println();
         

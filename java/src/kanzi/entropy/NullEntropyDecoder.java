@@ -21,7 +21,6 @@ import kanzi.InputBitStream;
 
 // Null entropy encoder and decoder
 // Pass through that writes the data directly to the bitstream
-// Helpful to debug
 public final class NullEntropyDecoder extends AbstractDecoder
 {
     private final InputBitStream bitstream;
@@ -50,15 +49,7 @@ public final class NullEntropyDecoder extends AbstractDecoder
        {
           while (i < end8)
           {
-             final long val = this.decodeLong();
-             array[i]   = (byte) (val >>> 56);
-             array[i+1] = (byte) (val >>> 48);
-             array[i+2] = (byte) (val >>> 40);
-             array[i+3] = (byte) (val >>> 32);
-             array[i+4] = (byte) (val >>> 24);
-             array[i+5] = (byte) (val >>> 16);
-             array[i+6] = (byte) (val >>> 8);
-             array[i+7] = (byte) (val & 0xFF);
+             this.decodeLong(array, i);
              i += 8;
           }
 
@@ -81,15 +72,17 @@ public final class NullEntropyDecoder extends AbstractDecoder
     }
 
     
-    private long decodeLong()
+    private void decodeLong(byte[] array, int offset)
     {
-       return this.bitstream.readBits(64);
-    }
-   
-     
-    @Override
-    public void dispose()
-    {
+       final long val = this.bitstream.readBits(64);
+       array[offset]   = (byte) (val >>> 56);
+       array[offset+1] = (byte) (val >>> 48);
+       array[offset+2] = (byte) (val >>> 40);
+       array[offset+3] = (byte) (val >>> 32);
+       array[offset+4] = (byte) (val >>> 24);
+       array[offset+5] = (byte) (val >>> 16);
+       array[offset+6] = (byte) (val >>> 8);
+       array[offset+7] = (byte)  val;
     }
 
 

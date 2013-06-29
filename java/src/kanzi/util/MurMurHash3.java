@@ -92,6 +92,10 @@ public class MurMurHash3
            k1 = (k1 << 15) | (k1 >>> 17);
            k1 *= C2;
            h1 ^= k1;
+           // Fallthrough
+           
+        default:
+           // Fallthrough
       }
 
       // Finalization

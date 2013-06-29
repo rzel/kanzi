@@ -26,14 +26,14 @@ import kanzi.OutputBitStream;
 // Not thread safe
 public final class RangeEncoder extends AbstractEncoder
 {
-    private static final long TOP       = 1L << 48;
+    private static final long TOP       = (1L << 56) - 1;
     private static final long BOTTOM    = (1L << 40) - 1;
     private static final long MAX_RANGE = BOTTOM + 1;
-    private static final long MASK      = 0x00FFFFFFFFFFFFFFL;
+    private static final long MASK      = 0x00FF000000000000L;
     
     private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
     private static final int NB_SYMBOLS = 257; //256 + EOF
-    private static final int BASE_LEN = NB_SYMBOLS>>4;
+    private static final int BASE_LEN = NB_SYMBOLS >> 4;
 
     private long low;
     private long range;
@@ -66,7 +66,7 @@ public final class RangeEncoder extends AbstractEncoder
         if (chunkSize > 1<<30)
            throw new IllegalArgumentException("The chunk size must be a least most 2^30");
 
-        this.range = (TOP << 8) - 1;
+        this.range = TOP;
         this.bitstream = bitstream;
         this.chunkSize = chunkSize;
 
@@ -139,15 +139,15 @@ public final class RangeEncoder extends AbstractEncoder
         // If the left-most digits are the same throughout the range, write bits to bitstream
         while (true)
         {                       
-            if (((this.low ^ (this.low + this.range)) & MASK) >= TOP)
+            if (((this.low ^ (this.low + this.range)) & MASK) != 0)
             {
                if (this.range >= MAX_RANGE)
                   break;
                else // Normalize
-                  this.range = (-this.low & MASK) & BOTTOM;
+                  this.range = -this.low & BOTTOM;
             }
 
-            this.bitstream.writeBits(((this.low >> 48) & 0xFF), 8);
+            this.bitstream.writeBits(this.low >> 48, 8);
             this.range <<= 8;
             this.low <<= 8;
         }
@@ -182,7 +182,7 @@ public final class RangeEncoder extends AbstractEncoder
 
             for (int i=0; i<7; i++)
             {
-                this.bitstream.writeBits(((this.low >> 48) & 0xFF), 8);
+                this.bitstream.writeBits(this.low >> 48, 8);
                 this.low <<= 8;
             }
 

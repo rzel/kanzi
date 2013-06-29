@@ -85,7 +85,7 @@ public class XXHash
            v4 += (((data[idx+12] & 0xFF) | ((data[idx+13] & 0xFF) << 8) | ((data[idx+14] & 0xFF) << 16) | 
                   ((data[idx+15] & 0xFF) << 24)) * PRIME2);
            v4 = ((v4 << 13) | (v4 >>> 19)) * PRIME1;
-          idx += 16;
+           idx += 16;
         } 
         while (idx <= limit);
 
