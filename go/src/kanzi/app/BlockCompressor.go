@@ -46,7 +46,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 
 	// Define flags
 	var help = flag.Bool("help", false, "display the help message")
-	var debug = flag.Bool("debug", false, "display the size of the encoded block pre-entropy coding")
+	var debug = flag.Bool("debug", false, "display the sizethe block at each stage (in bytes, floor rounding if fractional)")
 	var silent = flag.Bool("silent", false, "silent mode: no output (except warnings and errors)")
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
 	var inputName = flag.String("input", "", "mandatory name of the input file to encode")
@@ -61,7 +61,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 
 	if *help == true {
 		printOut("-help              : display this message", true)
-		printOut("-debug             : display the size of the encoded block pre-entropy coding", true)
+		printOut("-debug             : display the sizethe block at each stage (in bytes, floor rounding if fractional)", true)
 		printOut("-silent            : silent mode: no output (except warnings and errors)", true)
 		printOut("-overwrite         : overwrite the output file if it already exists", true)
 		printOut("-input=<filename>  : mandatory name of the input file to encode", true)

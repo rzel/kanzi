@@ -272,7 +272,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
            if (arg.equals("-help"))
            {
                printOut("-help                : display this message", true);
-               printOut("-debug               : display the size of the encoded block pre-entropy coding", true);
+               printOut("-debug               : display the sizethe block at each stage (in bytes, floor rounding if fractional)", true);
                printOut("-silent              : silent mode: no output (except warnings and errors)", true);
                printOut("-overwrite           : overwrite the output file if it already exists", true);
                printOut("-input=<inputName>   : mandatory name of the input file to encode", true);
