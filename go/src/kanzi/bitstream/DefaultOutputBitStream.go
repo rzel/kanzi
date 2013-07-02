@@ -23,8 +23,8 @@ import (
 type DefaultOutputBitStream struct {
 	closed   bool
 	written  uint64
-	position int
-	bitIndex uint
+	position int  // index of current byte in buffer
+	bitIndex uint // index of current bit to write
 	os       kanzi.OutputStream
 	buffer   []byte
 }
@@ -46,20 +46,20 @@ func NewDefaultOutputBitStream(stream kanzi.OutputStream, bufferSize uint) (*Def
 }
 
 func (this *DefaultOutputBitStream) WriteBit(bit int) error {
-	this.buffer[this.position] |= byte((bit & 1) << uint(this.bitIndex))
-	this.bitIndex = (this.bitIndex + 7) & 7
-	this.written++
-	err := error(nil)
+	this.buffer[this.position] |= byte((bit & 1) << this.bitIndex)
 
-	if this.bitIndex == 7 {
+	if this.bitIndex == 0 {
+		this.bitIndex = 7
 		this.position++
 
 		if this.position >= len(this.buffer) {
-			err = this.Flush()
+			return this.Flush()
 		}
+	} else {
+		this.bitIndex--
 	}
 
-	return err
+	return nil
 }
 
 func (this *DefaultOutputBitStream) WriteBits(value uint64, length uint) (uint, error) {
@@ -88,7 +88,6 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, length uint) (uint, 
 		idx -= sz
 		bits := ((value >> remaining) & ((1 << sz) - 1))
 		this.buffer[this.position] |= byte(bits << idx)
-		this.written += uint64(sz)
 		this.bitIndex = (idx + 7) & 7
 
 		if this.bitIndex == 7 {
@@ -105,7 +104,6 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, length uint) (uint, 
 	for remaining >= 8 {
 		// Fast track, progress byte by byte
 		remaining -= 8
-		this.written += 8
 		this.buffer[this.position] = byte(value >> remaining)
 		this.position++
 
@@ -119,7 +117,6 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, length uint) (uint, 
 	// Process remaining bits
 	if remaining > 0 {
 		this.bitIndex -= remaining
-		this.written += uint64(remaining)
 		this.buffer[this.position] |= byte(value << (8 - remaining))
 	}
 
@@ -128,13 +125,16 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, length uint) (uint, 
 
 func (this *DefaultOutputBitStream) Flush() error {
 	if this.Closed() {
-		return errors.New("Bit stream closed")
+		return errors.New("Stream closed")
 	}
 
 	if this.position > 0 {
+		// The buffer contains an incomplete byte at 'position'
 		if _, err := this.os.Write(this.buffer[0:this.position]); err != nil {
 			return err
 		}
+
+		this.written += uint64(this.position << 3)
 
 		if this.bitIndex != 7 {
 			this.buffer[0] = this.buffer[this.position]
@@ -164,19 +164,9 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 		return true, nil
 	}
 
-	if this.written > 0 && this.bitIndex != 7 {
+	if this.bitIndex != 7 {
+		// Ready to write the incomplete last byte
 		this.position++
-
-		if this.position >= len(this.buffer) {
-			if err := this.Flush(); err != nil {
-				return false, err
-			}
-
-		}
-
-		this.written -= 7
-		this.written += uint64(this.bitIndex)
-		this.written += 8
 		this.bitIndex = 7
 	}
 
@@ -186,13 +176,16 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 	// Force an error on any subsequent write attempt
 	this.position = len(this.buffer)
 	this.bitIndex = 7
-
-	err := this.os.Close()
-	return true, err
+	return true, this.os.Close()
 }
 
 func (this *DefaultOutputBitStream) Written() uint64 {
-	return this.written
+	if this.closed {
+		return this.written
+	} else {
+		// Number of bits flushed + bytes written in memory + bits written in memory
+		return this.written + uint64(this.position<<3) + uint64(7-this.bitIndex)
+	}
 }
 
 func (this *DefaultOutputBitStream) Closed() bool {

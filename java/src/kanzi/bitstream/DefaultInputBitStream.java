@@ -25,8 +25,8 @@ public final class DefaultInputBitStream implements InputBitStream
 {
    private final InputStream is;
    private final byte[] buffer;
-   private int position;
-   private int bitIndex; // index of current bit to read
+   private int position;  // index of current byte (consumed if bitIndex == 7)
+   private int bitIndex;  // index of current bit to read
    private long read;
    private boolean closed;
    private int maxPosition;
@@ -38,7 +38,7 @@ public final class DefaultInputBitStream implements InputBitStream
    }
 
 
-  public DefaultInputBitStream(InputStream is, byte[] buffer)
+   public DefaultInputBitStream(InputStream is, byte[] buffer)
    {
       if (is == null)
          throw new NullPointerException("Invalid null input stream parameter");
@@ -52,6 +52,8 @@ public final class DefaultInputBitStream implements InputBitStream
       this.is = is;
       this.buffer = buffer;
       this.bitIndex = 7;
+      this.position = -1;
+      this.maxPosition = -1;
    }
 
 
@@ -67,26 +69,26 @@ public final class DefaultInputBitStream implements InputBitStream
 
       final int bit = (this.buffer[this.position] >> this.bitIndex) & 1;
       this.bitIndex = (this.bitIndex + 7) & 7;
-      this.read++;
       return bit;
    }
 
 
    private synchronized int readFromInputStream(int length) throws BitStreamException
    {
-      if (this.closed == true)
+      if (this.isClosed() == true)
          throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
 
       try
       {
+         this.read += ((this.maxPosition+1) << 3);
          final int size = this.is.read(this.buffer, 0, length);
 
-         if (size < 0)
+         if (size <= 0)
          {
             throw new BitStreamException("No more data to read in the bitstream",
                     BitStreamException.END_OF_STREAM);
          }
-
+         
          this.position = 0;
          this.maxPosition = size - 1;
          return size;
@@ -118,7 +120,6 @@ public final class DefaultInputBitStream implements InputBitStream
             idx -= sz;
             final long bits = (this.buffer[this.position] >>> idx) & ((1 << sz) - 1);
             res |= (bits << remaining);
-            this.read += sz;
             this.bitIndex = (idx + 7) & 7;
          }
 
@@ -129,7 +130,6 @@ public final class DefaultInputBitStream implements InputBitStream
                this.readFromInputStream(this.buffer.length);
             
             remaining -= 8;
-            this.read += 8;
             final long bits = this.buffer[this.position] & 0xFF;
             res |= (bits << remaining);
          }
@@ -140,7 +140,6 @@ public final class DefaultInputBitStream implements InputBitStream
             if (++this.position > this.maxPosition)
                this.readFromInputStream(this.buffer.length);
 
-            this.read += remaining;
             this.bitIndex -= remaining;
             final long bits = this.buffer[this.position] & 0xFF;
             res |= (bits >>> (8 - remaining));       
@@ -158,15 +157,14 @@ public final class DefaultInputBitStream implements InputBitStream
    @Override
    public synchronized void close()
    {
-      if (this.closed == true)
+      if (this.isClosed() == true)
          return;
 
-      // Reset fields to force a readFromInputStream() (that will throw an exception)
+      // Reset fields to force a readFromInputStream() and trigger an exception
       // on readBit() or readBits()
       this.closed = true;
       this.bitIndex = 7;
-      this.position = 0;
-      this.maxPosition = 0;
+      this.maxPosition = -1;
 
       try
       {
@@ -183,14 +181,18 @@ public final class DefaultInputBitStream implements InputBitStream
    @Override
    public synchronized long read()
    {
-      return this.read;
+      // Number of bits read from OS + bytes read in memory + bits read in memory
+      // If this.bitIndex == 7, the byte at this.position has been completely consumed
+      final int indexByte = (this.bitIndex == 7) ? this.position + 1 : this.position;
+      final int indexBit = 7 - this.bitIndex;
+      return this.read + (indexByte << 3) + indexBit;
    }
 
 
    @Override
    public synchronized boolean hasMoreToRead()
    {
-      if (this.closed == true)
+      if (this.isClosed() == true)
          return false;
 
       if ((this.position < this.maxPosition) || (this.bitIndex != 7))
@@ -207,4 +209,10 @@ public final class DefaultInputBitStream implements InputBitStream
 
       return true;
    }
+   
+   
+   public synchronized boolean isClosed()
+   {
+      return this.closed;
+   }   
 }

@@ -26,8 +26,8 @@ public final class DefaultOutputBitStream implements OutputBitStream
    private final OutputStream os;
    private final byte[] buffer;
    private boolean closed;
-   private int position;
-   private int bitIndex;
+   private int position;  // index of current byte in buffer
+   private int bitIndex;  // index of current bit to write
    private long written;
 
 
@@ -62,14 +62,16 @@ public final class DefaultOutputBitStream implements OutputBitStream
       try
       {
          this.buffer[this.position] |= ((bit & 1) << this.bitIndex);
-         this.bitIndex = (this.bitIndex + 7) & 7;
-         this.written++;
 
-         if (this.bitIndex == 7)
+         if (this.bitIndex == 0)
          {
+            this.bitIndex = 7;
+
             if (++this.position >= this.buffer.length)
                this.flush();
          }
+         else
+            this.bitIndex--;
       }
       catch (ArrayIndexOutOfBoundsException e)
       {
@@ -85,10 +87,10 @@ public final class DefaultOutputBitStream implements OutputBitStream
    public synchronized int writeBits(long value, int length)
    {
       if (length == 0)
-          return 0;
+         return 0;
 
       if (length > 64)
-        throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
+         throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
 
       try
       {
@@ -97,27 +99,25 @@ public final class DefaultOutputBitStream implements OutputBitStream
          // Pad the current position in buffer
          if (this.bitIndex != 7)
          {
-            int idx = this.bitIndex + 1;            
+            int idx = this.bitIndex + 1; 
             final int sz = (remaining <= idx) ? remaining : idx;
             remaining -= sz;
             idx -= sz;
             final long bits = (value >>> remaining) & ((1 << sz) - 1);
             this.buffer[this.position] |= (bits << idx);
-            this.written += sz;
             this.bitIndex = (idx + 7) & 7;
-
+            
             if (this.bitIndex == 7)
             {
-               if (++this.position >= this.buffer.length)
+               if (++this.position >= this.buffer.length) 
                   this.flush();
             }
-         }
+         } 
 
          while (remaining >= 8)
          {
             // Fast track, progress byte by byte
             remaining -= 8;
-            this.written += 8;
             this.buffer[this.position] = (byte) (value >>> remaining);
 
             if (++this.position >= this.buffer.length)
@@ -128,7 +128,6 @@ public final class DefaultOutputBitStream implements OutputBitStream
          if (remaining > 0)
          {
             this.bitIndex -= remaining;
-            this.written += remaining;
             this.buffer[this.position] = (byte) (value << (8 - remaining));
          }
 
@@ -153,6 +152,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
          {
             // The buffer contains an incomplete byte at 'position'
             this.os.write(this.buffer, 0, this.position);
+            this.written += (this.position << 3);
             this.buffer[0] = (this.bitIndex != 7) ? this.buffer[this.position] : 0;
             final int end = (this.position < this.buffer.length) ? this.position 
                     : this.buffer.length-1;
@@ -178,26 +178,23 @@ public final class DefaultOutputBitStream implements OutputBitStream
       if (this.isClosed() == true)
          return;
 
-      if ((this.written > 0) && (this.bitIndex != 7))
+      if (this.bitIndex != 7)
       {
-         if (++this.position >= this.buffer.length)
-            this.flush();
-
-         this.written -= (7 - this.bitIndex);
-         this.written += 8;
+         // Ready to write the incomplete last byte
+         this.position++;
          this.bitIndex = 7;
       }
 
       this.flush();
       this.closed = true;
 
-      // Force an exception on any write attempt
+      // Force an exception on any subsequent write attempt
       this.position = this.buffer.length;
       this.bitIndex = 7;
 
       try
       {
-        this.os.close();
+         this.os.close();
       }
       catch (IOException e)
       {
@@ -209,11 +206,13 @@ public final class DefaultOutputBitStream implements OutputBitStream
    @Override
    public synchronized long written()
    {
-      return this.written;
+      // Number of bits flushed + bytes written in memory + bits written in memory
+      return (this.isClosed() == true) ? this.written :
+              this.written + (this.position << 3) + (7 - this.bitIndex);
    }
 
 
-   protected synchronized boolean isClosed()
+   public synchronized boolean isClosed()
    {
       return this.closed;
    }
