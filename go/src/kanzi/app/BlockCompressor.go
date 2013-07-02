@@ -30,7 +30,7 @@ const (
 )
 
 type BlockCompressor struct {
-	debug        bool
+	verbose      bool
 	silent       bool
 	overwrite    bool
 	checksum     bool
@@ -46,7 +46,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 
 	// Define flags
 	var help = flag.Bool("help", false, "display the help message")
-	var debug = flag.Bool("debug", false, "display the sizethe block at each stage (in bytes, floor rounding if fractional)")
+	var verbose = flag.Bool("verbose", false, "display the size of the block at each stage (in bytes, floor rounding if fractional)")
 	var silent = flag.Bool("silent", false, "silent mode: no output (except warnings and errors)")
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
 	var inputName = flag.String("input", "", "mandatory name of the input file to encode")
@@ -61,7 +61,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 
 	if *help == true {
 		printOut("-help              : display this message", true)
-		printOut("-debug             : display the sizethe block at each stage (in bytes, floor rounding if fractional)", true)
+		printOut("-verbose           : display the size of the block at each stage (in bytes, floor rounding if fractional)", true)
 		printOut("-silent            : silent mode: no output (except warnings and errors)", true)
 		printOut("-overwrite         : overwrite the output file if it already exists", true)
 		printOut("-input=<filename>  : mandatory name of the input file to encode", true)
@@ -73,9 +73,9 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 		os.Exit(0)
 	}
 
-	if *silent == true && *debug == true {
-		printOut("Warning: both 'silent' and 'debug' options were selected, ignoring 'debug'", true)
-		*debug = false
+	if *silent == true && *verbose == true {
+		printOut("Warning: both 'silent' and 'verbose' options were selected, ignoring 'verbose'", true)
+		*verbose = false
 	}
 
 	if len(*inputName) == 0 {
@@ -87,7 +87,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 		*outputName = *inputName + ".knz"
 	}
 
-	this.debug = *debug
+	this.verbose = *verbose
 	this.silent = *silent
 	this.overwrite = *overwrite
 	this.inputName = *inputName
@@ -121,16 +121,16 @@ func main() {
 // Return exit code, number of bits written
 func (this *BlockCompressor) call() (int, uint64) {
 	var msg string
-	printOut("Input file name set to '"+this.inputName+"'", this.debug)
-	printOut("Output file name set to '"+this.outputName+"'", this.debug)
+	printOut("Input file name set to '"+this.inputName+"'", this.verbose)
+	printOut("Output file name set to '"+this.outputName+"'", this.verbose)
 	msg = fmt.Sprintf("Block size set to %d", this.blockSize)
-	printOut(msg, this.debug)
-	msg = fmt.Sprintf("Debug set to %t", this.debug)
-	printOut(msg, this.debug)
+	printOut(msg, this.verbose)
+	msg = fmt.Sprintf("Debug set to %t", this.verbose)
+	printOut(msg, this.verbose)
 	msg = fmt.Sprintf("Overwrite set to %t", this.overwrite)
-	printOut(msg, this.debug)
+	printOut(msg, this.verbose)
 	msg = fmt.Sprintf("Checksum set to %t", this.checksum)
-	printOut(msg, this.debug)
+	printOut(msg, this.verbose)
 	w1 := "no"
 
 	if this.transform != "NONE" {
@@ -138,7 +138,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 	}
 
 	msg = fmt.Sprintf("Using %s transform (stage 1)", w1)
-	printOut(msg, this.debug)
+	printOut(msg, this.verbose)
 	w2 := "no"
 
 	if this.entropyCodec != "NONE" {
@@ -146,7 +146,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 	}
 
 	msg = fmt.Sprintf("Using %s entropy codec (stage 2)", w2)
-	printOut(msg, this.debug)
+	printOut(msg, this.verbose)
 	written := uint64(0)
 	output, err := os.OpenFile(this.outputName, os.O_RDWR, 666)
 
@@ -169,14 +169,14 @@ func (this *BlockCompressor) call() (int, uint64) {
 	}
 
 	defer output.Close()
-	debugWriter := os.Stdout
+	verboseWriter := os.Stdout
 
-	if this.debug == false {
-		debugWriter = nil
+	if this.verbose == false {
+		verboseWriter = nil
 	}
 
 	cos, err := io.NewCompressedOutputStream(this.entropyCodec, this.transform,
-		output, this.blockSize, this.checksum, debugWriter)
+		output, this.blockSize, this.checksum, verboseWriter)
 
 	if err != nil {
 		if ioerr, isIOErr := err.(io.IOError); isIOErr == true {

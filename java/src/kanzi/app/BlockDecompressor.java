@@ -33,7 +33,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
 {
    private static final int DEFAULT_BUFFER_SIZE = 32768;
 
-   private final boolean debug;
+   private final boolean verbose;
    private final boolean silent;
    private final boolean overwrite;
    private final String inputName;
@@ -46,7 +46,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
    {
       Map<String, Object> map = new HashMap<String, Object>();
       processCommandLine(args, map);
-      this.debug = (Boolean) map.get("debug");
+      this.verbose = (Boolean) map.get("verbose");
       this.silent = (Boolean) map.get("silent");
       this.overwrite = (Boolean) map.get("overwrite");
       this.inputName = (String) map.get("inputName");
@@ -111,10 +111,10 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
    @Override
    public Integer call()
    {
-      printOut("Input file name set to '" + this.inputName + "'", this.debug);
-      printOut("Output file name set to '" + this.outputName + "'", this.debug);
-      printOut("Debug set to "+this.debug, this.debug);
-      printOut("Overwrite set to "+this.overwrite, this.debug);
+      printOut("Input file name set to '" + this.inputName + "'", this.verbose);
+      printOut("Output file name set to '" + this.outputName + "'", this.verbose);
+      printOut("Debug set to "+this.verbose, this.verbose);
+      printOut("Overwrite set to "+this.overwrite, this.verbose);
 
       long read = 0;
       printOut("Decoding ...", !this.silent);
@@ -165,7 +165,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
          try
          {
             this.cis = new CompressedInputStream(new FileInputStream(input),
-                 (this.debug == true) ? System.out : null);
+                 (this.verbose == true) ? System.out : null);
          }
          catch (Exception e)
          {
@@ -243,7 +243,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
 
     private static void processCommandLine(String args[], Map<String, Object> map)
     {
-        boolean debug = false;
+        boolean verbose = false;
         boolean silent = false;
         boolean overwrite = false;
         String inputName = null;
@@ -256,16 +256,16 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
            if (arg.equals("-help"))
            {
               printOut("-help                : display this message", true);
-              printOut("-debug               : display the sizethe block at each stage (in bytes, floor rounding if fractional)", true);
+              printOut("-verbose             : display the size of the block at each stage (in bytes, floor rounding if fractional)", true);
               printOut("-overwrite           : overwrite the output file if it already exists", true);
               printOut("-silent              : silent mode: no output (except warnings and errors)", true);
               printOut("-input=<inputName>   : mandatory name of the input file to decode", true);
               printOut("-output=<outputName> : optional name of the output file", true);
               System.exit(0);
            }
-           else if (arg.equals("-debug"))
+           else if (arg.equals("-verbose"))
            {
-              debug = true;
+              verbose = true;
            }
            else if (arg.equals("-silent"))
            {
@@ -304,13 +304,13 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
                    : inputName + ".tmp";
         }
 
-        if ((silent == true) && (debug == true))
+        if ((silent == true) && (verbose == true))
         {
-           printOut("Warning: both 'silent' and 'debug' options were selected, ignoring 'debug'", true);
-           debug = false;
+           printOut("Warning: both 'silent' and 'verbose' options were selected, ignoring 'verbose'", true);
+           verbose = false;
         }
 
-        map.put("debug", debug);
+        map.put("verbose", verbose);
         map.put("overwrite", overwrite);
         map.put("silent", silent);
         map.put("outputName", outputName);

@@ -33,7 +33,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
    private static final int DEFAULT_BUFFER_SIZE = 32768;
    public static final int WARN_EMPTY_INPUT = -128;
 
-   private boolean debug;
+   private boolean verbose;
    private boolean silent;
    private boolean overwrite;
    private boolean checksum;
@@ -50,7 +50,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
    {
       Map<String, Object> map = new HashMap<String, Object>();
       processCommandLine(args, map);
-      this.debug = (Boolean) map.get("debug");
+      this.verbose = (Boolean) map.get("verbose");
       this.silent = (Boolean) map.get("silent");
       this.overwrite = (Boolean) map.get("overwrite");
       this.inputName = (String) map.get("inputName");
@@ -120,16 +120,16 @@ public class BlockCompressor implements Runnable, Callable<Integer>
    @Override
    public Integer call()
    {
-      printOut("Input file name set to '" + this.inputName + "'", this.debug);
-      printOut("Output file name set to '" + this.outputName + "'", this.debug);
-      printOut("Block size set to "+this.blockSize, this.debug);
-      printOut("Debug set to "+this.debug, this.debug);
-      printOut("Overwrite set to "+this.overwrite, this.debug);
-      printOut("Checksum set to "+this.checksum, this.debug);
+      printOut("Input file name set to '" + this.inputName + "'", this.verbose);
+      printOut("Output file name set to '" + this.outputName + "'", this.verbose);
+      printOut("Block size set to "+this.blockSize, this.verbose);
+      printOut("Debug set to "+this.verbose, this.verbose);
+      printOut("Overwrite set to "+this.overwrite, this.verbose);
+      printOut("Checksum set to "+this.checksum, this.verbose);
       String etransform = ("NONE".equals(this.transform)) ? "no" : this.transform;
-      printOut("Using " + etransform + " transform (stage 1)", this.debug);
+      printOut("Using " + etransform + " transform (stage 1)", this.verbose);
       String ecodec = ("NONE".equals(this.codec)) ? "no" : this.codec;
-      printOut("Using " + ecodec + " entropy codec (stage 2)", this.debug);
+      printOut("Using " + ecodec + " entropy codec (stage 2)", this.verbose);
 
       try
       {
@@ -157,7 +157,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
                  new FileOutputStream(output),
                  this.blockSize,
                  this.checksum,
-                 (this.debug == true) ? System.out : null);
+                 (this.verbose == true) ? System.out : null);
          }
          catch (Exception e)
          {
@@ -256,7 +256,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
     {
         // Set default values
         int blockSize = 100000;
-        boolean debug = false;
+        boolean verbose = false;
         boolean silent = false;
         boolean overwrite = false;
         boolean checksum = false;
@@ -272,7 +272,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
            if (arg.equals("-help"))
            {
                printOut("-help                : display this message", true);
-               printOut("-debug               : display the sizethe block at each stage (in bytes, floor rounding if fractional)", true);
+               printOut("-verbose             : display the size of the block at each stage (in bytes, floor rounding if fractional)", true);
                printOut("-silent              : silent mode: no output (except warnings and errors)", true);
                printOut("-overwrite           : overwrite the output file if it already exists", true);
                printOut("-input=<inputName>   : mandatory name of the input file to encode", true);
@@ -283,9 +283,9 @@ public class BlockCompressor implements Runnable, Callable<Integer>
                printOut("-checksum =          : enable block checksum", true);
                System.exit(0);
            }
-           else if (arg.equals("-debug"))
+           else if (arg.equals("-verbose"))
            {
-               debug = true;
+               verbose = true;
            }
            else if (arg.equals("-silent"))
            {
@@ -344,14 +344,14 @@ public class BlockCompressor implements Runnable, Callable<Integer>
         if (outputName == null)
            outputName = inputName + ".knz";
 
-        if ((silent == true) && (debug == true))
+        if ((silent == true) && (verbose == true))
         {
-           printOut("Warning: both 'silent' and 'debug' options were selected, ignoring 'debug'", true);
-           debug = false;
+           printOut("Warning: both 'silent' and 'verbose' options were selected, ignoring 'verbose'", true);
+           verbose = false;
         }
 
         map.put("blockSize", blockSize);
-        map.put("debug", debug);
+        map.put("verbose", verbose);
         map.put("silent", silent);
         map.put("overwrite", overwrite);
         map.put("inputName", inputName);

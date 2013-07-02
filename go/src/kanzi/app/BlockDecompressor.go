@@ -29,7 +29,7 @@ const (
 )
 
 type BlockDecompressor struct {
-	debug      bool
+	verbose    bool
 	silent     bool
 	overwrite  bool
 	inputName  string
@@ -41,7 +41,7 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 
 	// Define flags
 	var help = flag.Bool("help", false, "display the help message")
-	var debug = flag.Bool("debug", false, "display the sizethe block at each stage (in bytes, floor rounding if fractional)")
+	var verbose = flag.Bool("verbose", false, "display the size of the block at each stage (in bytes, floor rounding if fractional)")
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
 	var silent = flag.Bool("silent", false, "silent mode: no output (except warnings and errors)")
 	var inputName = flag.String("input", "", "mandatory name of the input file to decode")
@@ -52,7 +52,7 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 
 	if *help == true {
 		printOut("-help              : display this message", true)
-		printOut("-debug             : display the sizethe block at each stage (in bytes, floor rounding if fractional)", true)
+		printOut("-verbose           : display the size of the block at each stage (in bytes, floor rounding if fractional)", true)
 		printOut("-silent            : silent mode: no output (except warnings and errors)", true)
 		printOut("-overwrite         : overwrite the output file if it already exists", true)
 		printOut("-input=<filename>  : mandatory name of the input file to encode", true)
@@ -60,9 +60,9 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 		os.Exit(0)
 	}
 
-	if *silent == true && *debug == true {
-		printOut("Warning: both 'silent' and 'debug' options were selected, ignoring 'debug'", true)
-		*debug = false
+	if *silent == true && *verbose == true {
+		printOut("Warning: both 'silent' and 'verbose' options were selected, ignoring 'verbose'", true)
+		*verbose = false
 	}
 
 	if len(*inputName) == 0 {
@@ -82,7 +82,7 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 		}
 	}
 
-	this.debug = *debug
+	this.verbose = *verbose
 	this.silent = *silent
 	this.inputName = *inputName
 	this.outputName = *outputName
@@ -112,12 +112,12 @@ func main() {
 // Return exit code, number of bits written
 func (this *BlockDecompressor) call() (int, uint64) {
 	var msg string
-	printOut("Input file name set to '"+this.inputName+"'", this.debug)
-	printOut("Output file name set to '"+this.outputName+"'", this.debug)
-	msg = fmt.Sprintf("Debug set to %t", this.debug)
-	printOut(msg, this.debug)
+	printOut("Input file name set to '"+this.inputName+"'", this.verbose)
+	printOut("Output file name set to '"+this.outputName+"'", this.verbose)
+	msg = fmt.Sprintf("Debug set to %t", this.verbose)
+	printOut(msg, this.verbose)
 	msg = fmt.Sprintf("Overwrite set to %t", this.overwrite)
-	printOut(msg, this.debug)
+	printOut(msg, this.verbose)
 
 	output, err := os.OpenFile(this.outputName, os.O_RDWR, 666)
 
@@ -152,13 +152,13 @@ func (this *BlockDecompressor) call() (int, uint64) {
 	}
 
 	defer input.Close()
-	debugWriter := os.Stdout
+	verboseWriter := os.Stdout
 
-	if this.debug == false {
-		debugWriter = nil
+	if this.verbose == false {
+		verboseWriter = nil
 	}
 
-	cis, err := io.NewCompressedInputStream(input, debugWriter)
+	cis, err := io.NewCompressedInputStream(input, verboseWriter)
 
 	if err != nil {
 		if err.(*io.IOError) != nil {

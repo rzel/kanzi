@@ -41,7 +41,7 @@ public class TestBlockCoder
        {
           if (args[i].startsWith("-input="))
              set.add(args[i]+".knz");
-          else if (args[i].equals("-debug"))
+          else if (args[i].equals("-verbose"))
              set.add(args[i]);
           else if (args[i].equals("-silent"))
              set.add(args[i]);
