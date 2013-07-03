@@ -35,7 +35,7 @@ import (
 
 const (
 	BITSTREAM_TYPE           = 0x4B414E5A // "KANZ"
-	BITSTREAM_FORMAT_VERSION = 2
+	BITSTREAM_FORMAT_VERSION = 3
 	DEFAULT_BUFFER_SIZE      = 1024 * 1024
 	COPY_LENGTH_MASK         = 0x0F
 	SMALL_BLOCK_MASK         = 0x80
@@ -114,12 +114,12 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 	}
 	
 	if blockSize > MAX_BLOCK_SIZE {
-		errMsg := fmt.Sprintf("The block size must be at most %d)", MAX_BLOCK_SIZE)
+		errMsg := fmt.Sprintf("The block size must be at most %d", MAX_BLOCK_SIZE)
 		return nil, errors.New(errMsg)
 	}
 
 	if blockSize < MIN_BLOCK_SIZE {
-		errMsg := fmt.Sprintf("The block size must be at least %d)", MIN_BLOCK_SIZE)
+		errMsg := fmt.Sprintf("The block size must be at least %d", MIN_BLOCK_SIZE)
 		return nil, errors.New(errMsg)
 	}
 
@@ -210,7 +210,7 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 	}
 
 	if _, err = this.obs.WriteBits(uint64(this.blockSize), 26); err != nil {
-		return NewIOError("Cannot write block size header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write block size in header", ERR_WRITE_FILE)
 	}
 
 	return nil
@@ -483,7 +483,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 		return NewIOError(errMsg, ERR_READ_FILE)
 	}
 
-	version := int((header >> 41) & 0x7F)
+	version := int(header >> 41) & 0x7F
 
 	// Sanity check
 	if version != BITSTREAM_FORMAT_VERSION {
@@ -501,13 +501,13 @@ func (this *CompressedInputStream) ReadHeader() error {
 	}
 
 	// Read entropy codec
-	this.entropyType = byte((header >> 33) & 0x7F)
+	this.entropyType = byte(header >> 33) & 0x7F
 
 	// Read transform
-	this.transformType = byte((header >> 26) & 0x7F)
+	this.transformType = byte(header >> 26) & 0x7F
 
 	// Read block size
-	this.blockSize = uint(header & uint64(0x03FFFFFF))
+	this.blockSize = uint(header & 0x03FFFFFF)
 
 	if this.blockSize > MAX_BLOCK_SIZE {
 		errMsg := fmt.Sprintf("Invalid block size read from file: %d", this.blockSize)
