@@ -23,7 +23,7 @@ import kanzi.util.sort.QuickSort;
 public final class HuffmanTree
 {
     // Return the number of codes generated
-    public static int generateCanonicalCodes(int[] sizes, int[] codes)
+    public static int generateCanonicalCodes(short[] sizes, int[] codes)
     {
        final int[] array = new int[sizes.length];
        int n = 0;
@@ -92,10 +92,10 @@ public final class HuffmanTree
     // Array comparator used to sort keys and values to generate canonical codes
     private static class HuffmanArrayComparator implements ArrayComparator
     {
-        private final int[] array;
+        private final short[] array;
         
 
-        public HuffmanArrayComparator(int[] array)
+        public HuffmanArrayComparator(short[] array)
         {
             if (array == null)
                 throw new NullPointerException("Invalid null array parameter");

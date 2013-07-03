@@ -31,7 +31,7 @@ public class HuffmanDecoder extends AbstractDecoder
 
     private final InputBitStream bitstream;
     private final int[] codes;
-    private final int[] sizes; 
+    private final short[] sizes; 
     private Node root;
     private CacheData[] decodingCache;
     private CacheData current;
@@ -60,7 +60,7 @@ public class HuffmanDecoder extends AbstractDecoder
            throw new IllegalArgumentException("The chunk size must be a least most 2^30");
 
         this.bitstream = bitstream;
-        this.sizes = new int[256];
+        this.sizes = new short[256];
         this.codes = new int[256];
         this.decodingCache = new CacheData[1 << DECODING_BATCH_SIZE];
         this.chunkSize = chunkSize;
@@ -77,16 +77,15 @@ public class HuffmanDecoder extends AbstractDecoder
        buildDecodingCache(this.root, this.decodingCache);
        this.current = new CacheData(this.root); // point to root
     }
-       
+
     
     private static CacheData[] buildDecodingCache(Node rootNode, CacheData[] data)
     {
-       final int size = 1 << DECODING_BATCH_SIZE;
-       CacheData previousData = new CacheData(null);
-       int n = 0;
+       final int end = 1 << DECODING_BATCH_SIZE;
+       CacheData previousData = (data[0] == null) ? new CacheData(null) : data[0];
 
        // Create an array storing a list of tree nodes (shortcuts) for each input value
-       for (int val=0; val<size; val++)
+       for (int val=0; val<end; val++)
        {
           int shift = DECODING_BATCH_SIZE - 1;
           boolean firstAdded = false;
@@ -105,21 +104,29 @@ public class HuffmanDecoder extends AbstractDecoder
                    break;
              }
 
-             final CacheData currentData = new CacheData(currentNode);
-
+             // Reuse cache data objects when recreating the cache
+             if (previousData.next == null) 
+                previousData.next = new CacheData(currentNode);
+             else
+                previousData.next.value = currentNode;
+             
              // The cache is made of linked nodes
-             previousData.next = currentData;
-             previousData = currentData;
+             previousData = previousData.next;
 
              if (firstAdded == false)
              {
                 // Add first node of list to array (whether it is a leaf or not)
-                data[n++] = currentData;
+                data[val] = previousData;
                 firstAdded = true;
              }
           }
 
-          previousData.next = new CacheData(rootNode);
+          // Reuse cache data objects when recreating the cache
+          if (previousData.next == null) 
+             previousData.next = new CacheData(rootNode);
+          else
+             previousData.next.value = rootNode;
+          
           previousData = previousData.next;
        }
 
@@ -175,16 +182,16 @@ public class HuffmanDecoder extends AbstractDecoder
     
     public boolean readLengths() throws BitStreamException
     {
-        final int[] buf = this.sizes;
+        final short[] buf = this.sizes;
         ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
-        buf[0] = 1 + egdec.decodeByte();       
+        buf[0] = (short) (1 + egdec.decodeByte());
         int maxSize = buf[0];
         
         // Read lengths
         for (int i=1; i<256; i++)
         {
-           buf[i] = buf[i-1] + egdec.decodeByte();
-           
+           buf[i] = (short) (buf[i-1] + egdec.decodeByte());
+      
            if (maxSize < buf[i])
               maxSize = buf[i];
         }

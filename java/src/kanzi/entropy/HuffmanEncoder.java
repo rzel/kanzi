@@ -30,7 +30,7 @@ public class HuffmanEncoder extends AbstractEncoder
     private final OutputBitStream bitstream;
     private final int[] buffer;
     private final int[] codes;
-    private final int[] sizes; // Cache for speed purpose
+    private final short[] sizes; // Cache for speed purpose
     private final int chunkSize;
 
 
@@ -57,7 +57,7 @@ public class HuffmanEncoder extends AbstractEncoder
 
         this.bitstream = bitstream;
         this.buffer = new int[256]; 
-        this.sizes = new int[256];
+        this.sizes = new short[256];
         this.codes = new int[256];
         this.chunkSize = chunkSize;
         
@@ -146,7 +146,7 @@ public class HuffmanEncoder extends AbstractEncoder
     }
 
            
-    private static Node createTreeFromFrequencies(int[] frequencies, int[] sizes_)
+    private static Node createTreeFromFrequencies(int[] frequencies, short[] sizes_)
     {
        int[] array = new int[256];
        int n = 0;
@@ -170,8 +170,7 @@ public class HuffmanEncoder extends AbstractEncoder
 
        for (int i=n-1; i>=0; i--)
        {
-          final int val = array[i];
-          queue1.addFirst(new Node((byte) val, frequencies[val]));
+          queue1.addFirst(new Node((byte) array[i], frequencies[array[i]]));
        }
 
        while (queue1.size() + queue2.size() > 1)
@@ -179,15 +178,15 @@ public class HuffmanEncoder extends AbstractEncoder
           // Extract 2 minimum nodes
           for (int i=0; i<2; i++)
           {
-             if (queue1.size() == 0)
-             {
-                nodes[i] = queue2.removeFirst();
-                continue;
-             }
-
              if (queue2.size() == 0)
              {
                 nodes[i] = queue1.removeFirst();
+                continue;
+             }
+
+             if (queue1.size() == 0)
+             {
+                nodes[i] = queue2.removeFirst();
                 continue;
              }
 
@@ -200,8 +199,7 @@ public class HuffmanEncoder extends AbstractEncoder
           // Merge minimum nodes and enqueue result
           final Node left = nodes[0];
           final Node right = nodes[1];
-          final Node merged = new Node(left.weight + right.weight, left, right);
-          queue2.addLast(merged);
+          queue2.addLast(new Node(left.weight + right.weight, left, right));
        }
 
        final Node rootNode = ((queue1.isEmpty()) ? queue2.removeFirst() : queue1.removeFirst());
@@ -211,11 +209,11 @@ public class HuffmanEncoder extends AbstractEncoder
 
 
     // Fill sizes
-    private static void fillTree(Node node, int depth, int[] sizes_)
+    private static void fillTree(Node node, int depth, short[] sizes_)
     {
        if ((node.left == null) && (node.right == null))
        {
-          sizes_[node.symbol & 0xFF] = depth;
+          sizes_[node.symbol & 0xFF] = (short) depth;
           return;
        }
 
