@@ -209,7 +209,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 
 	for len > 0 {
 		if err != nil {
-			fmt.Printf("Failed to read the next chunk of input file '%v': %v\n", this.inputName, err)
+			fmt.Printf("Failed to read block from file '%v': %v\n", this.inputName, err)
 			return io.ERR_READ_FILE, written
 		}
 
@@ -220,7 +220,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 				fmt.Printf("%s\n", ioerr.Error())
 				return ioerr.ErrorCode(), written
 			} else {
-				fmt.Printf("Error in block codec forward(): %v\n", err.Error())
+				fmt.Printf("An unexpected condition happened. Exiting ...\n%v\n", err.Error())
 				return io.ERR_PROCESS_BLOCK, written
 			}
 		}

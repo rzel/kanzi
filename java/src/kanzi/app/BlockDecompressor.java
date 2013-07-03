@@ -203,7 +203,8 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
             }
             catch (Exception e)
             {
-               System.err.println("Failed to read next block: " + e.getMessage());
+               System.err.print("Failed to write decompressed block to file '"+this.outputName+"': ");
+               System.err.println(e.getMessage());
                return Error.ERR_READ_FILE;
             }
 
@@ -219,7 +220,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       catch (Exception e)
       {
          System.err.println("An unexpected condition happened. Exiting ...");
-         e.printStackTrace();
+         System.err.println(e.getMessage());
          return Error.ERR_UNKNOWN;
       }
 

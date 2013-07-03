@@ -185,34 +185,31 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       // Encode
       printOut("Encoding ...", !this.silent);
       int read = 0;
-
-      // If the compression ratio is greater than one for this block,
-      // the compression will fail (unless up to MAX_BLOCK_HEADER_SIZE bytes are reserved
-      // in the block for header data)
       IndexedByteArray iba = new IndexedByteArray(new byte[DEFAULT_BUFFER_SIZE], 0);
       int len;
       long before = System.nanoTime();
 
       try
-      {
-         while ((len = this.is.read(iba.array, 0, iba.array.length)) > 0)
-         {
-            try
-            {
-               // Just write block to the compressed output stream !
-               read += len;
-               this.cos.write(iba.array, 0, len);
-            }
-            catch (kanzi.io.IOException e)
-            {
-               System.err.println(e.getMessage());
-               return e.getErrorCode();
-            }
-            catch (IOException e)
-            {
-               System.err.println(e.getMessage());
-               return Error.ERR_UNKNOWN;
-            }
+      {       
+          while (true)
+          {
+             try
+             {
+                len = this.is.read(iba.array, 0, iba.array.length);
+             }
+             catch (Exception e)
+             {
+                System.err.print("Failed to read block from file '"+this.inputName+"': ");
+                System.err.println(e.getMessage());                
+                return Error.ERR_READ_FILE;
+             }
+             
+             if (len <= 0)
+                break;
+             
+             // Just write block to the compressed output stream !
+             read += len;
+             this.cos.write(iba.array, 0, len);
           }
        }
        catch (kanzi.io.IOException e)
@@ -223,7 +220,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
        catch (Exception e)
        {
           System.err.println("An unexpected condition happened. Exiting ...");
-          e.printStackTrace();
+          System.err.println(e.getMessage());
           return Error.ERR_UNKNOWN;
        }
 

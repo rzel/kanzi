@@ -182,7 +182,7 @@ func (this *BlockDecompressor) call() (int, uint64) {
 				fmt.Printf("%s\n", ioerr.Message())
 				return ioerr.ErrorCode(), read
 			} else {
-				fmt.Printf("Error in block codec inverse(): %v\n", err)
+				fmt.Printf("An unexpected condition happened. Exiting ...\n%v\n", err)
 				return io.ERR_PROCESS_BLOCK, read
 			}
 		}
@@ -191,7 +191,7 @@ func (this *BlockDecompressor) call() (int, uint64) {
 			_, err = output.Write(buffer[0:decoded])
 
 			if err != nil {
-				fmt.Printf("Failed to write next block: %v\n", err)
+				fmt.Printf("Failed to write decompressed block to file '%v': %v\n", this.outputName, err)
 				return io.ERR_WRITE_FILE, read
 			}
 
