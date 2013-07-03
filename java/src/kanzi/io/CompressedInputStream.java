@@ -191,32 +191,24 @@ public class CompressedInputStream extends InputStream
 
 
    // Need to override this method because the default implementation
-   // in Java gobbles the IOException (uh?)
+   // in Java gobbles the IOException except on first byte (uh?)
    @Override
    public int read(byte[] array, int off, int len) throws IOException
    {
-      if (len == 0)
+      if (len <= 0)
          return 0;
 
-      int c = this.read();
-
-      if (c == -1)
-         return -1;
-
-      array[off] = (byte) c;
-      int i = 1;
-
-      for (; i<len ; i++)
+      for (int i=0; i<len ; i++)
       {
-         c = this.read();
+         int c = this.read();
 
          if (c == -1)
-            break;
+            return i;
 
          array[off+i] = (byte) c;
       }
 
-      return i;
+      return len;
    }
 
 

@@ -72,6 +72,9 @@ public class CompressedOutputStream extends OutputStream
       if (entropyCodec == null)
          throw new NullPointerException("Invalid null entropy encoder type parameter");
 
+      if (functionType == null)
+         throw new NullPointerException("Invalid null transform type parameter");
+
       if (os == null)
          throw new NullPointerException("Invalid null output stream parameter");
 
@@ -85,18 +88,18 @@ public class CompressedOutputStream extends OutputStream
 
       // Check entropy type validity (throws if not valid)
       char type = entropyCodec.toUpperCase().charAt(0);
-      String name = new EntropyCodecFactory().getName((byte) type);
+      String checkedEntropyType = new EntropyCodecFactory().getName((byte) type);
 
-      if (entropyCodec.equalsIgnoreCase(name) == false)
+      if (entropyCodec.equalsIgnoreCase(checkedEntropyType) == false)
          throw new IllegalArgumentException("Unsupported entropy type: " + entropyCodec);
 
       this.entropyType = type;
 
       // Check transform type validity (throws if not valid)
       type = functionType.toUpperCase().charAt(0);
-      name = new FunctionFactory().getName((byte) type);
+      String checkedFunctionType = new FunctionFactory().getName((byte) type);
 
-      if (functionType.equalsIgnoreCase(name) == false)
+      if (functionType.equalsIgnoreCase(checkedFunctionType) == false)
          throw new IllegalArgumentException("Unsupported function type: " + functionType);
 
       this.transformType = type;

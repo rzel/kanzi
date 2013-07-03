@@ -112,7 +112,7 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 	if os == nil {
 		return nil, errors.New("Invalid null output stream parameter")
 	}
-
+	
 	if blockSize > MAX_BLOCK_SIZE {
 		errMsg := fmt.Sprintf("The block size must be at most %d)", MAX_BLOCK_SIZE)
 		return nil, errors.New(errMsg)
@@ -127,23 +127,36 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 	var err error
 
 	if this.obs, err = bitstream.NewDefaultOutputBitStream(os, blockSize); err != nil {
-		return this, err
+		return nil, err
 	}
 
 	eType := entropyCodec[0]
 
 	// Check entropy type validity
-	if _, err = entropy.GetEntropyCodecName(eType); err != nil {
-		return this, NewIOError(err.Error(), ERR_CREATE_CODEC)
+	checkedEntropyType, err := entropy.GetEntropyCodecName(eType)
+	
+	if err != nil {
+		return nil, NewIOError(err.Error(), ERR_CREATE_CODEC)
 	}
 
+	if checkedEntropyType != entropyCodec {
+	    errMsg := "Unsupported entropy type: " + entropyCodec
+		return nil, NewIOError(errMsg, ERR_CREATE_CODEC)
+	}
+	
 	this.entropyType = eType
-
 	fType := functionType[0]
 
 	// Check transform type validity
-	if _, err = function.GetByteFunctionName(fType); err != nil {
-		return this, err
+	checkedFunctionType, err := function.GetByteFunctionName(fType); 
+	
+	if err != nil {
+		return nil, err
+	}
+
+	if checkedFunctionType != functionType {
+	    errMsg := "Unsupported transform type: " + functionType
+		return nil, NewIOError(errMsg, ERR_CREATE_CODEC)
 	}
 
 	this.transformType = fType
@@ -153,7 +166,7 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 		this.hasher, err = util.NewXXHash(BITSTREAM_TYPE)
 
 		if err != nil {
-			return this, err
+			return nil, err
 		}
 	}
 
@@ -440,7 +453,7 @@ func NewCompressedInputStream(is kanzi.InputStream,
 		return nil, NewIOError(errMsg, ERR_CREATE_BITSTREAM)
 	}
 
-	return this, err
+	return this, nil
 }
 
 func (this *CompressedInputStream) ReadHeader() error {
