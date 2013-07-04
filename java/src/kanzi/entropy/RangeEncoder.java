@@ -37,11 +37,10 @@ public final class RangeEncoder extends AbstractEncoder
 
     private long low;
     private long range;
-    private boolean flushed;
+    private boolean disposed;
     private final int[] baseFreq;
     private final int[] deltaFreq;
     private final OutputBitStream bitstream;
-    private boolean written;
     private final int chunkSize;
 
 
@@ -153,7 +152,6 @@ public final class RangeEncoder extends AbstractEncoder
         }
 
         this.updateFrequencies(value+1);
-        this.written = true;
         return true;
     }
 
@@ -175,19 +173,18 @@ public final class RangeEncoder extends AbstractEncoder
     @Override
     public void dispose()
     {
-        if ((this.written == true) && (this.flushed == false))
-        {
-            // After this call the frequency tables may not be up to date
-            this.flushed = true;
+       if (this.disposed == true)
+          return;
+        
+       this.disposed = true;
 
-            for (int i=0; i<7; i++)
-            {
-                this.bitstream.writeBits(this.low >> 48, 8);
-                this.low <<= 8;
-            }
+       for (int i=0; i<7; i++)
+       {
+          this.bitstream.writeBits(this.low >> 48, 8);
+          this.low <<= 8;
+       }
 
-            this.bitstream.flush();
-        }
+       this.bitstream.flush();
     }
 
 

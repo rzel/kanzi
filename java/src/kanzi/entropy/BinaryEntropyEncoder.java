@@ -26,6 +26,7 @@ public class BinaryEntropyEncoder extends AbstractEncoder
    private long low;
    private long high;
    private final OutputBitStream bitstream;
+   private boolean disposed;
 
    
    public BinaryEntropyEncoder(OutputBitStream bitstream, Predictor predictor)
@@ -98,7 +99,11 @@ public class BinaryEntropyEncoder extends AbstractEncoder
    @Override
    public void dispose()
    {
+      if (this.disposed == true)
+         return;
+      
+      this.disposed = true;
       this.bitstream.writeBits(this.low | 0xFFFFFFL, 56);
-      this.bitstream.flush();
+      this.bitstream.flush();          
    }
 }

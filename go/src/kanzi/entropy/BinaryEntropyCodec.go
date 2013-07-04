@@ -34,6 +34,7 @@ type BinaryEntropyEncoder struct {
 	low       uint64
 	high      uint64
 	bitstream kanzi.OutputBitStream
+	disposed  bool
 }
 
 func NewBinaryEntropyEncoder(bs kanzi.OutputBitStream, predictor Predictor) (*BinaryEntropyEncoder, error) {
@@ -103,6 +104,11 @@ func (this *BinaryEntropyEncoder) BitStream() kanzi.OutputBitStream {
 }
 
 func (this *BinaryEntropyEncoder) Dispose() {
+	if this.disposed == true {
+		return
+	}
+
+	this.disposed = true
 	this.bitstream.WriteBits(this.low|0xFFFFFF, 56)
 	this.bitstream.Flush()
 }

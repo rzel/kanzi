@@ -106,6 +106,7 @@ type EntropyDecoder interface {
 	BitStream() InputBitStream
 
 	// Must be called before getting rid of the entropy decoder
+	// Trying to encode after a call to dispose gives undefined behavior
 	Dispose()
 }
 

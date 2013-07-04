@@ -35,11 +35,10 @@ const (
 type RangeEncoder struct {
 	low       uint64
 	range_    uint64
-	flushed   bool
+	disposed  bool
 	baseFreq  []int
 	deltaFreq []int
 	bitstream kanzi.OutputBitStream
-	written   bool
 	chunkSize int
 }
 
@@ -127,7 +126,6 @@ func (this *RangeEncoder) EncodeByte(b byte) error {
 	}
 
 	this.updateFrequencies(int(value + 1))
-	this.written = true
 	return nil
 }
 
@@ -190,17 +188,18 @@ func (this *RangeEncoder) BitStream() kanzi.OutputBitStream {
 }
 
 func (this *RangeEncoder) Dispose() {
-	if this.written == true && this.flushed == false {
-		// After this call the frequency tables may not be up to date
-		this.flushed = true
-
-		for i := 0; i < 7; i++ {
-			this.bitstream.WriteBits(this.low>>48, 8)
-			this.low <<= 8
-		}
-
-		this.bitstream.Flush()
+	if this.disposed == true {
+		return
 	}
+
+	this.disposed = true
+
+	for i := 0; i < 7; i++ {
+		this.bitstream.WriteBits(this.low>>48, 8)
+		this.low <<= 8
+	}
+
+	this.bitstream.Flush()
 }
 
 type RangeDecoder struct {

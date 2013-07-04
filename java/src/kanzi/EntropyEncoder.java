@@ -29,5 +29,6 @@ public interface EntropyEncoder
     public OutputBitStream getBitStream();
 
     // Must be called before getting rid of the entropy coder
+    // Trying to encode after a call to dispose gives undefined behavior
     public void dispose();
 }

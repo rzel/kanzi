@@ -372,8 +372,6 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 		return NewIOError(err.Error(), ERR_CREATE_CODEC)
 	}
 
-	defer ee.Dispose()
-
 	// Write block 'header' (mode + compressed length)
 	bs := ee.BitStream()
 	written := bs.Written()
@@ -399,6 +397,9 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 		return NewIOError(err.Error(), ERR_PROCESS_BLOCK)
 	}
 
+	// Dispose before displaying statistics. Dispose may write to the bitstream
+	ee.Dispose()
+	
 	// Print info if debug writer is not nil
 	if this.debugWriter != nil {
 		fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d (%d%%)", this.blockId,

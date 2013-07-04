@@ -333,6 +333,12 @@ public class CompressedOutputStream extends OutputStream
          // Entropy encode block
          final int encoded = ee.encode(this.iba2.array, 0, compressedLength);
 
+         // Dispose before displaying statistics. Dispose may write to the bitstream
+         ee.dispose();
+         
+         // Force ee to null to avoid double dispose (in the finally section)
+         ee = null; 
+         
          // Print info if debug stream is not null
          if (this.ds != null)
          {
