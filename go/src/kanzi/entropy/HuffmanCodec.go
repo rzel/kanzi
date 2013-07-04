@@ -398,13 +398,11 @@ func NewHuffmanDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*HuffmanDec
 	this.decodingCache = make([]*HuffmanCacheData, 1<<DECODING_BATCH_SIZE)
 	this.chunkSize = int(chkSize)
 
-	// Default lengths
+	// Default lengths & canonical codes
 	for i := range this.sizes {
 		this.sizes[i] = 8
+		this.codes[i] = i
 	}
-
-	// Create canonical codes
-	GenerateCanonicalCodes(this.sizes, this.codes)
 
 	// Create tree from code sizes
 	this.root = this.createTreeFromSizes(8)

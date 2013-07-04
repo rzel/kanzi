@@ -27,7 +27,7 @@ public class HuffmanDecoder extends AbstractDecoder
 {
     public static final int DECODING_BATCH_SIZE = 10; // in bits
     private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
-    private static final Key ZERO_KEY = new Key(0, 0);
+    private static final Key ZERO_KEY = new Key((short) 0, 0);
 
     private final InputBitStream bitstream;
     private final int[] codes;
@@ -65,12 +65,12 @@ public class HuffmanDecoder extends AbstractDecoder
         this.decodingCache = new CacheData[1 << DECODING_BATCH_SIZE];
         this.chunkSize = chunkSize;
         
-        // Default lengths
+        // Default lengths & canonical codes
         for (int i=0; i<256; i++)
+        {
            this.sizes[i] = 8;
-        
-       // Create canonical codes
-       HuffmanTree.generateCanonicalCodes(this.sizes, this.codes);
+           this.codes[i] = i;
+        }       
 
        // Create tree from code sizes
        this.root = this.createTreeFromSizes(8);
@@ -143,7 +143,7 @@ public class HuffmanDecoder extends AbstractDecoder
        // Create node for each (present) symbol and add to map
        for (int i=this.sizes.length-1; i>=0; i--)
        {
-          final int size = this.sizes[i];
+          final short size = this.sizes[i];
 
           if (size <= 0)
              continue;
@@ -157,19 +157,22 @@ public class HuffmanDecoder extends AbstractDecoder
        while (codeMap.size() > 1)
        {
           final Map.Entry<Key, Node> last = codeMap.pollLastEntry();
-          final Key key = last.getKey();
-          final Key upKey = new Key(key.length-1, key.code >> 1);
-          Node upNode = codeMap.get(upKey);
+          Key key = last.getKey();
+          final int code = key.code;
+          final short length = key.length;
+          key.length = (short) (length-1);
+          key.code = code >> 1;
+          Node upNode = codeMap.get(key);
 
           // Create superior node if it does not exist (length gap > 1)
           if (upNode == null)
           {
-             upNode = new Node((byte) 0, sum >> upKey.length);
-             codeMap.put(upKey, upNode);
+             upNode = new Node((byte) 0, sum >> length);
+             codeMap.put(key, upNode);
           }
 
           // Add the current node to its parent at the correct place
-          if ((key.code & 1) == 1)
+          if ((code & 1) == 1)
              upNode.right = last.getValue();
           else
              upNode.left = last.getValue();
@@ -304,10 +307,10 @@ public class HuffmanDecoder extends AbstractDecoder
     
     private static class Key implements Comparable<Key>
     {
-       final int length;
-       final int code;
-
-       Key(int length, int code)
+       int code;
+       short length;
+       
+       Key(short length, int code)
        {
           this.code = code;
           this.length = length;
