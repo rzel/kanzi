@@ -395,30 +395,29 @@ func NewHuffmanDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*HuffmanDec
 	this.bitstream = bs
 	this.sizes = make([]uint8, 256)
 	this.codes = make([]uint, 256)
-	this.decodingCache = make([]*HuffmanCacheData, 1<<DECODING_BATCH_SIZE)
 	this.chunkSize = int(chkSize)
 
 	// Default lengths & canonical codes
-	for i := range this.sizes {
+	for i := uint(0); i<256; i++ {
 		this.sizes[i] = 8
 		this.codes[i] = i
 	}
 
 	// Create tree from code sizes
 	this.root = this.createTreeFromSizes(8)
-	buildDecodingCache(this.root, this.decodingCache)
-	this.current = &HuffmanCacheData{value: this.root} // point to root
+	this.decodingCache = buildDecodingCache(this.root, make([]*HuffmanCacheData, 1<<DECODING_BATCH_SIZE))
+	this.current = this.decodingCache[0] // point to root
 	return this, nil
 }
 
-func buildDecodingCache(rootNode *HuffmanNode, data []*HuffmanCacheData) []*HuffmanCacheData {
+func buildDecodingCache(rootNode *HuffmanNode, cache []*HuffmanCacheData) []*HuffmanCacheData {
 	end := 1 << DECODING_BATCH_SIZE
 	var previousData *HuffmanCacheData
 
-	if data[0] == nil {
-		previousData = &HuffmanCacheData{}
+	if cache[0] == nil {
+		previousData = &HuffmanCacheData{value: rootNode}
 	} else {
-		previousData = data[0]
+		previousData = cache[0]
 	}
 
 	// Create an array storing a list of tree nodes (shortcuts) for each input value
@@ -458,7 +457,7 @@ func buildDecodingCache(rootNode *HuffmanNode, data []*HuffmanCacheData) []*Huff
 
 			if firstAdded == false {
 				// Add first node of list to array (whether it is a leaf or not)
-				data[val] = previousData
+				cache[val] = previousData
 				firstAdded = true
 			}
 		}
@@ -473,7 +472,7 @@ func buildDecodingCache(rootNode *HuffmanNode, data []*HuffmanCacheData) []*Huff
 		previousData = previousData.next
 	}
 
-	return data
+	return cache
 }
 
 func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
@@ -662,20 +661,25 @@ func (this *HuffmanDecoder) fastDecodeByte() (byte, error) {
 		currNode = this.current.value
 	}
 
-	for currNode.left != nil || currNode.right != nil {
-		r, err := this.bitstream.ReadBit()
+	// The node symbol is 0 only if the node is not a leaf or it codes the value 0.
+	// We need to check if it is a leaf only if the symbol is 0.
+	if currNode.symbol == 0 {
+		for currNode.left != nil || currNode.right != nil {
+			r, err := this.bitstream.ReadBit()
 
-		if err != nil {
-			return 0, err
-		}
+			if err != nil {
+				return 0, err
+			}
 
-		if r == 0 {
-			currNode = currNode.left
-		} else {
-			currNode = currNode.right
+			if r == 0 {
+				currNode = currNode.left
+			} else {
+				currNode = currNode.right
+			}
 		}
 	}
 
+	// Move to next starting point in cache
 	this.current = this.current.next
 	return currNode.symbol, nil
 }

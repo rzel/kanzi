@@ -62,7 +62,6 @@ public class HuffmanDecoder extends AbstractDecoder
         this.bitstream = bitstream;
         this.sizes = new short[256];
         this.codes = new int[256];
-        this.decodingCache = new CacheData[1 << DECODING_BATCH_SIZE];
         this.chunkSize = chunkSize;
         
         // Default lengths & canonical codes
@@ -74,16 +73,16 @@ public class HuffmanDecoder extends AbstractDecoder
 
        // Create tree from code sizes
        this.root = this.createTreeFromSizes(8);
-       buildDecodingCache(this.root, this.decodingCache);
-       this.current = new CacheData(this.root); // point to root
+       this.decodingCache = buildDecodingCache(this.root, new CacheData[1<<DECODING_BATCH_SIZE]);
+       this.current = this.decodingCache[0]; // point to root
     }
 
     
-    private static CacheData[] buildDecodingCache(Node rootNode, CacheData[] data)
+    private static CacheData[] buildDecodingCache(Node rootNode, CacheData[] cache)
     {
        final int end = 1 << DECODING_BATCH_SIZE;
-       CacheData previousData = (data[0] == null) ? new CacheData(null) : data[0];
-
+       CacheData previousData = (cache[0] == null) ? new CacheData(rootNode) : cache[0];
+     
        // Create an array storing a list of tree nodes (shortcuts) for each input value
        for (int val=0; val<end; val++)
        {
@@ -116,7 +115,7 @@ public class HuffmanDecoder extends AbstractDecoder
              if (firstAdded == false)
              {
                 // Add first node of list to array (whether it is a leaf or not)
-                data[val] = previousData;
+                cache[val] = previousData;
                 firstAdded = true;
              }
           }
@@ -130,7 +129,7 @@ public class HuffmanDecoder extends AbstractDecoder
           previousData = previousData.next;
        }
 
-       return data;
+       return cache;
     }
 
 
@@ -167,7 +166,7 @@ public class HuffmanDecoder extends AbstractDecoder
           // Create superior node if it does not exist (length gap > 1)
           if (upNode == null)
           {
-             upNode = new Node((byte) 0, sum >> length);
+             upNode = new Node((byte) 0, sum >> key.length);
              codeMap.put(key, upNode);
           }
 
@@ -288,11 +287,17 @@ public class HuffmanDecoder extends AbstractDecoder
           currNode = this.current.value;
        }
 
-       while ((currNode.left != null) || (currNode.right != null))
+       // The node symbol is 0 only if the node is not a leaf or it codes the value 0.
+       // We need to check if it is a leaf only if the symbol is 0.
+       if (currNode.symbol == 0)
        {
-          currNode = (this.bitstream.readBit() == 0) ? currNode.left : currNode.right;
+          while ((currNode.left != null) || (currNode.right != null))
+          {
+             currNode = (this.bitstream.readBit() == 0) ? currNode.left : currNode.right;
+          }
        }
 
+       // Move to next starting point in cache
        this.current = this.current.next;
        return currNode.symbol;
     }
