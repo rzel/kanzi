@@ -17,6 +17,7 @@ package transform
 
 const (
 	RESET_THRESHOLD = 64
+	LIST_LENGTH     = 17
 )
 
 type Payload struct {
@@ -39,34 +40,6 @@ func NewMTFT(sz uint) (*MTFT, error) {
 	this.heads = make([]*Payload, 16)
 	this.lengths = make([]int, 16)
 	this.buckets = make([]byte, 256)
-
-	// Initialize the linked lists: 1 item in bucket 0 and 17 in each other
-	array := make([]*Payload, 256)
-	array[0] = &Payload{value: 0}
-	previous := array[0]
-	this.heads[0] = previous
-	this.lengths[0] = 1
-	this.buckets[0] = 0
-	listIdx := byte(0)
-
-	for i := 1; i < 256; i++ {
-		array[i] = &Payload{value: byte(i)}
-
-		if (i-1)%17 == 0 {
-			listIdx++
-			this.heads[listIdx] = array[i]
-			this.lengths[listIdx] = 17
-		}
-
-		this.buckets[i] = listIdx
-		previous.next = array[i]
-		array[i].previous = previous
-		previous = array[i]
-	}
-
-	// Create a fake end payload so that every payload in every list has a successor
-	this.anchor = &Payload{value: 0}
-	previous.next = this.anchor
 	return this, nil
 }
 
@@ -79,18 +52,6 @@ func (this *MTFT) SetSize(sz uint) bool {
 	return true
 }
 
-func (this *MTFT) Forward(input []byte) []byte {
-	this.balanceLists(true)
-	end := len(input)
-
-	if this.size != 0 {
-		end = int(this.size)
-	}
-
-	// This code is on the critical speed path
-	return this.moveToFront(input, end)
-}
-
 func (this *MTFT) Inverse(input []byte) []byte {
 	indexes := this.buckets
 
@@ -98,10 +59,10 @@ func (this *MTFT) Inverse(input []byte) []byte {
 		indexes[i] = byte(i)
 	}
 
-	end := len(input)
+	end := int(this.size)
 
-	if this.size != 0 {
-		end = int(this.size)
+	if end == 0 {
+		end = len(input)
 	}
 
 	for i := 0; i < end; i++ {
@@ -129,8 +90,40 @@ func (this *MTFT) Inverse(input []byte) []byte {
 	return input
 }
 
-// Recreate one list with 1 item and 15 lists with 17 items
+// Initialize the linked lists: 1 item in bucket 0 and LIST_LENGTH in each other
+// Used by forward() only
+func (this *MTFT) initLists() {
+	array := make([]*Payload, 256)
+	array[0] = &Payload{value: 0}
+	previous := array[0]
+	this.heads[0] = previous
+	this.lengths[0] = 1
+	this.buckets[0] = 0
+	listIdx := byte(0)
+
+	for i := 1; i < 256; i++ {
+		array[i] = &Payload{value: byte(i)}
+
+		if (i-1)%LIST_LENGTH == 0 {
+			listIdx++
+			this.heads[listIdx] = array[i]
+			this.lengths[listIdx] = LIST_LENGTH
+		}
+
+		this.buckets[i] = listIdx
+		previous.next = array[i]
+		array[i].previous = previous
+		previous = array[i]
+	}
+
+	// Create a fake end payload so that every payload in every list has a successor
+	this.anchor = &Payload{value: 0}
+	previous.next = this.anchor
+}
+
+// Recreate one list with 1 item and 15 lists with LIST_LENGTH items
 // Update lengths and buckets accordingly.
+// Used by forward() only
 func (this *MTFT) balanceLists(resetValues bool) {
 	this.lengths[0] = 1
 	p := this.heads[0].next
@@ -143,9 +136,9 @@ func (this *MTFT) balanceLists(resetValues bool) {
 
 	for listIdx := byte(1); listIdx < 16; listIdx++ {
 		this.heads[listIdx] = p
-		this.lengths[listIdx] = 17
+		this.lengths[listIdx] = LIST_LENGTH
 
-		for n := 0; n <= 16; n++ {
+		for n := 0; n < LIST_LENGTH; n++ {
 			if resetValues == true {
 				val++
 				p.value = val
@@ -157,14 +150,26 @@ func (this *MTFT) balanceLists(resetValues bool) {
 	}
 }
 
-func (this *MTFT) moveToFront(values []byte, end int) []byte {
+func (this *MTFT) Forward(input []byte) []byte {
+	if this.anchor == nil {
+		this.initLists()
+	} else {
+		this.balanceLists(true)
+	}
+
+	end := int(this.size)
+
+	if end == 0 {
+		end = len(input)
+	}
+
 	previous := this.heads[0].value
 
 	for ii := 0; ii < end; ii++ {
-		current := values[ii]
+		current := input[ii]
 
 		if current == previous {
-			values[ii] = byte(0)
+			input[ii] = byte(0)
 			continue
 		}
 
@@ -183,7 +188,7 @@ func (this *MTFT) moveToFront(values []byte, end int) []byte {
 			idx++
 		}
 
-		values[ii] = byte(idx)
+		input[ii] = byte(idx)
 
 		// Unlink (the end anchor ensures p.next != nil)
 		p.previous.next = p.next
@@ -213,5 +218,5 @@ func (this *MTFT) moveToFront(values []byte, end int) []byte {
 		previous = current
 	}
 
-	return values
+	return input
 }

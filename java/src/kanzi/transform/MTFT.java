@@ -26,12 +26,13 @@ import kanzi.ByteTransform;
 public final class MTFT implements ByteTransform
 {
     private static final int RESET_THRESHOLD = 64;
+    private static final int LIST_LENGTH = 17;
 
     private int size;
     private final Payload[] heads; // linked lists
-    private final int[] lengths; // length of linked list
-    private final byte[] buckets; // index of list
-    private final Payload anchor;
+    private final int[] lengths;   // length of linked list
+    private final byte[] buckets;  // index of list
+    private Payload anchor;
     
 
     public MTFT()
@@ -42,54 +43,13 @@ public final class MTFT implements ByteTransform
 
     public MTFT(int size)
     {
-        if (size < 0) // size == 0 has a special meaning (see forward())
+        if (size < 0)
             throw new IllegalArgumentException("Invalid size parameter (must be at least 0)");
 
         this.size = size;
         this.heads = new Payload[16];
         this.lengths = new int[16];
         this.buckets = new byte[256];
-
-        // Initialize the linked lists: 1 item in bucket 0 and 17 in each other
-        Payload[] array = new Payload[256];
-        array[0] = new Payload((byte) 0);
-        Payload previous = array[0];
-        this.heads[0] = previous;
-        this.lengths[0] = 1;
-        this.buckets[0] = 0;
-        byte listIdx = 0;
-                
-        for (int i=1; i<256; i++)
-        {
-           array[i] = new Payload((byte) i);
-
-           if ((i-1) % 17 == 0)
-           {
-              listIdx++;
-              this.heads[listIdx] = array[i];
-              this.lengths[listIdx] = 17;
-           }
-
-           this.buckets[i] = listIdx;
-           previous.next = array[i];
-           array[i].previous = previous;
-           previous = array[i];
-        }
- 
-        // Create a fake end payload so that every payload in every list has a successor
-        this.anchor = new Payload((byte) 0);
-        previous.next = this.anchor;
-    }
-
-
-    @Override
-    public byte[] forward(byte[] input, int blkptr)
-    {
-        this.balanceLists(true);
-        final int end = (this.size == 0) ? input.length : blkptr + this.size;
-
-        // This code is on the critical speed path
-        return this.moveToFront(input, blkptr, end);
     }
 
 
@@ -151,8 +111,44 @@ public final class MTFT implements ByteTransform
     }
 
 
-    // Recreate one list with 1 item and 15 lists with 17 items
+    // Initialize the linked lists: 1 item in bucket 0 and LIST_LENGTH in each other
+    // Used by forward() only
+    private void initLists()
+    {
+        Payload[] array = new Payload[256];
+        array[0] = new Payload((byte) 0);
+        Payload previous = array[0];
+        this.heads[0] = previous;
+        this.lengths[0] = 1;
+        this.buckets[0] = 0;
+        byte listIdx = 0;
+                
+        for (int i=1; i<256; i++)
+        {
+           array[i] = new Payload((byte) i);
+
+           if ((i-1) % LIST_LENGTH == 0)
+           {
+              listIdx++;
+              this.heads[listIdx] = array[i];
+              this.lengths[listIdx] = LIST_LENGTH;
+           }
+
+           this.buckets[i] = listIdx;
+           previous.next = array[i];
+           array[i].previous = previous;
+           previous = array[i];
+        }
+ 
+        // Create a fake end payload so that every payload in every list has a successor
+        this.anchor = new Payload((byte) 0);
+        previous.next = this.anchor;   
+    }
+    
+
+    // Recreate one list with 1 item and 15 lists with LIST_LENGTH items
     // Update lengths and buckets accordingly. 
+    // Used by forward() only
     private void balanceLists(boolean resetValues)
     {
        this.lengths[0] = 1;
@@ -168,9 +164,9 @@ public final class MTFT implements ByteTransform
        for (byte listIdx=1; listIdx<16; listIdx++)
        {
           this.heads[listIdx] = p;
-          this.lengths[listIdx] = 17;
+          this.lengths[listIdx] = LIST_LENGTH;
 
-          for (int n=0; n<=16; n++)
+          for (int n=0; n<LIST_LENGTH; n++)
           {
              if (resetValues == true)
                 p.value = ++val;
@@ -182,17 +178,24 @@ public final class MTFT implements ByteTransform
     }
 
 
-    private byte[] moveToFront(byte[] values, int start, int end)
+    @Override
+    public byte[] forward(byte[] input, int blkptr)
     {
+        if (this.anchor == null)
+           this.initLists();
+        else
+           this.balanceLists(true);
+        
+       final int end = (this.size == 0) ? input.length : blkptr + this.size;
        byte previous = this.heads[0].value;
 
-       for (int ii=start; ii<end; ii++)
+       for (int ii=blkptr; ii<end; ii++)
        {
-          final byte current = values[ii];
+          final byte current = input[ii];
 
           if (current == previous)
           {
-             values[ii] = 0;
+             input[ii] = 0;
              continue;
           }
 
@@ -211,7 +214,7 @@ public final class MTFT implements ByteTransform
              idx++;
           }
 
-          values[ii] = (byte) idx;
+          input[ii] = (byte) idx;
 
           // Unlink (the end anchor ensures p.next != null)
           p.previous.next = p.next;
@@ -240,7 +243,7 @@ public final class MTFT implements ByteTransform
           previous = current;
        }
 
-       return values;
+       return input;
     }
 
 
