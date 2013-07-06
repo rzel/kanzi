@@ -479,7 +479,6 @@ func buildDecodingCache(rootNode *HuffmanNode, cache []*HuffmanCacheData) []*Huf
 func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
 	codeMap := make(map[int]*HuffmanNode)
 	sum := uint(1 << maxSize)
-	keys := make([]int, 256)
 	tree, _ := util.NewIntBTree() //use binary tree
 	codeMap[0] = &HuffmanNode{symbol: byte(0), weight: sum}
 	tree.Add(0) // add key(0,0)
@@ -492,7 +491,7 @@ func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
 			continue
 		}
 
-		key := (int(size) << 16) | int(this.codes[i])
+		key := (int(size) << 24) | int(this.codes[i])
 		tree.Add(key)
 		value := &HuffmanNode{symbol: byte(i), weight: sum >> size}
 		codeMap[key] = value
@@ -503,9 +502,9 @@ func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
 		key, _ := tree.Max()
 		tree.Remove(key)
 		node := codeMap[key]
-		l := (key >> 16) & 0xFFFF
-		c := key & 0xFFFF
-		upKey := ((l - 1) << 16) | ((c >> 1) & 0xFF)
+		l := (key >> 24) & 0xFFFF
+		c := key & 0xFFFFFF
+		upKey := ((l - 1) << 24) | (c >> 1)
 		upNode := codeMap[upKey]
 
 		// Create superior node if it does not exist (length gap > 1)
@@ -524,7 +523,7 @@ func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
 	}
 
 	// Return the last element of the map (root node)
-	return codeMap[keys[0]]
+	return codeMap[0]
 }
 
 func (this *HuffmanDecoder) ReadLengths() error {
