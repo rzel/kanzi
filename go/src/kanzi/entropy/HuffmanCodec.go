@@ -269,7 +269,6 @@ func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 
 	// Create canonical codes
 	GenerateCanonicalCodes(this.sizes, this.codes)
-	prevSize := uint8(1)
 	egenc, err := NewExpGolombEncoder(this.bitstream, true)
 
 	if err != nil {
@@ -278,9 +277,26 @@ func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 
 	// Transmit code lengths only, frequencies and codes do not matter
 	// Unary encode the length difference
+	prevSize := uint8(2)
+	zeros := 0
+
 	for i := 0; i < 256; i++ {
-		egenc.EncodeByte(byte(this.sizes[i] - prevSize))
-		prevSize = this.sizes[i]
+		currSize := this.sizes[i]
+		egenc.EncodeByte(byte(currSize - prevSize))
+
+		if currSize == 0 {
+			zeros++
+		} else {
+			zeros = 0
+		}
+
+		// If there is one zero size symbol, save a few bits by avoiding the
+		// encoding of a big size difference twice
+		// EG: 13 13 0 13 14 ... encoded as 0 -13 0 +1 instead of 0 -13 +13 0 +1
+		// If there are several zero size symbols in a row, use regular encoding
+		if zeros != 1 {
+			prevSize = currSize
+		}
 	}
 
 	return nil
@@ -399,7 +415,7 @@ func NewHuffmanDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*HuffmanDec
 	this.chunkSize = int(chkSize)
 
 	// Default lengths & canonical codes
-	for i := uint(0); i<256; i++ {
+	for i := uint(0); i < 256; i++ {
 		this.sizes[i] = 8
 		this.codes[i] = i
 	}
@@ -534,25 +550,43 @@ func (this *HuffmanDecoder) ReadLengths() error {
 		return err
 	}
 
-	szDelta, err := egdec.DecodeByte()
+	currSize, err := egdec.DecodeByte()
 
 	if err != nil {
 		return err
 	}
 
-	buf[0] = uint8(1 + szDelta)
-	maxSize := buf[0]
+	currSize += 2
+	maxSize := currSize
+	prevSize := currSize
+	buf[0] = uint8(currSize)
+	zeros := 0
 
 	// Read lengths
 	for i := 1; i < 256; i++ {
-		if szDelta, err = egdec.DecodeByte(); err != nil {
+		if currSize, err = egdec.DecodeByte(); err != nil {
 			return err
 		}
 
-		buf[i] = uint8(buf[i-1] + szDelta)
+		currSize += prevSize
+		buf[i] = uint8(currSize)
+
+		if currSize == 0 {
+			zeros++
+		} else {
+			zeros = 0
+		}
 
 		if maxSize < buf[i] {
 			maxSize = buf[i]
+		}
+
+		// If there is one zero size symbol, save a few bits by avoiding the
+		// encoding of a big size difference twice
+		// EG: 13 13 0 13 14 ... encoded as 0 -13 0 +1 instead of 0 -13 +13 0 +1
+		// If there are several zero size symbols in a row, use regular decoding
+		if zeros != 1 {
+			prevSize = currSize
 		}
 	}
 

@@ -82,17 +82,27 @@ public class HuffmanEncoder extends AbstractEncoder
 
         // Create canonical codes
         HuffmanTree.generateCanonicalCodes(this.sizes, this.codes);      
-        int prevSize = 1;
         ExpGolombEncoder egenc = new ExpGolombEncoder(this.bitstream, true);
-       
+
         // Transmit code lengths only, frequencies and codes do not matter
         // Unary encode the length difference
+        int prevSize = 2;
+        int zeros = 0;
+        
         for (int i=0; i<256; i++)
         {
-           egenc.encodeByte((byte) (this.sizes[i] - prevSize));
-           prevSize = this.sizes[i];
+           final int currSize = this.sizes[i];           
+           egenc.encodeByte((byte) (currSize - prevSize));
+           zeros = (currSize == 0) ? zeros+1 : 0;          
+    
+           // If there is one zero size symbol, save a few bits by avoiding the 
+           // encoding of a big size difference twice
+           // EG: 13 13 0 13 14 ... encoded as 0 -13 0 +1 instead of 0 -13 +13 0 +1
+           // If there are several zero size symbols in a row, use regular encoding
+           if (zeros != 1)
+              prevSize = currSize;
         }
-        
+
         return true;
     }
 

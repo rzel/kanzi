@@ -186,16 +186,28 @@ public class HuffmanDecoder extends AbstractDecoder
     {
         final short[] buf = this.sizes;
         ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
-        buf[0] = (short) (1 + egdec.decodeByte());
-        int maxSize = buf[0];
+        int currSize = 2 + egdec.decodeByte();
+        int maxSize = currSize;
+        int prevSize = currSize;
+        buf[0] = (short) currSize;
+        int zeros = 0;
         
         // Read lengths
         for (int i=1; i<256; i++)
         {
-           buf[i] = (short) (buf[i-1] + egdec.decodeByte());
-      
-           if (maxSize < buf[i])
-              maxSize = buf[i];
+           currSize = prevSize + egdec.decodeByte();
+           buf[i] = (short) currSize;
+           zeros = (currSize == 0) ? zeros+1 : 0;
+  
+           if (maxSize < currSize)
+              maxSize = currSize;
+                      
+           // If there is one zero size symbol, save a few bits by avoiding the 
+           // encoding of a big size difference twice
+           // EG: 13 13 0 13 14 ... encoded as 0 -13 0 +1 instead of 0 -13 +13 0 +1
+           // If there are several zero size symbols in a row, use regular decoding
+           if (zeros != 1)
+              prevSize = currSize;
         }
 
         // Create canonical codes
