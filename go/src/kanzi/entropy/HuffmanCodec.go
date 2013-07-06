@@ -19,6 +19,7 @@ import (
 	"container/list"
 	"errors"
 	"kanzi"
+	"kanzi/util"
 	"sort"
 )
 
@@ -479,7 +480,7 @@ func (this *HuffmanDecoder) createTreeFromSizes(maxSize uint) *HuffmanNode {
 	codeMap := make(map[int]*HuffmanNode)
 	sum := uint(1 << maxSize)
 	keys := make([]int, 256)
-	tree := kanzi.IntBTree{} //use binary tree
+	tree, _ := util.NewIntBTree() //use binary tree
 	codeMap[0] = &HuffmanNode{symbol: byte(0), weight: sum}
 	tree.Add(0) // add key(0,0)
 
