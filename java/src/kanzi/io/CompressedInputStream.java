@@ -190,25 +190,73 @@ public class CompressedInputStream extends InputStream
    }
 
 
-   // Need to override this method because the default implementation
-   // in Java gobbles the IOException except on first byte (uh?)
+    /**
+     * Reads some number of bytes from the input stream and stores them into
+     * the buffer array <code>b</code>. The number of bytes actually read is
+     * returned as an integer.  This method blocks until input data is
+     * available, end of file is detected, or an exception is thrown.
+     *
+     * <p> If the length of <code>b</code> is zero, then no bytes are read and
+     * <code>0</code> is returned; otherwise, there is an attempt to read at
+     * least one byte. If no byte is available because the stream is at the
+     * end of the file, the value <code>-1</code> is returned; otherwise, at
+     * least one byte is read and stored into <code>b</code>.
+     *
+     * <p> The first byte read is stored into element <code>b[0]</code>, the
+     * next one into <code>b[1]</code>, and so on. The number of bytes read is,
+     * at most, equal to the length of <code>b</code>. Let <i>k</i> be the
+     * number of bytes actually read; these bytes will be stored in elements
+     * <code>b[0]</code> through <code>b[</code><i>k</i><code>-1]</code>,
+     * leaving elements <code>b[</code><i>k</i><code>]</code> through
+     * <code>b[b.length-1]</code> unaffected.
+     *
+     * <p> The <code>read(b)</code> method for class <code>InputStream</code>
+     * has the same effect as: <pre><code> read(b, 0, b.length) </code></pre>
+     *
+     * @param      b   the buffer into which the data is read.
+     * @return     the total number of bytes read into the buffer, or
+     *             <code>-1</code> if there is no more data because the end of
+     *             the stream has been reached.
+     * @exception  IOException  If the first byte cannot be read for any reason
+     * other than the end of the file, if the input stream has been closed, or
+     * if some other I/O error occurs.
+     * @exception  NullPointerException  if <code>b</code> is <code>null</code>.
+     * @see        java.io.InputStream#read(byte[], int, int)
+     */
    @Override
    public int read(byte[] array, int off, int len) throws IOException
    {
-      if (len <= 0)
-         return 0;
+      int remaining = len;
 
-      for (int i=0; i<len ; i++)
+      while (remaining > 0)
       {
-         int c = this.read();
+         // Limit to number of available bytes in buffer
+         final int lenChunk = (this.iba1.index + remaining < this.maxIdx) ? remaining : 
+                 this.maxIdx - this.iba1.index;
 
-         if (c == -1)
-            return i;
+         if (lenChunk > 0)
+         {
+            // Process a chunk of in-buffer data. No access to bitstream required
+            System.arraycopy(this.iba1.array, this.iba1.index, array, off, lenChunk);
+            this.iba1.index += lenChunk;
+            off += lenChunk;
+            remaining -= lenChunk;
 
-         array[off+i] = (byte) c;
+            if (remaining == 0)
+               break;
+         }
+         
+         // Buffer empty, time to decode
+         int c2 = this.read();
+
+         if (c2 == -1)
+            break;
+
+         array[off++] = (byte) c2;
+         remaining--;
       }
 
-      return len;
+      return len - remaining;
    }
 
 

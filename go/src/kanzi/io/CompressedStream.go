@@ -112,7 +112,7 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 	if os == nil {
 		return nil, errors.New("Invalid null output stream parameter")
 	}
-	
+
 	if blockSize > MAX_BLOCK_SIZE {
 		errMsg := fmt.Sprintf("The block size must be at most %d", MAX_BLOCK_SIZE)
 		return nil, errors.New(errMsg)
@@ -134,28 +134,28 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 
 	// Check entropy type validity
 	checkedEntropyType, err := entropy.GetEntropyCodecName(eType)
-	
+
 	if err != nil {
 		return nil, NewIOError(err.Error(), ERR_CREATE_CODEC)
 	}
 
 	if checkedEntropyType != entropyCodec {
-	    errMsg := "Unsupported entropy type: " + entropyCodec
+		errMsg := "Unsupported entropy type: " + entropyCodec
 		return nil, NewIOError(errMsg, ERR_CREATE_CODEC)
 	}
-	
+
 	this.entropyType = eType
 	fType := functionType[0]
 
 	// Check transform type validity
-	checkedFunctionType, err := function.GetByteFunctionName(fType); 
-	
+	checkedFunctionType, err := function.GetByteFunctionName(fType)
+
 	if err != nil {
 		return nil, err
 	}
 
 	if checkedFunctionType != functionType {
-	    errMsg := "Unsupported transform type: " + functionType
+		errMsg := "Unsupported transform type: " + functionType
 		return nil, NewIOError(errMsg, ERR_CREATE_CODEC)
 	}
 
@@ -219,34 +219,32 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 // Implement the kanzi.OutputStream interface
 func (this *CompressedOutputStream) Write(array []byte) (int, error) {
 	startChunk := 0
-	lenChunk := len(array) - startChunk
+	remaining := len(array)
+	bSize := int(this.blockSize)
 
-	if lenChunk+this.curIdx >= int(this.blockSize) {
-		// Limit to number of available bytes
-		lenChunk = int(this.blockSize) - this.curIdx
-	}
-
-	for lenChunk > 0 {
-		copy(this.buffer1[this.curIdx:], array[startChunk:startChunk+lenChunk])
-		this.curIdx += lenChunk
-		startChunk += lenChunk
-
-		if this.curIdx >= int(this.blockSize) {
+	for remaining > 0 {
+		if this.curIdx >= bSize {
 			// Buffer full, time to encode
 			if err := this.processBlock(); err != nil {
-				return startChunk, err
+				return len(array) - remaining, err
 			}
 		}
 
-		lenChunk = len(array) - startChunk
+		lenChunk := len(array) - startChunk
 
-		if lenChunk+this.curIdx >= int(this.blockSize) {
-			// Limit to number of available bytes
-			lenChunk = int(this.blockSize) - this.curIdx
+		if lenChunk+this.curIdx >= bSize {
+			// Limit to number of available bytes in buffer
+			lenChunk = bSize - this.curIdx
 		}
+
+		// Process a chunk of in-buffer data. No access to bitstream required
+		copy(this.buffer1[this.curIdx:], array[startChunk:startChunk+lenChunk])
+		this.curIdx += lenChunk
+		startChunk += lenChunk
+		remaining -= lenChunk
 	}
 
-	return len(array), nil
+	return len(array) - remaining, nil
 }
 
 // Implement the kanzi.OutputStream interface
@@ -272,7 +270,7 @@ func (this *CompressedOutputStream) Close() error {
 	// End block of size 0
 	this.obs.WriteBits(SMALL_BLOCK_MASK, 8)
 	this.obs.Close()
-	
+
 	// Release resources
 	this.buffer1 = EMPTY_BYTE_SLICE
 	this.buffer2 = EMPTY_BYTE_SLICE
@@ -399,7 +397,7 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 
 	// Dispose before displaying statistics. Dispose may write to the bitstream
 	ee.Dispose()
-	
+
 	// Print info if debug writer is not nil
 	if this.debugWriter != nil {
 		fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d (%d%%)", this.blockId,
@@ -484,7 +482,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 		return NewIOError(errMsg, ERR_READ_FILE)
 	}
 
-	version := int(header >> 41) & 0x7F
+	version := int(header>>41) & 0x7F
 
 	// Sanity check
 	if version != BITSTREAM_FORMAT_VERSION {
@@ -502,10 +500,10 @@ func (this *CompressedInputStream) ReadHeader() error {
 	}
 
 	// Read entropy codec
-	this.entropyType = byte(header >> 33) & 0x7F
+	this.entropyType = byte(header>>33) & 0x7F
 
 	// Read transform
-	this.transformType = byte(header >> 26) & 0x7F
+	this.transformType = byte(header>>26) & 0x7F
 
 	// Read block size
 	this.blockSize = uint(header & 0x03FFFFFF)
@@ -569,19 +567,20 @@ func (this *CompressedInputStream) Close() error {
 // Implement kanzi.InputStream interface
 func (this *CompressedInputStream) Read(array []byte) (int, error) {
 	startChunk := 0
+	remaining := len(array)
 
-	for true {
+	for remaining > 0 {
 		if this.curIdx >= this.maxIdx {
 			var err error
 
 			// Buffer empty, time to decode
 			if this.maxIdx, err = this.processBlock(); err != nil {
-				return startChunk, err
+				return len(array) - remaining, err
 			}
 
 			if this.maxIdx == 0 {
 				// Reached end of stream
-				return startChunk, nil
+				return len(array) - remaining, nil
 			}
 		}
 
@@ -592,16 +591,14 @@ func (this *CompressedInputStream) Read(array []byte) (int, error) {
 			lenChunk = this.maxIdx - this.curIdx
 		}
 
-		if lenChunk == 0 {
-			break
-		}
-
+		// Process a chunk of in-buffer data. No access to bitstream required
 		copy(array[startChunk:], this.buffer1[this.curIdx:this.curIdx+lenChunk])
+		remaining -= lenChunk
 		this.curIdx += lenChunk
 		startChunk += lenChunk
 	}
 
-	return len(array), nil
+	return len(array) - remaining, nil
 }
 
 func (this *CompressedInputStream) processBlock() (int, error) {
@@ -727,7 +724,7 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 		}
 
 		decoded = int(oIdx)
-		
+
 		// Print info if debug writer is not nil
 		if this.debugWriter != nil {
 			fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d", this.blockId,

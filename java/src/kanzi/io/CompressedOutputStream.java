@@ -136,6 +136,66 @@ public class CompressedOutputStream extends OutputStream
    }
 
 
+    /**
+     * Writes <code>len</code> bytes from the specified byte array
+     * starting at offset <code>off</code> to this output stream.
+     * The general contract for <code>write(b, off, len)</code> is that
+     * some of the bytes in the array <code>b</code> are written to the
+     * output stream in order; element <code>b[off]</code> is the first
+     * byte written and <code>b[off+len-1]</code> is the last byte written
+     * by this operation.
+     * <p>
+     * The <code>write</code> method of <code>OutputStream</code> calls
+     * the write method of one argument on each of the bytes to be
+     * written out. Subclasses are encouraged to override this method and
+     * provide a more efficient implementation.
+     * <p>
+     * If <code>b</code> is <code>null</code>, a
+     * <code>NullPointerException</code> is thrown.
+     * <p>
+     * If <code>off</code> is negative, or <code>len</code> is negative, or
+     * <code>off+len</code> is greater than the length of the array
+     * <code>b</code>, then an <tt>IndexOutOfBoundsException</tt> is thrown.
+     *
+     * @param      b     the data.
+     * @param      off   the start offset in the data.
+     * @param      len   the number of bytes to write.
+     * @exception  IOException  if an I/O error occurs. In particular,
+     *             an <code>IOException</code> is thrown if the output
+     *             stream is closed.
+     */
+    @Override
+    public void write(byte[] array, int off, int len) throws IOException 
+    {
+      int remaining = len;
+
+      while (remaining > 0)
+      {
+         // Limit to number of available bytes in buffer
+         final int lenChunk = (this.iba1.index + remaining < this.iba1.array.length) ? remaining : 
+                 this.iba1.array.length - this.iba1.index;
+
+         if (lenChunk > 0)
+         {
+            // Process a chunk of in-buffer data. No access to bitstream required
+            System.arraycopy(array, off, this.iba1.array, this.iba1.index, lenChunk);
+            this.iba1.index += lenChunk;
+            off += lenChunk;
+            remaining -= lenChunk;
+
+            if (remaining == 0)
+               break;
+         }
+         
+         // Buffer full, time to encode
+         this.write(array[off]);
+         off++;
+         remaining--;
+      }
+   }
+
+
+    
    /**
     * Writes the specified byte to this output stream. The general
     * contract for <code>write</code> is that one byte is written
@@ -151,11 +211,11 @@ public class CompressedOutputStream extends OutputStream
    @Override
    public void write(int b) throws IOException
    {
-      this.iba1.array[this.iba1.index++] = (byte) b;
-
       // If the buffer is full, time to encode
       if (this.iba1.index >= this.iba1.array.length)
          this.processBlock();
+
+      this.iba1.array[this.iba1.index++] = (byte) b;
    }
 
 
