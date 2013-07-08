@@ -119,7 +119,7 @@ public class CompressedInputStream extends InputStream
          if (this.ds != null)
          {
             this.ds.println("Checksum set to "+(this.hasher != null));
-            this.ds.println("Block size set to "+this.blockSize);
+            this.ds.println("Block size set to "+this.blockSize+" bytes");
             String w1 = new FunctionFactory().getName((byte) this.transformType);
 
             if ("NONE".equals(w1))

@@ -257,9 +257,9 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
            if (arg.equals("-help"))
            {
               printOut("-help                : display this message", true);
-              printOut("-verbose             : display the size of the block at each stage (in bytes, floor rounding if fractional)", true);
+              printOut("-verbose             : display the block size at each stage (in bytes, floor rounding if fractional)", true);
               printOut("-overwrite           : overwrite the output file if it already exists", true);
-              printOut("-silent              : silent mode: no output (except warnings and errors)", true);
+              printOut("-silent              : silent mode, no output (except warnings and errors)", true);
               printOut("-input=<inputName>   : mandatory name of the input file to decode", true);
               printOut("-output=<outputName> : optional name of the output file", true);
               System.exit(0);

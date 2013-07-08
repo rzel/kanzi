@@ -41,9 +41,9 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 
 	// Define flags
 	var help = flag.Bool("help", false, "display the help message")
-	var verbose = flag.Bool("verbose", false, "display the size of the block at each stage (in bytes, floor rounding if fractional)")
+	var verbose = flag.Bool("verbose", false, "display the block size at each stage (in bytes, floor rounding if fractional)")
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
-	var silent = flag.Bool("silent", false, "silent mode: no output (except warnings and errors)")
+	var silent = flag.Bool("silent", false, "silent mode, no output (except warnings and errors)")
 	var inputName = flag.String("input", "", "mandatory name of the input file to decode")
 	var outputName = flag.String("output", "", "optional name of the output file")
 
@@ -52,8 +52,8 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 
 	if *help == true {
 		printOut("-help              : display this message", true)
-		printOut("-verbose           : display the size of the block at each stage (in bytes, floor rounding if fractional)", true)
-		printOut("-silent            : silent mode: no output (except warnings and errors)", true)
+		printOut("-verbose           : display the block size at each stage (in bytes, floor rounding if fractional)", true)
+		printOut("-silent            : silent mode, no output (except warnings and errors)", true)
 		printOut("-overwrite         : overwrite the output file if it already exists", true)
 		printOut("-input=<filename>  : mandatory name of the input file to encode", true)
 		printOut("-output=<filename> : optional name of the output file", true)

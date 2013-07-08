@@ -122,7 +122,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
    {
       printOut("Input file name set to '" + this.inputName + "'", this.verbose);
       printOut("Output file name set to '" + this.outputName + "'", this.verbose);
-      printOut("Block size set to "+this.blockSize, this.verbose);
+      printOut("Block size set to "+this.blockSize+ " bytes", this.verbose);
       printOut("Debug set to "+this.verbose, this.verbose);
       printOut("Overwrite set to "+this.overwrite, this.verbose);
       printOut("Checksum set to "+this.checksum, this.verbose);
@@ -252,7 +252,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
     private static void processCommandLine(String args[], Map<String, Object> map)
     {
         // Set default values
-        int blockSize = 100000;
+        int blockSize = 1024 * 1024; // 1 MB
         boolean verbose = false;
         boolean silent = false;
         boolean overwrite = false;
@@ -269,12 +269,12 @@ public class BlockCompressor implements Runnable, Callable<Integer>
            if (arg.equals("-help"))
            {
                printOut("-help                : display this message", true);
-               printOut("-verbose             : display the size of the block at each stage (in bytes, floor rounding if fractional)", true);
-               printOut("-silent              : silent mode: no output (except warnings and errors)", true);
+               printOut("-verbose             : display the block size at each stage (in bytes, floor rounding if fractional)", true);
+               printOut("-silent              : silent mode, no output (except warnings and errors)", true);
                printOut("-overwrite           : overwrite the output file if it already exists", true);
                printOut("-input=<inputName>   : mandatory name of the input file to encode", true);
                printOut("-output=<outputName> : optional name of the output file (defaults to <input.knz>)", true);
-               printOut("-block=<size>        : size of the blocks (max 16 MB / min 1KB / default 100 KB)", true);
+               printOut("-block=<size>        : size of the input blocks (max 16MB - 4 / min 1KB / default 1MB)", true);
                printOut("-entropy=            : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true);
                printOut("-transform=          : transform to use [None|Block*|Snappy|LZ4|RLT]", true);
                printOut("-checksum =          : enable block checksum", true);
@@ -315,10 +315,24 @@ public class BlockCompressor implements Runnable, Callable<Integer>
            else if (arg.startsWith("-block="))
            {
               arg = arg.substring(7).trim();
+              String str = arg.toUpperCase();
+              int scale = 1;              
 
               try
               {
-                 blockSize = Integer.parseInt(arg);
+                 // Process K or M suffix
+                 if ('K' == str.charAt(str.length()-1))
+                 {
+                    scale = 1024;
+                    str = str.substring(0, str.length()-1);
+                 }
+                 else if ('M' == str.charAt(str.length()-1))
+                 {
+                    scale = 1024 * 1024;
+                    str = str.substring(0, str.length()-1);
+                 }
+                 
+                 blockSize = scale * Integer.parseInt(str);
               }
               catch (NumberFormatException e)
               {

@@ -515,7 +515,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 
 	if this.debugWriter != nil {
 		fmt.Fprintf(this.debugWriter, "Checksum set to %v\n", (this.hasher != nil))
-		fmt.Fprintf(this.debugWriter, "Block size set to %d\n", this.blockSize)
+		fmt.Fprintf(this.debugWriter, "Block size set to %d bytes\n", this.blockSize)
 		w1, err := function.GetByteFunctionName(this.transformType)
 
 		if err != nil {

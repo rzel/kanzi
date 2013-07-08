@@ -21,6 +21,7 @@ import (
 	"kanzi/io"
 	"os"
 	"strings"
+	"strconv"
 	"time"
 )
 
@@ -46,12 +47,12 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 
 	// Define flags
 	var help = flag.Bool("help", false, "display the help message")
-	var verbose = flag.Bool("verbose", false, "display the size of the block at each stage (in bytes, floor rounding if fractional)")
-	var silent = flag.Bool("silent", false, "silent mode: no output (except warnings and errors)")
+	var verbose = flag.Bool("verbose", false, "display the block size at each stage (in bytes, floor rounding if fractional)")
+	var silent = flag.Bool("silent", false, "silent mode, no output (except warnings and errors)")
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
 	var inputName = flag.String("input", "", "mandatory name of the input file to encode")
 	var outputName = flag.String("output", "", "optional name of the output file (defaults to <input.knz>)")
-	var blockSize = flag.Int("block", 100000, "size of the blocks (max 16 MB / min 1KB / default 100 KB)")
+	var blockSize = flag.String("block", "1048576", "size of the input blocks (max 16MB - 4 / min 1KB / default 1MB)")
 	var entropy = flag.String("entropy", "Huffman", "entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]")
 	var function = flag.String("transform", "Block", "transform to use [None|Block*|Snappy|LZ4|RLT]")
 	var cksum = flag.Bool("checksum", false, "enable block checksum")
@@ -61,12 +62,12 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 
 	if *help == true {
 		printOut("-help              : display this message", true)
-		printOut("-verbose           : display the size of the block at each stage (in bytes, floor rounding if fractional)", true)
-		printOut("-silent            : silent mode: no output (except warnings and errors)", true)
+		printOut("-verbose           : display the block size at each stage (in bytes, floor rounding if fractional)", true)
+		printOut("-silent            : silent mode, no output (except warnings and errors)", true)
 		printOut("-overwrite         : overwrite the output file if it already exists", true)
 		printOut("-input=<filename>  : mandatory name of the input file to encode", true)
 		printOut("-output=<filename> : optional name of the output file (defaults to <input.knz>)", true)
-		printOut("-block=<size>      : size of the blocks (max 16 MB / min 1KB / default 100 KB)", true)
+		printOut("-block=<size>      : size of the input blocks (max 16MB - 4 / min 1KB / default 1MB)", true)
 		printOut("-entropy=          : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true)
 		printOut("-transform=        : transform to use [None|Block*|Snappy|LZ4|RLT]", true)
 		printOut("-checksum          : enable block checksum", true)
@@ -92,7 +93,27 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	this.overwrite = *overwrite
 	this.inputName = *inputName
 	this.outputName = *outputName
-	this.blockSize = uint(*blockSize)
+	strBlockSize := strings.ToUpper(*blockSize)	
+	
+	// Process K or M suffix
+	scale := 1
+	
+	if strBlockSize[len(strBlockSize)-1] == 'K' {	
+		strBlockSize = strBlockSize[0:len(strBlockSize)-1]
+		scale = 1024
+	} else if strBlockSize[len(strBlockSize)-1] == 'M' {	
+		strBlockSize = strBlockSize[0:len(strBlockSize)-1]
+		scale = 1024 * 1024
+	}
+
+	bSize, err := strconv.Atoi(strBlockSize)
+
+	if err != nil {
+		fmt.Printf("Invalid block size provided on command line: %v\n", *blockSize)
+		os.Exit(io.ERR_BLOCK_SIZE)
+	}
+
+	this.blockSize = uint(scale * bSize)
 	this.entropyCodec = strings.ToUpper(*entropy)
 	this.transform = strings.ToUpper(*function)
 	this.checksum = *cksum
@@ -123,7 +144,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 	var msg string
 	printOut("Input file name set to '"+this.inputName+"'", this.verbose)
 	printOut("Output file name set to '"+this.outputName+"'", this.verbose)
-	msg = fmt.Sprintf("Block size set to %d", this.blockSize)
+	msg = fmt.Sprintf("Block size set to %d bytes", this.blockSize)
 	printOut(msg, this.verbose)
 	msg = fmt.Sprintf("Debug set to %t", this.verbose)
 	printOut(msg, this.verbose)
