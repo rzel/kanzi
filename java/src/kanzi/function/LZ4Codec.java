@@ -26,7 +26,7 @@ import kanzi.IndexedByteArray;
 // More details on the algorithm are available here:
 // http://fastcompression.blogspot.com/2011/05/lz4-explained.html
 
-public class LZ4Codec implements ByteFunction
+public final class LZ4Codec implements ByteFunction
 {
    private static final int HASH_SEED          = 0x9E3779B1;
    private static final int HASH_LOG           = 12;
@@ -87,23 +87,23 @@ public class LZ4Codec implements ByteFunction
    }
 
 
-   private static int writeLength(IndexedByteArray iba, int len)
-   {
-      while (len >= 0x1FE)
+   private static int writeLength(byte[] array, int idx, int len) 
+   {   
+      while (len >= 0x1FE) 
       {
-         iba.array[iba.index++] = (byte) 0xFF;
-         iba.array[iba.index++] = (byte) 0xFF;
+         array[idx++] = (byte) 0xFF;
+         array[idx++] = (byte) 0xFF;
          len -= 0x1FE;
       }
 
-      if (len >= 0xFF)
+      if (len >= 0xFF) 
       {
-         iba.array[iba.index++] = (byte) 0xFF;
+         array[idx++] = (byte) 0xFF;
          len -= 0xFF;
       }
-
-      iba.array[iba.index++] = (byte) len;
-      return iba.index;
+    
+      array[idx++] = (byte) len;
+      return idx;
    }
 
 
@@ -120,7 +120,7 @@ public class LZ4Codec implements ByteFunction
          if (last == true)
             destination.array[destination.index++] = (byte) token;
 
-         writeLength(destination, runLen - RUN_MASK);
+         destination.index = writeLength(destination.array, destination.index, runLen - RUN_MASK);
       }
       else
       {
@@ -165,7 +165,7 @@ public class LZ4Codec implements ByteFunction
       final byte[] dst = destination.array;
       final int count = (this.size > 0) ? this.size : src.length - srcIdx0;
 
-      if (count < MIN_LENGTH)
+      if (count <= MIN_LENGTH)
       {
          emitLiterals(source, destination, count, true);
          return true;
@@ -187,25 +187,17 @@ public class LZ4Codec implements ByteFunction
       while (true)
       {
          int attempts = DEFAULT_FIND_MATCH_ATTEMPTS;
+         int fwdIdx = srcIdx;
          int ref;
-
-         // Find a match
-         while (true)
+if (base == 0)
+{
+          // Find a match
+         do
          {
-            final int val = ((src[srcIdx] & 0xFF) << SHIFT1) | ((src[srcIdx+1] & 0xFF) << SHIFT2) |
-                  ((src[srcIdx+2] & 0xFF) << SHIFT3) | ((src[srcIdx+3] & 0xFF) << SHIFT4);
-            final int h = (val * HASH_SEED) >>> hashShift;
-            ref = base + (table[h] & hashMask);
-            table[h] = srcIdx - base;
+            srcIdx = fwdIdx;
+            fwdIdx += (attempts >>> SKIP_STRENGTH);
 
-            if ((ref >= srcIdx - MAX_DISTANCE) && (src[ref] == src[srcIdx]) && 
-                 (src[ref+1] == src[srcIdx+1]) && (src[ref+2] == src[srcIdx+2]) &&
-                 (src[ref+3] == src[srcIdx+3]))
-                   break;
-           
-            srcIdx += (attempts >>> SKIP_STRENGTH);
-
-            if (srcIdx > mfLimit)
+            if (fwdIdx > mfLimit)
             {
                source.index = anchor;
                destination.index = dstIdx;
@@ -214,8 +206,33 @@ public class LZ4Codec implements ByteFunction
             }
 
             attempts++;
+            final int h = (readInt(src, srcIdx) * HASH_SEED) >>> hashShift;
+            ref = (table[h] & hashMask);
+            table[h] = srcIdx;        
          }
-         
+         while ((compareInts(src, ref, srcIdx) == false));
+} else {
+         // Find a match
+         do
+         {
+            srcIdx = fwdIdx;
+            fwdIdx += (attempts >>> SKIP_STRENGTH);
+
+            if (fwdIdx > mfLimit)
+            {
+               source.index = anchor;
+               destination.index = dstIdx;
+               emitLiterals(source, destination, srcEnd - anchor, true);
+               return true;
+            }
+
+            attempts++;
+            final int h = (readInt(src, srcIdx) * HASH_SEED) >>> hashShift;
+            ref = base + (table[h] & hashMask);
+            table[h] = srcIdx - base;        
+         }
+         while ((ref <= srcIdx - MAX_DISTANCE) || (compareInts(src, ref, srcIdx) == false));
+}      
          // Catch up
          while ((ref > srcIdx0) && (srcIdx > anchor) && (src[ref-1] == src[srcIdx-1]))
          {
@@ -233,8 +250,8 @@ public class LZ4Codec implements ByteFunction
          int token = emitLiterals(source, destination, runLen, false);
          dstIdx = destination.index;
 
-         while (true)
-         {
+         do
+         {       
             // Encode offset
             dst[dstIdx++] = (byte) (srcIdx-ref);
             dst[dstIdx++] = (byte) ((srcIdx-ref) >> 8);
@@ -256,8 +273,7 @@ public class LZ4Codec implements ByteFunction
             if (matchLen >= ML_MASK)
             {
                dst[tokenOff] = (byte) (token | ML_MASK);
-               destination.index = dstIdx;
-               dstIdx = writeLength(destination, matchLen-ML_MASK);
+               dstIdx = writeLength(dst, dstIdx, matchLen-ML_MASK);
             }
             else
             {
@@ -274,27 +290,20 @@ public class LZ4Codec implements ByteFunction
             }
 
             // Test next position
-            final int val1 = ((src[srcIdx-2] & 0xFF) << SHIFT1) | ((src[srcIdx-1] & 0xFF) << SHIFT2) |
-                    ((src[srcIdx] & 0xFF) << SHIFT3) | ((src[srcIdx+1] & 0xFF) << SHIFT4);
-            final int h1 = (val1 * HASH_SEED) >>> hashShift;
-
-            final int val2 = ((src[srcIdx] & 0xFF) << SHIFT1) | ((src[srcIdx+1] & 0xFF) << SHIFT2) |
-                    ((src[srcIdx+2] & 0xFF) << SHIFT3) | ((src[srcIdx+3] & 0xFF) << SHIFT4);
-            final int h2 = (val2 * HASH_SEED) >>> hashShift;
-
+            final int h1 = (readInt(src, srcIdx-2) * HASH_SEED) >>> hashShift;
+            final int h2 = (readInt(src, srcIdx) * HASH_SEED) >>> hashShift;
             table[h1] = srcIdx - 2 - base;
             ref = base + (table[h2] & hashMask);
             table[h2] = srcIdx - base;
 
-            if ((ref <= srcIdx - MAX_DISTANCE) || (src[ref] != src[srcIdx]) || 
-                (src[ref+1] != src[srcIdx+1]) || (src[ref+2] != src[srcIdx+2]) || 
-                (src[ref+3] != src[srcIdx+3]))
+            if ((ref <= srcIdx - MAX_DISTANCE) || (compareInts(src, ref, srcIdx) == false))
                break;
 
             tokenOff = dstIdx;
             dstIdx++;
             token = 0;
          }
+         while (true);
 
          // Prepare next loop
          anchor = srcIdx;
@@ -417,5 +426,23 @@ public class LZ4Codec implements ByteFunction
    public static int getMaxEncodedLength(int srcLen)
    {
       return srcLen + (srcLen / 255) + 16;
+   }
+   
+   
+   private static boolean compareInts(byte[] array, int srcIdx, int dstIdx)
+   {
+      return ((array[srcIdx] == array[dstIdx]) &&
+               (array[srcIdx+1] == array[dstIdx+1]) &&
+               (array[srcIdx+2] == array[dstIdx+2]) &&
+               (array[srcIdx+3] == array[dstIdx+3]));
+   }
+
+   
+   private static int readInt(byte[] array, int srcIdx)
+   {
+      return ((array[srcIdx]   & 0xFF) << SHIFT1) | 
+             ((array[srcIdx+1] & 0xFF) << SHIFT2) |
+             ((array[srcIdx+2] & 0xFF) << SHIFT3) | 
+             ((array[srcIdx+3] & 0xFF) << SHIFT4);
    }
 }
