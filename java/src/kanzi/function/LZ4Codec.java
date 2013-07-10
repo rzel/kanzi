@@ -31,14 +31,12 @@ public final class LZ4Codec implements ByteFunction
    private static final int HASH_SEED          = 0x9E3779B1;
    private static final int HASH_LOG           = 12;
    private static final int HASH_LOG_64K       = 13;
-   private static final int MASK_HASH          = -1;
-   private static final int MASK_HASH_64K      = 0xFFFF;
    private static final int MAX_DISTANCE       = (1 << 16) - 1;
    private static final int SKIP_STRENGTH      = 6;
    private static final int LAST_LITERALS      = 5;
    private static final int MIN_MATCH          = 4;
    private static final int MF_LIMIT           = 12;
-   private static final int LZ4_64K_LIMIT      = (1 << 16) + (MF_LIMIT - 1);
+   private static final int LZ4_64K_LIMIT      = MAX_DISTANCE + MF_LIMIT;
    private static final int ML_BITS            = 4;
    private static final int ML_MASK            = (1 << ML_BITS) - 1;
    private static final int RUN_BITS           = 8 - ML_BITS;
@@ -151,13 +149,13 @@ public final class LZ4Codec implements ByteFunction
          return false;
 
       return (count < LZ4_64K_LIMIT) ?
-         this.doForward(source, destination, source.index, HASH_LOG_64K, MASK_HASH_64K) :
-         this.doForward(source, destination, 0, HASH_LOG, MASK_HASH);
+         this.doForward(source, destination, source.index, HASH_LOG_64K) :
+         this.doForward(source, destination, 0, HASH_LOG);
    }
 
 
    private boolean doForward(IndexedByteArray source, IndexedByteArray destination,
-           final int base, final int hashLog, final int hashMask)
+           final int base, final int hashLog)
    {
       final int srcIdx0 = source.index;
       final int dstIdx0 = destination.index;
@@ -189,29 +187,7 @@ public final class LZ4Codec implements ByteFunction
          int attempts = DEFAULT_FIND_MATCH_ATTEMPTS;
          int fwdIdx = srcIdx;
          int ref;
-if (base == 0)
-{
-          // Find a match
-         do
-         {
-            srcIdx = fwdIdx;
-            fwdIdx += (attempts >>> SKIP_STRENGTH);
 
-            if (fwdIdx > mfLimit)
-            {
-               source.index = anchor;
-               destination.index = dstIdx;
-               emitLiterals(source, destination, srcEnd - anchor, true);
-               return true;
-            }
-
-            attempts++;
-            final int h = (readInt(src, srcIdx) * HASH_SEED) >>> hashShift;
-            ref = (table[h] & hashMask);
-            table[h] = srcIdx;        
-         }
-         while ((compareInts(src, ref, srcIdx) == false));
-} else {
          // Find a match
          do
          {
@@ -228,11 +204,11 @@ if (base == 0)
 
             attempts++;
             final int h = (readInt(src, srcIdx) * HASH_SEED) >>> hashShift;
-            ref = base + (table[h] & hashMask);
+            ref = base + table[h];
             table[h] = srcIdx - base;        
          }
-         while ((ref <= srcIdx - MAX_DISTANCE) || (compareInts(src, ref, srcIdx) == false));
-}      
+         while ((differentInts(src, ref, srcIdx) == true) || (ref <= srcIdx - MAX_DISTANCE));
+       
          // Catch up
          while ((ref > srcIdx0) && (srcIdx > anchor) && (src[ref-1] == src[srcIdx-1]))
          {
@@ -293,10 +269,10 @@ if (base == 0)
             final int h1 = (readInt(src, srcIdx-2) * HASH_SEED) >>> hashShift;
             final int h2 = (readInt(src, srcIdx) * HASH_SEED) >>> hashShift;
             table[h1] = srcIdx - 2 - base;
-            ref = base + (table[h2] & hashMask);
+            ref = base + table[h2];
             table[h2] = srcIdx - base;
 
-            if ((ref <= srcIdx - MAX_DISTANCE) || (compareInts(src, ref, srcIdx) == false))
+            if ((differentInts(src, ref, srcIdx) == true) || (ref <= srcIdx - MAX_DISTANCE))
                break;
 
             tokenOff = dstIdx;
@@ -429,12 +405,12 @@ if (base == 0)
    }
    
    
-   private static boolean compareInts(byte[] array, int srcIdx, int dstIdx)
+   private static boolean differentInts(byte[] array, int srcIdx, int dstIdx)
    {
-      return ((array[srcIdx] == array[dstIdx]) &&
-               (array[srcIdx+1] == array[dstIdx+1]) &&
-               (array[srcIdx+2] == array[dstIdx+2]) &&
-               (array[srcIdx+3] == array[dstIdx+3]));
+      return ((array[srcIdx] != array[dstIdx])     ||
+              (array[srcIdx+1] != array[dstIdx+1]) ||
+              (array[srcIdx+2] != array[dstIdx+2]) ||
+              (array[srcIdx+3] != array[dstIdx+3]));
    }
 
    

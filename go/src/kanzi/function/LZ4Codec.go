@@ -30,14 +30,12 @@ const (
 	HASH_SEED                   = 0x9E3779B1
 	HASH_LOG                    = 12
 	HASH_LOG_64K                = 13
-	MASK_HASH                   = -1
-	MASK_HASH_64K               = 0xFFFF
 	MAX_DISTANCE                = (1 << 16) - 1
 	SKIP_STRENGTH               = 6
 	LAST_LITERALS               = 5
 	MIN_MATCH                   = 4
 	MF_LIMIT                    = 12
-	LZ4_64K_LIMIT               = (1 << 16) + (MF_LIMIT - 1)
+	LZ4_64K_LIMIT               = MAX_DISTANCE + MF_LIMIT
 	ML_BITS                     = 4
 	ML_MASK                     = (1 << ML_BITS) - 1
 	RUN_BITS                    = 8 - ML_BITS
@@ -158,14 +156,14 @@ func (this *LZ4Codec) Forward(src, dst []byte) (uint, uint, error) {
 	}
 
 	if count < LZ4_64K_LIMIT {
-		return this.doForward(src, dst, 0, HASH_LOG_64K, MASK_HASH_64K)
+		return this.doForward(src, dst, HASH_LOG_64K)
 	} else {
-		return this.doForward(src, dst, 0, HASH_LOG, MASK_HASH)
+		return this.doForward(src, dst, HASH_LOG)
 	}
 }
 
 func (this *LZ4Codec) doForward(src []byte, dst []byte,
-	base int, hashLog uint, hashMask int) (uint, uint, error) {
+	hashLog uint) (uint, uint, error) {
 	count := int(this.size)
 
 	if this.size == 0 {
@@ -193,32 +191,27 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 
 	for {
 		attempts := DEFAULT_FIND_MATCH_ATTEMPTS
+		fwdIdx := srcIdx
 		var ref int
 
 		// Find a match
 		for {
-			val32 := uint32(src[srcIdx]) << SHIFT1
-			val32 |= (uint32(src[srcIdx+1]) << SHIFT2)
-			val32 |= (uint32(src[srcIdx+2]) << SHIFT3)
-			val32 |= (uint32(src[srcIdx+3]) << SHIFT4)
-			h32 := (val32 * HASH_SEED) >> hashShift
-			ref = base + (table[h32] & hashMask)
-			table[h32] = srcIdx - base
+			srcIdx = fwdIdx
+			fwdIdx += (attempts >> SKIP_STRENGTH)
 
-			if (ref >= srcIdx-MAX_DISTANCE) && (src[ref] == src[srcIdx]) &&
-				(src[ref+1] == src[srcIdx+1]) && (src[ref+2] == src[srcIdx+2]) &&
-				(src[ref+3] == src[srcIdx+3]) {
-				break
-			}
-
-			srcIdx += (attempts >> SKIP_STRENGTH)
-
-			if srcIdx > mfLimit {
+			if fwdIdx > mfLimit {
 				_, dstDelta, _ := emitLiterals(src[anchor:], dst[dstIdx:], srcEnd-anchor, true)
 				return uint(srcEnd), uint(dstIdx + dstDelta), error(nil)
 			}
 
 			attempts++
+			h32 := (readInt(src, srcIdx) * HASH_SEED) >> hashShift
+			ref = table[h32]
+			table[h32] = srcIdx
+
+			if differentInts(src, ref, srcIdx) == false && ref > srcIdx-MAX_DISTANCE {
+				break
+			}
 		}
 
 		// Catch up
@@ -268,25 +261,13 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 			}
 
 			// Test next position
-			val32_1 := uint32(src[srcIdx-2]) << SHIFT1
-			val32_1 |= (uint32(src[srcIdx-1]) << SHIFT2)
-			val32_1 |= (uint32(src[srcIdx]) << SHIFT3)
-			val32_1 |= (uint32(src[srcIdx+1]) << SHIFT4)
-			h32_1 := (val32_1 * HASH_SEED) >> hashShift
+			h32_1 := (readInt(src, srcIdx-2) * HASH_SEED) >> hashShift
+			h32_2 := (readInt(src, srcIdx) * HASH_SEED) >> hashShift
+			table[h32_1] = srcIdx - 2
+			ref = table[h32_2]
+			table[h32_2] = srcIdx
 
-			val32_2 := uint32(src[srcIdx]) << SHIFT1
-			val32_2 |= (uint32(src[srcIdx+1]) << SHIFT2)
-			val32_2 |= (uint32(src[srcIdx+2]) << SHIFT3)
-			val32_2 |= (uint32(src[srcIdx+3]) << SHIFT4)
-			h32_2 := (val32_2 * HASH_SEED) >> hashShift
-
-			table[h32_1] = srcIdx - 2 - base
-			ref = base + (table[h32_2] & hashMask)
-			table[h32_2] = srcIdx - base
-
-			if (ref <= srcIdx-MAX_DISTANCE) || (src[ref] != src[srcIdx]) ||
-				(src[ref+1] != src[srcIdx+1]) || (src[ref+2] != src[srcIdx+2]) ||
-				(src[ref+3] != src[srcIdx+3]) {
+			if differentInts(src, ref, srcIdx) == true || ref <= srcIdx-MAX_DISTANCE {
 				break
 			}
 
@@ -301,6 +282,20 @@ func (this *LZ4Codec) doForward(src []byte, dst []byte,
 	}
 
 	return uint(srcIdx), uint(dstIdx), error(nil)
+}
+
+func differentInts(array []byte, srcIdx, dstIdx int) bool {
+	return (array[srcIdx] != array[dstIdx]) ||
+		(array[srcIdx+1] != array[dstIdx+1]) ||
+		(array[srcIdx+2] != array[dstIdx+2]) ||
+		(array[srcIdx+3] != array[dstIdx+3])
+}
+
+func readInt(array []byte, srcIdx int) uint32 {
+	return (uint32(array[srcIdx]) << SHIFT1) |
+		(uint32(array[srcIdx+1]) << SHIFT2) |
+		(uint32(array[srcIdx+2]) << SHIFT3) |
+		(uint32(array[srcIdx+3]) << SHIFT4)
 }
 
 func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
