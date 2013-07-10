@@ -22,7 +22,7 @@ import kanzi.IndexedByteArray;
 // Snappy is a fast compression codec aiming for very high speed and
 // reasonable compression ratios.
 // This implementation is a port of the Go source at http://code.google.com/p/snappy-go/
-public class SnappyCodec implements ByteFunction
+public final class SnappyCodec implements ByteFunction
 {
    private static final int MAX_OFFSET     = 32768;
    private static final int TAG_LITERAL    = 0x00;
@@ -38,7 +38,7 @@ public class SnappyCodec implements ByteFunction
    private static final byte TAG_ENG_LEN4  = (byte) ((TAG_DEC_LEN4<<2) | TAG_LITERAL);
    private static final int MAX_TABLE_SIZE = 16384;
    private static final byte B0            = (byte) ((TAG_DEC_LEN4 << 2) | TAG_COPY2);
-   private static final long HASH_SEED     = 0x1e35a7bd;
+   private static final int HASH_SEED      = 0x1e35a7bd;
 
    private int size;
    private final int[] buffer;
@@ -152,7 +152,7 @@ public class SnappyCodec implements ByteFunction
      {
         if ((offset < 2048) && (len < 12) && (len >= 4))
         {
-           dst[idx]   = (byte) (((b2 & 0x07)<<5) | ((len-4)<<2) | TAG_COPY1);
+           dst[idx]   = (byte) (((b2&0x07) << 5) | ((len-4) << 2) | TAG_COPY1);
            dst[idx+1] = b1;
            idx += 2;
            break;
@@ -182,17 +182,12 @@ public class SnappyCodec implements ByteFunction
   public boolean forward(IndexedByteArray source, IndexedByteArray destination)
   {
      final int srcIdx = source.index;
-     int dstIdx = destination.index;
      final byte[] src = source.array;
      final byte[] dst = destination.array;
      final int count = (this.size > 0) ? this.size : src.length - srcIdx;
 
-     if (dst.length - dstIdx < getMaxEncodedLength(count))
+     if (dst.length - destination.index < getMaxEncodedLength(count))
         return false;
-
-     // Create copies to manipulate the index without impacting parameters
-     IndexedByteArray iba1 = new IndexedByteArray(src, srcIdx);
-     IndexedByteArray iba2 = new IndexedByteArray(dst, dstIdx);
 
      // The block starts with the varint-encoded length of the decompressed bytes.
      int d = putUvarint(destination, (long) count);
@@ -202,8 +197,8 @@ public class SnappyCodec implements ByteFunction
      {
         if (count > 0)
         {
-           iba2.index = d;
-           d += emitLiteral(iba1, iba2, count);
+           destination.index = d;
+           d += emitLiteral(source, destination, count);
         }
 
         source.index = srcIdx + count;
@@ -213,16 +208,20 @@ public class SnappyCodec implements ByteFunction
 
      // Initialize the hash table. Its size ranges from 1<<8 to 1<<14 inclusive.
      int shift = 24;
-     int tableSize = 256;
+     int tableSize = MAX_TABLE_SIZE;
      final int[] table = this.buffer; // aliasing
-     final int max = (count < MAX_TABLE_SIZE) ? count : MAX_TABLE_SIZE;
-
-     while (tableSize < max)
+     
+     if (count < MAX_TABLE_SIZE)
      {
-        shift--;
-        tableSize <<= 1;
+        tableSize = 256;
+        
+        while (tableSize < count)
+        {
+           shift--;
+           tableSize <<= 1;
+        }
      }
-
+     
      for (int i=0; i<tableSize; i++)
         table[i] = -1;
 
@@ -234,10 +233,7 @@ public class SnappyCodec implements ByteFunction
      while (s < ends)
      {
         // Update the hash table
-        long hl = (src[s] & 0xFF) | ((src[s+1] & 0xFF) << 8) |
-                ((src[s+2] & 0xFF) << 16) | ((src[s+3] & 0xFF) << 24);
-        hl = ((hl * HASH_SEED) & 0xFFFFFFFFL) >> shift;
-        final int h = (int) hl;
+        int h = (readInt(src, s) * HASH_SEED) >>> shift;
         int t = table[h]; // The last position with the same hash as s
         table[h] = s;
 
@@ -248,8 +244,7 @@ public class SnappyCodec implements ByteFunction
            continue;
         }
         
-        if ((src[s] != src[t]) || (src[s+1] != src[t+1]) || 
-            (src[s+2] != src[t+2]) || (src[s+3] != src[t+3]))
+        if (differentInts(src, s, t) == true)
         {
            s++;
            continue;
@@ -258,9 +253,9 @@ public class SnappyCodec implements ByteFunction
         // Otherwise, we have a match. First, emit any pending literal bytes
         if (lit != s)
         {
-           iba1.index = lit;
-           iba2.index = d;
-           d += emitLiteral(iba1, iba2, s-lit);
+           source.index = lit;
+           destination.index = d;
+           d += emitLiteral(source, destination, s-lit);
         }
 
         // Extend the match to be as long as possible
@@ -275,17 +270,17 @@ public class SnappyCodec implements ByteFunction
         }
 
         // Emit the copied bytes
-        iba2.index = d;
-        d += emitCopy(iba2, s-t, s-s0);
+        destination.index = d;
+        d += emitCopy(destination, s-t, s-s0);
         lit = s;
      }
 
      // Emit any final pending literal bytes and return
      if (lit != count)
      {
-        iba1.index = lit;
-        iba2.index = d;
-        d += emitLiteral(iba1, iba2, count-lit);
+        source.index = lit;
+        destination.index = d;
+        d += emitLiteral(source, destination, count-lit);
      }
 
      source.index = srcIdx + count;
@@ -307,10 +302,9 @@ public class SnappyCodec implements ByteFunction
   }
 
   
-  // Uvarint decodes a long from buf and returns that value.
+  // Uvarint decodes a long from the input array and returns that value.
   // If an error occurred, an exception is raised.
-  // The index of the indexed byte array is incremented by the number
-  // of bytes read
+  // The index of the indexed byte array is incremented by the number of bytes read
   private static long getUvarint(IndexedByteArray iba) 
   {
      final int idx = iba.index;
@@ -321,18 +315,18 @@ public class SnappyCodec implements ByteFunction
  
      for (int i=idx; i<len; i++)
      {
-        final int b = array[i] & 0xFF;
+        final long b = array[i] & 0xFF;
         
-        if (b < 0x80)
-        {
-           if ((i-idx > 9) || ((b > 1) && (i-idx == 9)))
-              throw new NumberFormatException("Overflow: value is larger than 64 bits");
-        
+        if (((s == 63) && (b > 1)) || (s > 63))
+           throw new NumberFormatException("Overflow: value is larger than 64 bits");
+
+        if ((b & 0x80) == 0)
+        {        
            iba.index = i + 1;
-           return res | (((long) (b&0xFF)) << s);        
+           return res | (b << s);        
         }
         
-        res |= (((long) (b&0x7F)) << s);
+        res |= ((b & 0x7F) << s);
         s += 7;
      }
      
@@ -371,7 +365,7 @@ public class SnappyCodec implements ByteFunction
   // getDecodedLength returns the length of the decoded block or -1 if error
   // The index of the indexed byte array is incremented by the number
   // of bytes read
-  public static int getDecodedLength(IndexedByteArray source) 
+  private static int getDecodedLength(IndexedByteArray source) 
   {
      try
      {
@@ -380,7 +374,7 @@ public class SnappyCodec implements ByteFunction
         if (v > 0x7FFFFFFFL)
            return -1;
         
-        return (int) (v);
+        return (int) v;
      }
      catch (NumberFormatException e)
      {
@@ -508,4 +502,23 @@ public class SnappyCodec implements ByteFunction
      destination.index = d;
      return (d - dstIdx != dLen) ? false : true;
   }
+  
+  
+  private static boolean differentInts(byte[] array, int srcIdx, int dstIdx)
+  {
+     return ((array[srcIdx] != array[dstIdx])     ||
+             (array[srcIdx+1] != array[dstIdx+1]) ||
+             (array[srcIdx+2] != array[dstIdx+2]) ||
+             (array[srcIdx+3] != array[dstIdx+3]));
+  }
+
+   
+  private static int readInt(byte[] array, int srcIdx)
+  {
+     return ((array[srcIdx]   & 0xFF))       | 
+            ((array[srcIdx+1] & 0xFF) <<  8) |
+            ((array[srcIdx+2] & 0xFF) << 16) | 
+            ((array[srcIdx+3])        << 24);
+  }
+  
 }
