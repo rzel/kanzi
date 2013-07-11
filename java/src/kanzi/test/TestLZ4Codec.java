@@ -172,6 +172,10 @@ public class TestLZ4Codec
    public static void testSpeed()
    {
       // Test speed
+      byte[] input;
+      byte[] output;
+      byte[] reverse;
+      Random rnd = new Random();
       final int iter = 50000;
       final int size = 30000;
       System.out.println("\n\nSpeed test");
