@@ -32,8 +32,16 @@ public class TestRangeCoder
     public static void main(String[] args)
     {
         System.out.println("TestRangeCoder");
-
+        testCorrectness();
+        testSpeed();
+    }
+    
+    
+    public static void testCorrectness()
+    {
         // Test behavior
+        System.out.println("Correctness test");
+        
         for (int ii=1; ii<20; ii++)
         {
             System.out.println("\n\nTest "+ii);
@@ -110,10 +118,13 @@ public class TestRangeCoder
                 e.printStackTrace();
             }
         }
+     }
 
-
+    
+     public static void testSpeed()
+     {
         // Test speed
-        System.out.println("\n\nSpeed Test");
+        System.out.println("\n\nSpeed test");
         int[] repeats = { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3 };
         final int iter = 4000;
         final int size = 50000;

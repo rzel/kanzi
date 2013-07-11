@@ -26,14 +26,21 @@ public class TestRLT
     public static void main(String[] args)
     {
         System.out.println("TestRLT");
+        testCorrectness();
+        testSpeed();
+    }
+    
+    
+    public static void testCorrectness()
+    {        
         byte[] input;
         byte[] output;
         byte[] reverse;
         Random rnd = new Random();
 
         // Test behavior
+        System.out.println("Correctness test");
         {
-           System.out.println("Correctness test");
            for (int ii=0; ii<20; ii++)
            {
               System.out.println("\nTest "+ii);
@@ -158,9 +165,17 @@ public class TestRLT
                System.out.println("Identical");
                System.out.println();
             }
-      }
+       }
+    }
+        
 
+   public static void testSpeed()
+   {
       // Test speed
+      byte[] input;
+      byte[] output;
+      byte[] reverse;
+      Random rnd = new Random();
       final int iter = 50000;
       final int size = 30000;
       System.out.println("\n\nSpeed test");

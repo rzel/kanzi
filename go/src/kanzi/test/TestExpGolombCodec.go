@@ -16,10 +16,10 @@ limitations under the License.
 package main
 
 import (
-	"flag"
 	"fmt"
 	"kanzi/bitstream"
 	"kanzi/entropy"
+	"kanzi/util"
 	"math/rand"
 	"os"
 	"time"
@@ -27,13 +27,11 @@ import (
 
 func main() {
 	fmt.Printf("\nTestExpGolombCodec")
-	var outputName = flag.String("output", "TestExpGolombCodec.log", "optional name of the output file (defaults to TestExpGolombCodec.log)")
-	flag.Parse()
-	TestCorrectness(*outputName)
-	TestSpeed(*outputName)
+	TestCorrectness()
+	TestSpeed()
 }
 
-func TestCorrectness(filename string) {
+func TestCorrectness() {
 	fmt.Printf("\n\nCorrectness test")
 
 	// Test behavior
@@ -63,37 +61,25 @@ func TestCorrectness(filename string) {
 		}
 
 		fmt.Printf("\nEncoded: ")
-		oFile, err := os.Create(filename)
-
-		if err != nil {
-			fmt.Printf("Cannot create %s", filename)
-			os.Exit(1)
-		}
-
+		buffer := make([]byte, 16384)
+		oFile, _ := util.NewByteArrayOutputStream(buffer)
 		defer oFile.Close()
 		obs, _ := bitstream.NewDefaultOutputBitStream(oFile, 16384)
 		dbgbs, _ := bitstream.NewDebugOutputBitStream(obs, os.Stdout)
 		dbgbs.ShowByte(true)
 		dbgbs.Mark(true)
 		fpc, _ := entropy.NewExpGolombEncoder(dbgbs, true)
-		_, err = fpc.Encode(values)
 
-		if err != nil {
+		if _, err := fpc.Encode(values); err != nil {
 			fmt.Printf("Error during encoding: %s", err)
 			os.Exit(1)
 		}
 
 		fpc.Dispose()
 		dbgbs.Close()
-		fmt.Println()
+		println()
 
-		iFile, err2 := os.Open(filename)
-
-		if err2 != nil {
-			fmt.Printf("Cannot open %s", filename)
-			os.Exit(1)
-		}
-
+		iFile, _ := util.NewByteArrayInputStream(buffer)
 		defer iFile.Close()
 		ibs, _ := bitstream.NewDefaultInputBitStream(iFile, 16384)
 		dbgbs2, _ := bitstream.NewDebugInputBitStream(ibs, os.Stdout)
@@ -104,9 +90,8 @@ func TestCorrectness(filename string) {
 
 		ok := true
 		values2 := make([]byte, len(values))
-		_, err = fpd.Decode(values2)
 
-		if err != nil {
+		if _, err := fpd.Decode(values2); err != nil {
 			fmt.Printf("Error during decoding: %s", err)
 			os.Exit(1)
 		}
@@ -133,39 +118,20 @@ func TestCorrectness(filename string) {
 	}
 }
 
-func TestSpeed(filename string) {
+func TestSpeed() {
 	fmt.Printf("\n\nSpeed test\n")
-	repeats := [16]int{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3}
+	repeats := []int{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3}
 
 	for jj := 0; jj < 3; jj++ {
 		fmt.Printf("Test %v\n", jj+1)
-		oFile, err := os.Create(filename)
-
-		if err != nil {
-			fmt.Printf("Cannot create %s", filename)
-			return
-		}
-
-		defer oFile.Close()
-		iFile, err2 := os.Open(filename)
-
-		if err2 != nil {
-			fmt.Printf("Cannot open %s", filename)
-			return
-		}
-
-		defer iFile.Close()
 		delta1 := int64(0)
 		delta2 := int64(0)
-		
+
 		size := 50000
 		iter := 2000
+		buffer := make([]byte, size)
 		values1 := make([]byte, size)
 		values2 := make([]byte, size)
-		obs, _ := bitstream.NewDefaultOutputBitStream(oFile, 16384)
-		rc, _ := entropy.NewExpGolombEncoder(obs, true)
-		ibs, _ := bitstream.NewDefaultInputBitStream(iFile, 16384)
-		rd, _ := entropy.NewExpGolombDecoder(ibs, true)
 
 		for ii := 0; ii < iter; ii++ {
 			idx := jj
@@ -181,43 +147,49 @@ func TestSpeed(filename string) {
 				}
 
 				for j := i0; j < i0+length; j++ {
-					values1[j] = byte(uint(i0) & 0xFF)
+					values1[j] = byte(i0)
 					i++
 				}
 			}
 
+			oFile, _ := util.NewByteArrayOutputStream(buffer)
+			defer oFile.Close()
+			obs, _ := bitstream.NewDefaultOutputBitStream(oFile, uint(size))
+			rc, _ := entropy.NewExpGolombEncoder(obs, true)
+
 			// Encode
 			before := time.Now()
-			_, err := rc.Encode(values1)
 
-			if err != nil {
+			if _, err := rc.Encode(values1); err != nil {
 				fmt.Printf("An error occured during encoding: %v\n", err)
 				os.Exit(1)
 			}
 
+			rc.Dispose()
+			obs.Close()
 			after := time.Now()
 			delta1 += after.Sub(before).Nanoseconds()
 		}
 
-		rc.Dispose()
-		obs.Close()
-
 		for ii := 0; ii < iter; ii++ {
+			iFile, _ := util.NewByteArrayInputStream(buffer)
+			defer iFile.Close()
+			ibs, _ := bitstream.NewDefaultInputBitStream(iFile, uint(size))
+			rd, _ := entropy.NewExpGolombDecoder(ibs, true)
+
 			// Decode
 			before := time.Now()
-			_, err = rd.Decode(values2)
 
-			if err != nil {
+			if _, err := rd.Decode(values2); err != nil {
 				fmt.Printf("An error occured during decoding: %v\n", err)
 				os.Exit(1)
 			}
 
+			rd.Dispose()
+			ibs.Close()
 			after := time.Now()
 			delta2 += after.Sub(before).Nanoseconds()
 		}
-
-		rd.Dispose()
-		ibs.Close()
 
 		fmt.Printf("Encode [ms]      : %d\n", delta1/1000000)
 		fmt.Printf("Throughput [KB/s]: %d\n", (int64(iter*size))*1000000/delta1*1000/1024)

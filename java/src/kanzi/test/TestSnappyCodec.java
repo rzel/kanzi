@@ -26,14 +26,20 @@ public class TestSnappyCodec
     public static void main(String[] args)
     {
         System.out.println("TestSnappy");
-        byte[] input;
+        testCorrectness();
+        testSpeed();
+    }
+    
+    
+    public static void testCorrectness()
+    {        byte[] input;
         byte[] output;
         byte[] reverse;
         Random rnd = new Random();
 
         // Test behavior
+        System.out.println("Correctness test");
         {
-           System.out.println("Correctness test");
            for (int ii=0; ii<20; ii++)
            {
               System.out.println("\nTest "+ii);
@@ -158,94 +164,102 @@ public class TestSnappyCodec
                System.out.println("Identical");
                System.out.println();
             }
+         }
       }
 
-      // Test speed
-      final int iter = 50000;
-      final int size = 30000;
-      System.out.println("\n\nSpeed test");
-      System.out.println("Iterations: "+iter);
-      
-      for (int jj=0; jj<3; jj++)
+    
+      public static void testSpeed()
       {
-         input = new byte[size];
-         output = new byte[SnappyCodec.getMaxEncodedLength(size)];
-         reverse = new byte[size];
-         IndexedByteArray iba1 = new IndexedByteArray(input, 0);
-         IndexedByteArray iba2 = new IndexedByteArray(output, 0);
-         IndexedByteArray iba3 = new IndexedByteArray(reverse, 0);
+        // Test speed
+         byte[] input;
+         byte[] output;
+         byte[] reverse;
+         Random rnd = new Random();
+         final int iter = 50000;
+         final int size = 30000;
+         System.out.println("\n\nSpeed test");
+         System.out.println("Iterations: "+iter);
 
-         // Generate random data with runs
-         int n = 0;
-                 
-         while (n < input.length)        
+         for (int jj=0; jj<3; jj++)
          {
-            byte val = (byte) (rnd.nextInt() & 255);
-            input[n++] = val;
-            int run = rnd.nextInt() & 255;
-            run -= 200;
-            
-            while ((--run > 0) && (n < input.length))       
+            input = new byte[size];
+            output = new byte[SnappyCodec.getMaxEncodedLength(size)];
+            reverse = new byte[size];
+            IndexedByteArray iba1 = new IndexedByteArray(input, 0);
+            IndexedByteArray iba2 = new IndexedByteArray(output, 0);
+            IndexedByteArray iba3 = new IndexedByteArray(reverse, 0);
+
+            // Generate random data with runs
+            int n = 0;
+
+            while (n < input.length)        
+            {
+               byte val = (byte) (rnd.nextInt() & 255);
                input[n++] = val;
-         }
+               int run = rnd.nextInt() & 255;
+               run -= 200;
 
-         long before, after;
-         long delta1 = 0;
-         long delta2 = 0;
-
-         for (int ii = 0; ii < iter; ii++)
-         {
-            SnappyCodec snappy = new SnappyCodec(); 
-            iba1.index = 0;
-            iba2.index = 0;
-            before = System.nanoTime();
-            
-            if (snappy.forward(iba1, iba2) == false)
-            {
-               System.out.println("Encoding error");
-               System.exit(1);
-            }
-            
-            after = System.nanoTime();
-            delta1 += (after - before);
-         }
-
-         for (int ii = 0; ii < iter; ii++)
-         {
-            SnappyCodec snappy = new SnappyCodec(iba2.index); 
-            iba3.index = 0;
-            iba2.index = 0;
-            before = System.nanoTime();
-            
-            if (snappy.inverse(iba2, iba3) == false)
-            {
-               System.out.println("Decoding error");
-               System.exit(1);
+               while ((--run > 0) && (n < input.length))       
+                  input[n++] = val;
             }
 
-            after = System.nanoTime();
-            delta2 += (after - before);
-         }
+            long before, after;
+            long delta1 = 0;
+            long delta2 = 0;
 
-         int idx = -1;
-         
-         // Sanity check
-         for (int i=0; i<iba1.index; i++)
-         {
-            if (iba1.array[i] != iba3.array[i])
+            for (int ii = 0; ii < iter; ii++)
             {
-               idx = i;
-               break;
+               SnappyCodec snappy = new SnappyCodec(); 
+               iba1.index = 0;
+               iba2.index = 0;
+               before = System.nanoTime();
+
+               if (snappy.forward(iba1, iba2) == false)
+               {
+                  System.out.println("Encoding error");
+                  System.exit(1);
+               }
+
+               after = System.nanoTime();
+               delta1 += (after - before);
             }
+
+            for (int ii = 0; ii < iter; ii++)
+            {
+               SnappyCodec snappy = new SnappyCodec(iba2.index); 
+               iba3.index = 0;
+               iba2.index = 0;
+               before = System.nanoTime();
+
+               if (snappy.inverse(iba2, iba3) == false)
+               {
+                  System.out.println("Decoding error");
+                  System.exit(1);
+               }
+
+               after = System.nanoTime();
+               delta2 += (after - before);
+            }
+
+            int idx = -1;
+
+            // Sanity check
+            for (int i=0; i<iba1.index; i++)
+            {
+               if (iba1.array[i] != iba3.array[i])
+               {
+                  idx = i;
+                  break;
+               }
+            }
+
+            if (idx >= 0)
+               System.out.println("Failure at index "+idx+" ("+iba1.array[idx]+"<->"+iba3.array[idx]+")");
+
+            System.out.println("Snappy encoding [ms]: " + delta1 / 1000000);
+            System.out.println("Throughput [MB/s]   : " + ((long) (iter*size)) * 1000000L / delta1 * 1000L / (1024*1024));
+            System.out.println("Snappy decoding [ms]: " + delta2 / 1000000);
+            System.out.println("Throughput [MB/s]   : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
          }
-         
-         if (idx >= 0)
-            System.out.println("Failure at index "+idx+" ("+iba1.array[idx]+"<->"+iba3.array[idx]+")");
-         
-         System.out.println("Snappy encoding [ms]: " + delta1 / 1000000);
-         System.out.println("Throughput [MB/s]   : " + ((long) (iter*size)) * 1000000L / delta1 * 1000L / (1024*1024));
-         System.out.println("Snappy decoding [ms]: " + delta2 / 1000000);
-         System.out.println("Throughput [MB/s]   : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
-      }
-   }
+     }
 }

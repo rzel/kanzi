@@ -25,16 +25,24 @@ public class TestZLT
 {
    public static void main(String[] args)
    {
-      System.out.println("TestZLT");
+       System.out.println("TestZLT");
+       testCorrectness();
+       testSpeed();
+   }
+    
+    
+    public static void testCorrectness()
+    {
       byte[] input;
       byte[] output;
       byte[] res;
       Random rnd = new Random();
 
       // Test behavior
+      System.out.println("Correctness test");
+
       for (int ii=0; ii<=20; ii++)
       {
-         System.out.println("\n\nCorrectness test "+ii);
          int[] arr = new int[64];
 
          for (int i=0; i<arr.length; i++)
@@ -115,8 +123,16 @@ public class TestZLT
 
          System.out.println();
       }
-
+   }
+    
+    
+   public static void testSpeed()
+   {
       // Test speed
+      byte[] input;
+      byte[] output;
+      byte[] res;
+      Random rnd = new Random();
       final int iter = 50000;
       final int size = 30000;
       System.out.println("\n\nSpeed test");

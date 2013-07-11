@@ -36,165 +36,216 @@ public class TestDefaultBitStream
 {
     public static void main(String[] args)
     {
-      // Test correctness (byte aligned)
-      {
-        int[] values = new int[] { 1, 7, -9, 123, 0, 12, -63, -64, 275, -555, 100000, 123 };
-        System.out.println("Initial");
-
-        for (int i=0; i<values.length; i++)
-           System.out.print(" "+values[i]);
-
-        System.out.println();
+ 	testCorrectnessAligned();
+	testCorrectnessMisaligned();
+	testSpeed(args);
+    }
+    
+    
+    public static void testCorrectnessAligned()
+    {    
+        // Test correctness (byte aligned)
+        System.out.println("Correctness Test - byte aligned");
+        int[] values = new int[100];
+        Random rnd = new Random();
+        System.out.println("\nInitial");
         
         try
         {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream(4*values.length);
-            OutputStream os = new BufferedOutputStream(baos);
-            OutputBitStream obs = new DefaultOutputBitStream(os, 16384);
-            DebugOutputBitStream dbs = new DebugOutputBitStream(obs, System.out);
-            dbs.showByte(true);
-            
-            for (int i=0; i<values.length; i++)
-            {
-                int x = values[i];                     
-                dbs.writeBits(x, 32);
-            }
-                        
-            // Close first to force flush()
-            obs.close();
-            byte[] output = baos.toByteArray();
-            System.out.println("\nWritten: "+obs.written());
-            
-            ByteArrayInputStream bais = new ByteArrayInputStream(output);
-            InputStream is = new BufferedInputStream(bais);
-            InputBitStream ibs = new DefaultInputBitStream(is, 16384);
-            System.out.println("Read: ");
-            boolean ok = true;
-            
-            for (int i=0; i<values.length; i++)
-            {                
-                int x = (int) ibs.readBits(32);
-                System.out.print(" "+x);
-                ok &= (x == values[i]);
-            }
-            
-            System.out.println("\n"+((ok)?"Success\n":"Failure\n"));
-        }
-        catch (Exception e)
-        {
-            e.printStackTrace();
-        }
-      }
+           for (int test=0; test<10; test++)
+           {
+               ByteArrayOutputStream baos = new ByteArrayOutputStream(4*values.length);
+               OutputStream os = new BufferedOutputStream(baos);
+               OutputBitStream obs = new DefaultOutputBitStream(os, 16384);
+               DebugOutputBitStream dbs = new DebugOutputBitStream(obs, System.out);
+               dbs.showByte(true);       
 
-      // Test correctness (not byte aligned)
-      {
-        int[] values = new int[16384];
-        Random rnd = new Random();
+               for (int i=0; i<values.length; i++)
+               {
+                  values[i] = (test<5) ? rnd.nextInt(test*1000+100) : rnd.nextInt();
+                  System.out.print(values[i]+" ");
+                   
+                   if ((i % 50) == 49)
+                      System.out.println();                                     
+               }
 
-        for (int i=0; i<values.length; i++)
-            values[i] = rnd.nextInt() & (1 + (i & 63));
-
-
-         System.out.println("Initial");
-
-         for (int i=0; i<values.length; i++)
-         {
-            System.out.print(((+values[i] < 10) ? " 0" : " ") + values[i]);
-
-            if ((i & 63) == 63)
                System.out.println();
+               System.out.println();
+               
+               for (int i=0; i<values.length; i++)
+               {                   
+                   dbs.writeBits(values[i], 32);
+               }
+
+               // Close first to force flush()
+               dbs.close();
+               byte[] output = baos.toByteArray();
+               ByteArrayInputStream bais = new ByteArrayInputStream(output);
+               InputStream is = new BufferedInputStream(bais);
+               InputBitStream ibs = new DefaultInputBitStream(is, 16384);
+               System.out.println("Read:");
+               boolean ok = true;
+
+               for (int i=0; i<values.length; i++)
+               {                
+                   int x = (int) ibs.readBits(32);
+                   System.out.print(x);
+                   System.out.print((x == values[i]) ? " ": "* ");
+                   ok &= (x == values[i]);
+                   
+                   if ((i % 50) == 49)
+                      System.out.println();                                      
+               }
+
+               ibs.close();
+               System.out.println("\n");
+               System.out.println("Bits written: "+dbs.written());
+               System.out.println("Bits read: "+ibs.read());
+               System.out.println("\n"+((ok)?"Success":"Failure"));
+               System.out.println();
+               System.out.println();
+            }
          }
+         catch (Exception e)
+         {
+           e.printStackTrace();
+         }
+    }
+
+    
+    public static void testCorrectnessMisaligned()
+    {    
+         // Test correctness (not byte aligned)
+         System.out.println("Correctness Test - not byte aligned");
+         int[] values = new int[100];
+         Random rnd = new Random();
 
          try
          {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream(values.length);
-            OutputStream os = new BufferedOutputStream(baos);
-            OutputBitStream obs = new DefaultOutputBitStream(os, 16384);
-
-            for (int i=0; i<values.length; i++)
+            for (int test=0; test<10; test++)
             {
-                int x = values[i];
-                obs.writeBits(x, (1 + (i & 63)));
+               ByteArrayOutputStream baos = new ByteArrayOutputStream(4*values.length);
+               OutputStream os = new BufferedOutputStream(baos);
+               OutputBitStream obs = new DefaultOutputBitStream(os, 16384);
+               DebugOutputBitStream dbs = new DebugOutputBitStream(obs, System.out);
+               dbs.showByte(true);       
+ 
+               for (int i=0; i<values.length; i++)
+               {
+                  values[i] = (test<5) ? rnd.nextInt(test*1000+100) : rnd.nextInt();
+                  final int mask = (1 << (1 + (i & 63))) - 1;
+                  values[i] &= mask;
+                  System.out.print(values[i]+" ");
+                   
+                   if ((i % 50) == 49)
+                      System.out.println();                   
+               }
+
+               System.out.println();
+               System.out.println();
+               
+               for (int i=0; i<values.length; i++)
+               {
+                   dbs.writeBits(values[i], (1 + (i & 63)));
+               }
+
+               // Close first to force flush()
+               dbs.close();
+               byte[] output = baos.toByteArray();
+               ByteArrayInputStream bais = new ByteArrayInputStream(output);
+               InputStream is = new BufferedInputStream(bais);
+               InputBitStream ibs = new DefaultInputBitStream(is, 16384);
+               System.out.println();
+               System.out.println("Read: ");
+               boolean ok = true;
+ 
+               for (int i=0; i<values.length; i++)
+               {
+                   int x = (int) ibs.readBits((1 + (i & 63)));
+                   System.out.print(x);
+                   System.out.print((x == values[i]) ? " ": "* ");
+                   ok &= (x == values[i]);
+                   
+                   if ((i % 50) == 49)
+                      System.out.println();                   
+               }
+
+               ibs.close();
+               System.out.println("\n");
+               System.out.println("Bits written: "+dbs.written());
+               System.out.println("Bits read: "+ibs.read());
+               System.out.println("\n"+((ok)?"Success":"Failure"));
+               System.out.println();
+               System.out.println();
             }
-
-            // Close first to force flush()
-            obs.close();
-            byte[] output = baos.toByteArray();
-            System.out.println("\nWritten: "+obs.written());
-
-            ByteArrayInputStream bais = new ByteArrayInputStream(output);
-            InputStream is = new BufferedInputStream(bais);
-            InputBitStream ibs = new DefaultInputBitStream(is, 16384);
-            System.out.println("\nRead: ");
-            boolean ok = true;
-
-            for (int i=0; i<values.length; i++)
-            {
-                int x = (int) ibs.readBits((1 + (i & 63)));
-                System.out.print(((x<10)?" 0":" ")+x+" ("+values[i]+") ");
-                ok &= (x == values[i]);
-
-                if ((i & 63) == 63)
-                    System.out.println();
-            }
-
-            System.out.println("\n"+((ok)?"Success\n":"Failure\n"));
         }
         catch (Exception e)
         {
             e.printStackTrace();
         }
-      }
+    }
 
-      // Test speed
-      {
-        String fileName = (args.length > 0) ? args[0] : "c:\\temp\\output.bin";
+    
+    public static void testSpeed(String[] args)
+    {    
+        // Test speed
+        System.out.println("\nSpeed Test");
+        String fileName = (args.length > 0) ? args[0] : "output.bin";
         int[] values = new int[] { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3,
                                    31, 14, 41, 15, 59, 92, 26, 65, 53, 35, 58, 89, 97, 79, 93, 32 };
 
         try
         {
-            FileOutputStream faos = new FileOutputStream(new File(fileName));
-            OutputStream os = new BufferedOutputStream(faos);
-            OutputBitStream obs = new DefaultOutputBitStream(os, 16384);
-            int nn = 100000 * values.length;
-            long before, after;
-            System.out.println("\nWriting ...");
-            before = System.nanoTime();
-
-            for (int i=0; i<nn; i++)
+            final int iter = 150;
+            long written = 0;
+            long read = 0;
+            long before = 0, after = 0;
+            long delta1 = 0, delta2 = 0;
+            int nn = 100000 * values.length;           
+            
+            for (int test=0; test<iter; test++)
             {
-                obs.writeBits(values[i%values.length], 1+(i&63));
+               FileOutputStream os = new FileOutputStream(new File(fileName));
+               OutputBitStream obs = new DefaultOutputBitStream(os, 1024*1024);
+               before = System.nanoTime();
+
+               for (int i=0; i<nn; i++)
+               {
+                  obs.writeBits(values[i%values.length], 1+(i&63));
+               }
+
+               // Close first to force flush()
+               obs.close();
+               after = System.nanoTime();
+               delta1 += (after-before);
+               written += obs.written();
+
+               FileInputStream is = new FileInputStream(new File(fileName));
+               InputBitStream ibs = new DefaultInputBitStream(is, 1024*1024);
+               before = System.nanoTime();
+
+               for (int i=0; i<nn; i++)
+               {
+                  ibs.readBits(1+(i&63));
+               }
+
+               ibs.close();
+               after = System.nanoTime();
+               delta2 += (after-before);
+               read += ibs.read();
             }
-
-            // Display bits written BEFORE closing (otherwise padding may be reported)
-            System.out.println(obs.written()+ " bits written");
-
-            // Close first to force flush()
-            obs.close();
-
-            after = System.nanoTime();
-            System.out.println("Elapsed time [ms]: "+((after-before)/1000000L));
-
-            FileInputStream fais = new FileInputStream(new File(fileName));
-            InputStream is = new BufferedInputStream(fais);
-            InputBitStream ibs = new DefaultInputBitStream(is, 16384);
-            System.out.println("\nReading ...");
-            before = System.nanoTime();
-
-            for (int i=0; i<nn; i++)
-            {
-               ibs.readBits(1+(i&63));
-           }
-
-            System.out.println(ibs.read()+ " bits read");
-            after = System.nanoTime();
-            System.out.println("Elapsed time [ms]: "+((after-before)/1000000L));
+            
+            System.out.println(written+ " bits written ("+(written/1024/1024/8)+" MB)");
+            System.out.println(read+ " bits read ("+(read/1024/1024/8)+" MB)");
+            System.out.println();
+            System.out.println("Write [ms]        : "+(delta1/1000000L));
+            System.out.println("Throughput [MB/s] : "+((written/1024*1000/8192)/(delta1/1000000L)));
+            System.out.println("Read [ms]         : "+(delta2/1000000L));
+            System.out.println("Throughput [MB/s] : "+((read/1024*1000/8192)/(delta2/1000000L)));
         }
         catch (Exception e)
         {
             e.printStackTrace();
         }
-      }
     }
 }
