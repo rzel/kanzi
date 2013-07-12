@@ -73,7 +73,7 @@ public class EntropyCodecFactory
          case NONE_TYPE:
             return new NullEntropyEncoder(obs);
          default :
-            throw new IllegalArgumentException("Invalid entropy encoder type: " + (char) entropyType);
+            throw new IllegalArgumentException("Unknown entropy codec type: " + (char) entropyType);
       }
    }
    
@@ -93,7 +93,7 @@ public class EntropyCodecFactory
          case NONE_TYPE:
             return "NONE";
          default :
-            throw new IllegalArgumentException("Invalid entropy encoder type: " + (char) entropyType);
+            throw new IllegalArgumentException("Unknown entropy codec type: " + (char) entropyType);
       }
    }
 }

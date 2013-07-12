@@ -478,7 +478,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 	header := uint64(0)
 
 	if header, err = this.ibs.ReadBits(48); err != nil {
-		errMsg := fmt.Sprintf("Error reading header in input file: %v", err)
+		errMsg := fmt.Sprintf("Invalid bitstream, cannot read header: %v", err)
 		return NewIOError(errMsg, ERR_READ_FILE)
 	}
 
@@ -486,7 +486,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 
 	// Sanity check
 	if version != BITSTREAM_FORMAT_VERSION {
-		errMsg := fmt.Sprintf("Cannot read this version of the stream: %d", version)
+		errMsg := fmt.Sprintf("Invalid bitstream, cannot read this version of the stream: %d", version)
 		return NewIOError(errMsg, ERR_STREAM_VERSION)
 	}
 
@@ -509,7 +509,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 	this.blockSize = uint(header & 0x03FFFFFF)
 
 	if this.blockSize > MAX_BLOCK_SIZE {
-		errMsg := fmt.Sprintf("Invalid block size read from file: %d", this.blockSize)
+		errMsg := fmt.Sprintf("Invalid bitstream, incorrect block size: %d", this.blockSize)
 		return NewIOError(errMsg, ERR_BLOCK_SIZE)
 	}
 
@@ -519,7 +519,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 		w1, err := function.GetByteFunctionName(this.transformType)
 
 		if err != nil {
-			errMsg := fmt.Sprintf("Invalid transform type: %d", this.blockSize)
+			errMsg := fmt.Sprintf("Invalid bitstream, unknown transform type: %d", this.transformType)
 			return NewIOError(errMsg, ERR_INVALID_CODEC)
 		}
 
@@ -535,7 +535,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 		}
 
 		if err != nil {
-			errMsg := fmt.Sprintf("Invalid entropy codec type: %d", this.blockSize)
+			errMsg := fmt.Sprintf("Invalid bitstream, unknown entropy codec type: %d", this.entropyType)
 			return NewIOError(errMsg, ERR_INVALID_CODEC)
 		}
 
@@ -742,7 +742,7 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 			checksum2 := this.hasher.Hash(data[0:decoded])
 
 			if checksum2 != checksum1 {
-				errMsg := fmt.Sprintf("Invalid checksum: expected %x, found %x", checksum1, checksum2)
+				errMsg := fmt.Sprintf("Corrupted bitstream: expected checksum %x, found %x", checksum1, checksum2)
 				return decoded, NewIOError(errMsg, ERR_PROCESS_BLOCK)
 			}
 		}

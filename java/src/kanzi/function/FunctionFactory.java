@@ -45,7 +45,7 @@ public class FunctionFactory
          case NONE_TYPE:
             return new NullFunction(size);
          default:
-            throw new IllegalArgumentException("Unsupported function type: " + (char) type);
+            throw new IllegalArgumentException("Unknown transform type: " + (char) type);
       }
    }
 
@@ -67,7 +67,7 @@ public class FunctionFactory
          case NONE_TYPE:
             return "NONE";
          default:
-            throw new IllegalArgumentException("Unsupported function type: " + (char) type);
+            throw new IllegalArgumentException("Unknown transform type: " + (char) type);
       }
    }
 }
