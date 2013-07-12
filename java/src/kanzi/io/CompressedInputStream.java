@@ -289,7 +289,9 @@ public class CompressedInputStream extends InputStream
       }
       catch (Exception e)
       {
-         throw new kanzi.io.IOException(e.getMessage(), Error.ERR_UNKNOWN);
+         int errorCode = (e instanceof BitStreamException) ? ((BitStreamException) e).getErrorCode() :
+                 Error.ERR_UNKNOWN;
+         throw new kanzi.io.IOException(e.getMessage(), errorCode);
       }
    }
 

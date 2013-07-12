@@ -18,6 +18,7 @@ package kanzi.io;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import kanzi.BitStreamException;
 import kanzi.ByteFunction;
 import kanzi.EntropyEncoder;
 import kanzi.IndexedByteArray;
@@ -297,9 +298,15 @@ public class CompressedOutputStream extends OutputStream
          this.iba1.index = 0;
          this.blockId++;
       }
+      catch (kanzi.io.IOException e)
+      {
+         throw e;
+      }
       catch (Exception e)
       {
-         throw new kanzi.io.IOException(e.getMessage(), Error.ERR_UNKNOWN);
+         int errorCode = (e instanceof BitStreamException) ? ((BitStreamException) e).getErrorCode() :
+                 Error.ERR_UNKNOWN;
+         throw new kanzi.io.IOException(e.getMessage(), errorCode);
       }
    }
 
