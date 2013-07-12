@@ -179,5 +179,6 @@ func main() {
 		fmt.Printf("\nThroughput [MB/s]: %d", (int64(iter*size))*1000000/delta1*1000/(1024*1024))
 		fmt.Printf("\nZLT decoding [ms]: %v", delta2/1000000)
 		fmt.Printf("\nThroughput [MB/s]: %d", (int64(iter*size))*1000000/delta2*1000/(1024*1024))
+		println()
 	}
 }

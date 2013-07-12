@@ -17,6 +17,7 @@ package bitstream
 
 import (
 	"errors"
+	"fmt"
 	"kanzi"
 )
 
@@ -68,7 +69,7 @@ func (this *DefaultInputBitStream) ReadBit() (int, error) {
 
 func (this *DefaultInputBitStream) ReadBits(length uint) (uint64, error) {
 	if length == 0 || length > 64 {
-		return 0, errors.New("Length must be in the [1..64] range")
+		return 0, fmt.Errorf("Invalid length: %v (must be in [1..64])", length)
 	}
 
 	remaining := length

@@ -175,5 +175,5 @@ func main() {
 	fmt.Printf("\nIterations: %v", iter*100)
 	fmt.Printf("\nDCT8 Forward transform [ms]: %v", delta1/1000000)
 	fmt.Printf("\nDCT8 Inverse transform [ms]: %v", delta2/1000000)
-
+	println()
 }

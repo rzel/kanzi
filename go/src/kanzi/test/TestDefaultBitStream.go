@@ -239,11 +239,12 @@ func testSpeed() {
 		file2.Close()
 	}
 
-	fmt.Printf("\n%v bits written (%v MB)", written, written/1024/8192)
-	fmt.Printf("\n%v bits read (%v MB)", read, read/1024/8192)
-	fmt.Printf("\n")
-	fmt.Printf("\nWrite [ms]        : %v", delta1/1000000)
-	fmt.Printf("\nThroughput [MB/s] : %d", (written/1024*1000/8192)/uint64(delta1/1000000))
-	fmt.Printf("\nRead [ms]         : %v", delta2/1000000)
-	fmt.Printf("\nThroughput [MB/s] : %d", (read/1024*1000/8192)/uint64(delta2/1000000))
+	println()
+	fmt.Printf("%v bits written (%v MB)\n", written, written/1024/8192)
+	fmt.Printf("%v bits read (%v MB)\n", read, read/1024/8192)
+	println()
+	fmt.Printf("Write [ms]        : %v\n", delta1/1000000)
+	fmt.Printf("Throughput [MB/s] : %d\n", (written/1024*1000/8192)/uint64(delta1/1000000))
+	fmt.Printf("Read [ms]         : %v\n", delta2/1000000)
+	fmt.Printf("Throughput [MB/s] : %d\n", (read/1024*1000/8192)/uint64(delta2/1000000))
 }

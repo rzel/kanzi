@@ -126,4 +126,5 @@ func main() {
 	fmt.Printf("\nIterations: %v", iter)
 	fmt.Printf("\nBWT Forward transform [ms]: %v", delta1/1000000)
 	fmt.Printf("\nBWT Inverse transform [ms]: %v", delta2/1000000)
+	println()
 }

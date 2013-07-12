@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	TOP                      = uint64(1<<56) - 1
-	BOTTOM                   = uint64(1<<40) - 1
-	MAX_RANGE                = BOTTOM + 1
+	TOP_RANGE                = uint64(0x00FFFFFFFFFFFFFF)
+	BOTTOM_RANGE             = uint64(0x000000FFFFFFFFFF)
+	MAX_RANGE                = BOTTOM_RANGE + 1
 	MASK                     = uint64(0x00FF000000000000)
 	NB_SYMBOLS               = 257           //256 + EOF
 	DEFAULT_RANGE_CHUNK_SIZE = uint(1 << 16) // 64 KB by default
@@ -72,7 +72,7 @@ func NewRangeEncoder(bs kanzi.OutputBitStream, chunkSizes ...uint) (*RangeEncode
 	}
 
 	this := new(RangeEncoder)
-	this.range_ = TOP
+	this.range_ = TOP_RANGE
 	this.bitstream = bs
 	this.chunkSize = int(chkSize)
 
@@ -116,7 +116,7 @@ func (this *RangeEncoder) EncodeByte(b byte) error {
 				break
 			} else {
 				// Normalize
-				this.range_ = -this.low & BOTTOM
+				this.range_ = -this.low & BOTTOM_RANGE
 			}
 		}
 
@@ -243,7 +243,7 @@ func NewRangeDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*RangeDecoder
 	}
 
 	this := new(RangeDecoder)
-	this.range_ = TOP
+	this.range_ = TOP_RANGE
 	this.bitstream = bs
 	this.chunkSize = int(chkSize)
 
@@ -337,7 +337,7 @@ func (this *RangeDecoder) decodeByte_() (byte, error) {
 				break
 			} else {
 				// Normalize
-				this.range_ = -this.low & BOTTOM
+				this.range_ = -this.low & BOTTOM_RANGE
 			}
 		}
 
@@ -420,7 +420,7 @@ func (this *RangeDecoder) Decode(block []byte) (int, error) {
 		return 0, errors.New("Invalid null block parameter")
 	}
 
-	// Deferred initialization: the bistream may not be ready at build time
+	// Deferred initialization: the bitstream may not be ready at build time
 	// Initialize 'current' with bytes read from the bitstream
 	if this.Initialized() == false {
 		if err := this.Initialize(); err != nil {

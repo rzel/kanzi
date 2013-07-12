@@ -198,6 +198,5 @@ func main() {
 		fmt.Printf("Additions [ms]: %d\n", delta1/1000000)
 		fmt.Printf("Deletions [ms]: %d\n", delta2/1000000)
 		fmt.Printf("Additions/Deletions at size=%v [ms]: %d\n", size, delta3/1000000)
-
 	}
 }

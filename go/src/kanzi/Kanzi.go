@@ -102,7 +102,7 @@ type EntropyDecoder interface {
 	// provided buffer.
 	Decode(block []byte) (int, error)
 
-	// Return the underlying bistream
+	// Return the underlying bitstream
 	BitStream() InputBitStream
 
 	// Must be called before getting rid of the entropy decoder

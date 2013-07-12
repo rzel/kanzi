@@ -17,6 +17,7 @@ package bitstream
 
 import (
 	"errors"
+	"fmt"
 	"kanzi"
 )
 
@@ -68,7 +69,7 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, length uint) (uint, 
 	}
 
 	if length > 64 {
-		return 0, errors.New("Length must be less than 64")
+		return 0, fmt.Errorf("Invalid length: %v (must be in [1..64])", length)
 	}
 
 	remaining := length

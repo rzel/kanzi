@@ -20,6 +20,13 @@ import (
 	"kanzi"
 )
 
+const (
+	TOP        = uint64(0x00FFFFFFFFFFFFFF)
+	MASK_24_56 = uint64(0x00FFFFFFFF000000)
+	MASK_0_24  = uint64(0x0000000000FFFFFF)
+	MASK_0_32  = uint64(0x00000000FFFFFFFF)
+)
+
 type Predictor interface {
 	// Used to update the probability model
 	Update(bit byte)
@@ -39,17 +46,17 @@ type BinaryEntropyEncoder struct {
 
 func NewBinaryEntropyEncoder(bs kanzi.OutputBitStream, predictor Predictor) (*BinaryEntropyEncoder, error) {
 	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
+		return nil, errors.New("Invalid null bitstream parameter")
 	}
 
 	if predictor == nil {
-		return nil, errors.New("Predictor parameter cannot be null")
+		return nil, errors.New("Invalid null predictor parameter")
 	}
 
 	this := new(BinaryEntropyEncoder)
 	this.predictor = predictor
 	this.low = 0
-	this.high = 0xFFFFFFFFFFFFFF
+	this.high = TOP
 	this.bitstream = bs
 	return this, nil
 }
@@ -82,7 +89,7 @@ func (this *BinaryEntropyEncoder) EncodeBit(bit byte) error {
 	this.predictor.Update(bit)
 
 	// Write unchanged first 32 bits to bitstream
-	for (this.low^this.high)&0xFFFFFFFF000000 == 0 {
+	for (this.low^this.high)&MASK_24_56 == 0 {
 		this.Flush()
 	}
 
@@ -96,7 +103,7 @@ func (this *BinaryEntropyEncoder) Encode(block []byte) (int, error) {
 func (this *BinaryEntropyEncoder) Flush() {
 	this.bitstream.WriteBits(this.high>>24, 32)
 	this.low <<= 32
-	this.high = (this.high << 32) | 0xFFFFFFFF
+	this.high = (this.high << 32) | MASK_0_32
 }
 
 func (this *BinaryEntropyEncoder) BitStream() kanzi.OutputBitStream {
@@ -109,7 +116,7 @@ func (this *BinaryEntropyEncoder) Dispose() {
 	}
 
 	this.disposed = true
-	this.bitstream.WriteBits(this.low|0xFFFFFF, 56)
+	this.bitstream.WriteBits(this.low|MASK_0_24, 56)
 	this.bitstream.Flush()
 }
 
@@ -124,26 +131,24 @@ type BinaryEntropyDecoder struct {
 
 func NewBinaryEntropyDecoder(bs kanzi.InputBitStream, predictor Predictor) (*BinaryEntropyDecoder, error) {
 	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
+		return nil, errors.New("Invalid null bitstream parameter")
 	}
 
 	if predictor == nil {
-		return nil, errors.New("Predictor parameter cannot be null")
+		return nil, errors.New("Invalid null predictor parameter")
 	}
 
 	// Defer stream reading. We are creating the object, we should not do any I/O
 	this := new(BinaryEntropyDecoder)
 	this.predictor = predictor
 	this.low = 0
-	this.high = 0xFFFFFFFFFFFFFF
-	this.current = 0
-	this.initialized = false
+	this.high = TOP
 	this.bitstream = bs
 	return this, nil
 }
 
 func (this *BinaryEntropyDecoder) DecodeByte() (byte, error) {
-	// Deferred initialization: the bistream may not be ready at build time
+	// Deferred initialization: the bitstream may not be ready at build time
 	// Initialize 'current' with bytes read from the bitstream
 	if this.Initialized() == false {
 		this.Initialize()
@@ -208,7 +213,7 @@ func (this *BinaryEntropyDecoder) DecodeBit() (int, error) {
 	this.predictor.Update(byte(bit))
 
 	// Read 32 bits from bitstream
-	for (this.low^this.high)&0xFFFFFFFF000000 == 0 {
+	for (this.low^this.high)&MASK_24_56 == 0 {
 		if err := this.Read(); err != nil {
 			return 0, err
 		}
@@ -219,7 +224,7 @@ func (this *BinaryEntropyDecoder) DecodeBit() (int, error) {
 
 func (this *BinaryEntropyDecoder) Read() error {
 	this.low = this.low << 32
-	this.high = (this.high << 32) | 0xFFFFFFFF
+	this.high = (this.high << 32) | MASK_0_32
 	read, err := this.bitstream.ReadBits(32)
 
 	if err == nil {
@@ -232,7 +237,7 @@ func (this *BinaryEntropyDecoder) Read() error {
 func (this *BinaryEntropyDecoder) Decode(block []byte) (int, error) {
 	err := error(nil)
 
-	// Deferred initialization: the bistream may not be ready at build time
+	// Deferred initialization: the bitstream may not be ready at build time
 	// Initialize 'current' with bytes read from the bitstream
 	if this.Initialized() == false {
 		if err = this.Initialize(); err != nil {

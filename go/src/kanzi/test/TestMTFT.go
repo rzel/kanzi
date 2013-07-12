@@ -158,5 +158,6 @@ func main() {
 		fmt.Printf("\nThroughput [KB/s]: %d", (int64(iter*size))*1000000/delta1*1000/1024)
 		fmt.Printf("\nMTFT Reverse transform [ms]: %v", delta2/1000000)
 		fmt.Printf("\nThroughput [KB/s]: %d", (int64(iter*size))*1000000/delta2*1000/1024)
+		println()
 	}
 }
