@@ -181,7 +181,7 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 }
 
 func (this *DefaultOutputBitStream) Written() uint64 {
-	if this.closed {
+	if this.Closed() {
 		return this.written
 	} else {
 		// Number of bits flushed + bytes written in memory + bits written in memory

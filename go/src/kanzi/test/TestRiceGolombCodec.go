@@ -120,13 +120,12 @@ func TestCorrectness() {
 
 func TestSpeed() {
 	fmt.Printf("\n\nSpeed test\n")
-	repeats := [16]int{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3}
+	repeats := []int{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3}
 
 	for jj := 0; jj < 3; jj++ {
 		fmt.Printf("Test %v\n", jj+1)
 		delta1 := int64(0)
 		delta2 := int64(0)
-
 		size := 50000
 		iter := 2000
 		buffer := make([]byte, size)

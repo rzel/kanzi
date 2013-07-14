@@ -54,11 +54,11 @@ public final class RiceGolombDecoder extends AbstractDecoder
        while (this.bitstream.readBit() == 0)
           q++;
 
-       // rest is binary encoded
+       // remainder is binary encoded
        final int r = (int) this.bitstream.readBits(this.logBase);
        final int res = (q << this.logBase) | r;
 
-       if ((res != 0) && (this.signed))
+       if ((res != 0) && (this.signed == true))
        {
           if (this.bitstream.readBit() == 1)
              return (byte) -res;

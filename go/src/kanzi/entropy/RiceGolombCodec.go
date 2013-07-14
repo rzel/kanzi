@@ -32,7 +32,7 @@ type RiceGolombEncoder struct {
 // Example: -1 is better compressed as int8 (1 followed by -) than as byte (-1 & 255 = 255)
 func NewRiceGolombEncoder(bs kanzi.OutputBitStream, sgn bool, logBase uint) (*RiceGolombEncoder, error) {
 	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
+		return nil, errors.New("Invalid null bitstream parameter")
 	}
 
 	if logBase <= 0 || logBase >= 8 {
@@ -70,7 +70,7 @@ func (this *RiceGolombEncoder) EncodeByte(val byte) error {
 		val2 = val
 	}
 
-	// quotient is unary encoded, rest is binary encoded
+	// quotient is unary encoded, remainder is binary encoded
 	emit := uint64(this.base | (uint(val2) & (this.base - 1)))
 	n := uint((1 + (uint(val2) >> this.logBase)) + this.logBase)
 
@@ -102,11 +102,7 @@ type RiceGolombDecoder struct {
 // If sgn is true, the extracted value is treated as an int8
 func NewRiceGolombDecoder(bs kanzi.InputBitStream, sgn bool, logBase uint) (*RiceGolombDecoder, error) {
 	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
-	}
-
-	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
+		return nil, errors.New("Invalid null bitstream parameter")
 	}
 
 	if logBase <= 0 || logBase >= 8 {
