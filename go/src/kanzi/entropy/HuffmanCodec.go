@@ -18,6 +18,7 @@ package entropy
 import (
 	"container/list"
 	"errors"
+	"fmt"
 	"kanzi"
 	"kanzi/util"
 	"sort"
@@ -278,11 +279,11 @@ func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 	// Transmit code lengths only, frequencies and codes do not matter
 	// Unary encode the length difference
 	prevSize := uint8(2)
-	zeros := 0
+	zeros := -1
 
 	for i := 0; i < 256; i++ {
 		currSize := this.sizes[i]
-		egenc.EncodeByte(byte(currSize - prevSize))
+		egenc.EncodeByte(currSize - prevSize)
 
 		if currSize == 0 {
 			zeros++
@@ -550,13 +551,18 @@ func (this *HuffmanDecoder) ReadLengths() error {
 		return err
 	}
 
-	currSize, err := egdec.DecodeByte()
+	delta, err := egdec.DecodeByte()
 
 	if err != nil {
 		return err
 	}
 
-	currSize += 2
+	currSize := int8(delta) + 2
+
+	if currSize < 0 {
+		return fmt.Errorf("Invalid bitstream: incorrect size %v for Huffman symbol 0", currSize)
+	}
+
 	maxSize := currSize
 	prevSize := currSize
 	buf[0] = uint8(currSize)
@@ -564,21 +570,25 @@ func (this *HuffmanDecoder) ReadLengths() error {
 
 	// Read lengths
 	for i := 1; i < 256; i++ {
-		if currSize, err = egdec.DecodeByte(); err != nil {
+		if delta, err = egdec.DecodeByte(); err != nil {
 			return err
 		}
 
-		currSize += prevSize
-		buf[i] = uint8(currSize)
+		currSize = int8(delta) + prevSize
 
+		if currSize < 0 {
+			return fmt.Errorf("Invalid bitstream: incorrect size %v for Huffman symbol %v", currSize, i)
+		}
+
+		buf[i] = uint8(currSize)
 		if currSize == 0 {
 			zeros++
 		} else {
 			zeros = 0
 		}
 
-		if maxSize < buf[i] {
-			maxSize = buf[i]
+		if maxSize < currSize {
+			maxSize = currSize
 		}
 
 		// If there is one zero size symbol, save a few bits by avoiding the

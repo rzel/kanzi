@@ -155,11 +155,11 @@ public class HuffmanDecoder extends AbstractDecoder
        // Process each element of the map except the root node
        while (codeMap.size() > 1)
        {
+          // Remove last entry and reuse key for upNode
           final Map.Entry<Key, Node> last = codeMap.pollLastEntry();
           Key key = last.getKey();
           final int code = key.code;
-          final short length = key.length;
-          key.length = (short) (length-1);
+          key.length--;
           key.code = code >> 1;
           Node upNode = codeMap.get(key);
 
@@ -187,6 +187,13 @@ public class HuffmanDecoder extends AbstractDecoder
         final short[] buf = this.sizes;
         ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
         int currSize = 2 + egdec.decodeByte();
+
+        if (currSize < 0)
+        {
+           throw new BitStreamException("Invalid bitstream: incorrect size "+currSize+
+                   " for Huffman symbol 0", BitStreamException.INVALID_STREAM);
+        }
+
         int maxSize = currSize;
         int prevSize = currSize;
         buf[0] = (short) currSize;
@@ -196,6 +203,13 @@ public class HuffmanDecoder extends AbstractDecoder
         for (int i=1; i<256; i++)
         {
            currSize = prevSize + egdec.decodeByte();
+           
+           if (currSize < 0)
+           {
+              throw new BitStreamException("Invalid bitstream: incorrect size "+currSize+
+                      " for Huffman symbol "+i, BitStreamException.INVALID_STREAM);
+           }
+     
            buf[i] = (short) currSize;
            zeros = (currSize == 0) ? zeros+1 : 0;
   
