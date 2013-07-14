@@ -16,7 +16,7 @@ limitations under the License.
 package util
 
 import (
-	"errors"
+	"fmt"
 )
 
 type ByteArrayOutputStream struct {
@@ -30,9 +30,9 @@ func NewByteArrayOutputStream(buffer []byte) (*ByteArrayOutputStream, error) {
 	return this, nil
 }
 
-func (this ByteArrayOutputStream) Write(b []byte) (n int, err error) {
-	if len(b) > len(this.array)+this.index {
-		return 0, errors.New("Output buffer too small")
+func (this *ByteArrayOutputStream) Write(b []byte) (n int, err error) {
+	if this.index+len(b) > len(this.array) {
+		return 0, fmt.Errorf("Output buffer too small, required:%v, available:%v", len(b), len(this.array)-this.index)
 	}
 
 	copy(this.array[this.index:], b)
@@ -59,12 +59,13 @@ func NewByteArrayInputStream(buffer []byte) (*ByteArrayInputStream, error) {
 	return this, nil
 }
 
-func (this ByteArrayInputStream) Read(b []byte) (n int, err error) {
-	if len(b) > len(this.array)+this.index {
-		return 0, errors.New("Input buffer too small")
+func (this *ByteArrayInputStream) Read(b []byte) (n int, err error) {
+		fmt.Printf("----- %v %v\n",  len(b), this.index)
+	if this.index+len(b) > len(this.array) {
+		return 0, fmt.Errorf("Input buffer too small, required:%v, available:%v", len(b), len(this.array)-this.index)
 	}
 
-	copy(b, this.array[this.index:])
+	copy(b, this.array[this.index:this.index+len(b)])
 	this.index += len(b)
 	return len(b), nil
 }
