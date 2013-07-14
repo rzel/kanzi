@@ -157,8 +157,8 @@ public class TestRiceGolombCoder
                 }
 
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
-                OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
+                ByteArrayOutputStream os = new ByteArrayOutputStream(size*2);
+                OutputBitStream bs = new DefaultOutputBitStream(os, size);
                 RiceGolombEncoder gc = new RiceGolombEncoder(bs, true, 3);
                 long before1 = System.nanoTime();
                 
@@ -175,7 +175,7 @@ public class TestRiceGolombCoder
 
                 // Decode
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
                 RiceGolombDecoder gd = new RiceGolombDecoder(bs2, true, 3);
                 long before2 = System.nanoTime();
                 

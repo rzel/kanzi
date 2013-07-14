@@ -157,8 +157,8 @@ public class TestRangeCoder
                 }
 
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
-                OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
+                ByteArrayOutputStream os = new ByteArrayOutputStream(size*2);
+                OutputBitStream bs = new DefaultOutputBitStream(os, size);
                 RangeEncoder rc = new RangeEncoder(bs);
                 long before1 = System.nanoTime();
                 
@@ -175,7 +175,7 @@ public class TestRangeCoder
 
                 // Decode
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
                 RangeDecoder rd = new RangeDecoder(bs2);
                 long before2 = System.nanoTime();
 

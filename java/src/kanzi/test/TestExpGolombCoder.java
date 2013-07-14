@@ -168,8 +168,8 @@ public class TestExpGolombCoder
                 }
 
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
-                OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
+                ByteArrayOutputStream os = new ByteArrayOutputStream(size*2);
+                OutputBitStream bs = new DefaultOutputBitStream(os, size);
                 ExpGolombEncoder gc = new ExpGolombEncoder(bs, true);
                 long before1 = System.nanoTime();
                 
@@ -186,7 +186,7 @@ public class TestExpGolombCoder
 
                 // Decode
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
                 ExpGolombDecoder gd = new ExpGolombDecoder(bs2, true);
                 long before2 = System.nanoTime();
                 

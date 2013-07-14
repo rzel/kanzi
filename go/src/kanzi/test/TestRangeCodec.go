@@ -62,7 +62,7 @@ func TestCorrectness() {
 
 		fmt.Printf("\nEncoded: ")
 		buffer := make([]byte, 16384)
-		oFile, _ := util.NewByteArrayOutputStream(buffer)
+		oFile, _ := util.NewByteArrayOutputStream(buffer, true)
 		defer oFile.Close()
 		obs, _ := bitstream.NewDefaultOutputBitStream(oFile, 16384)
 		dbgbs, _ := bitstream.NewDebugOutputBitStream(obs, os.Stdout)
@@ -78,7 +78,7 @@ func TestCorrectness() {
 		rc.Dispose()
 		dbgbs.Close()
 		println()
-		iFile, _ := util.NewByteArrayInputStream(buffer)
+		iFile, _ := util.NewByteArrayInputStream(buffer, true)
 		defer iFile.Close()
 		ibs, _ := bitstream.NewDefaultInputBitStream(iFile, 16384)
 		dbgbs2, _ := bitstream.NewDebugInputBitStream(ibs, os.Stdout)
@@ -125,7 +125,7 @@ func TestSpeed() {
 		fmt.Printf("\nTest %v\n", jj+1)
 		size := 50000
 		iter := 2000
-		buffer := make([]byte, size)
+		buffer := make([]byte, size*2)
 		values1 := make([]byte, size)
 		values2 := make([]byte, size)
 		delta1 := int64(0)
@@ -150,7 +150,7 @@ func TestSpeed() {
 				}
 			}
 
-			oFile, _ := util.NewByteArrayOutputStream(buffer)
+			oFile, _ := util.NewByteArrayOutputStream(buffer, false)
 			defer oFile.Close()
 			obs, _ := bitstream.NewDefaultOutputBitStream(oFile, uint(size))
 			rc, _ := entropy.NewRangeEncoder(obs)
@@ -164,13 +164,18 @@ func TestSpeed() {
 			}
 
 			rc.Dispose()
-			obs.Close()
+
+			if _, err := obs.Close(); err != nil {
+				fmt.Printf("Error during close: %v\n", err)
+				os.Exit(1)
+			}
+
 			after := time.Now()
 			delta1 += after.Sub(before).Nanoseconds()
 		}
 
 		for ii := 0; ii < iter; ii++ {
-			iFile, _ := util.NewByteArrayInputStream(buffer)
+			iFile, _ := util.NewByteArrayInputStream(buffer, false)
 			defer iFile.Close()
 			ibs, _ := bitstream.NewDefaultInputBitStream(iFile, uint(size))
 			rd, _ := entropy.NewRangeDecoder(ibs)
@@ -184,7 +189,12 @@ func TestSpeed() {
 			}
 
 			rd.Dispose()
-			ibs.Close()
+
+			if _, err := ibs.Close(); err != nil {
+				fmt.Printf("Error during close: %v\n", err)
+				os.Exit(1)
+			}
+
 			after := time.Now()
 			delta2 += after.Sub(before).Nanoseconds()
 

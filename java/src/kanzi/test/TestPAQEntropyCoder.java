@@ -150,8 +150,8 @@ public class TestPAQEntropyCoder
                 }
 
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
-                OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
+                ByteArrayOutputStream os = new ByteArrayOutputStream(size*2);
+                OutputBitStream bs = new DefaultOutputBitStream(os, size);
                 BinaryEntropyEncoder bec = new BinaryEntropyEncoder(bs, new PAQPredictor());
                 long before1 = System.nanoTime();
                 
@@ -168,7 +168,7 @@ public class TestPAQEntropyCoder
 
                 // Decode
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
                 BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new PAQPredictor());
                 long before2 = System.nanoTime();
                 

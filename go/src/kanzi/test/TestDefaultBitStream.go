@@ -25,7 +25,6 @@ import (
 	"time"
 )
 
-
 func main() {
 	testCorrectnessAligned()
 	testCorrectnessMisaligned()
@@ -39,7 +38,7 @@ func testCorrectnessAligned() {
 
 	for test := 0; test < 10; test++ {
 		buffer := make([]byte, 16384)
-		os_ , _ := util.NewByteArrayOutputStream(buffer)
+		os_, _ := util.NewByteArrayOutputStream(buffer, true)
 		obs, _ := bitstream.NewDefaultOutputBitStream(os_, 16384)
 		dbs, _ := bitstream.NewDebugOutputBitStream(obs, os.Stdout)
 		dbs.ShowByte(true)
@@ -68,7 +67,7 @@ func testCorrectnessAligned() {
 		// Close first to force flush()
 		dbs.Close()
 
-		is_ , _ := util.NewByteArrayInputStream(buffer)
+		is_, _ := util.NewByteArrayInputStream(buffer, true)
 		ibs, _ := bitstream.NewDefaultInputBitStream(is_, 16384)
 		fmt.Printf("\nRead:\n")
 		ok := true
@@ -114,7 +113,7 @@ func testCorrectnessMisaligned() {
 
 	for test := 0; test < 10; test++ {
 		buffer := make([]byte, 16384)
-		os_ , _ := util.NewByteArrayOutputStream(buffer)
+		os_, _ := util.NewByteArrayOutputStream(buffer, false)
 		obs, _ := bitstream.NewDefaultOutputBitStream(os_, 16384)
 		dbs, _ := bitstream.NewDebugOutputBitStream(obs, os.Stdout)
 		dbs.ShowByte(true)
@@ -145,7 +144,7 @@ func testCorrectnessMisaligned() {
 		// Close first to force flush()
 		dbs.Close()
 
-		is_ , _ := util.NewByteArrayInputStream(buffer)
+		is_, _ := util.NewByteArrayInputStream(buffer, false)
 		ibs, _ := bitstream.NewDefaultInputBitStream(is_, 16384)
 		fmt.Printf("\nRead:\n")
 		ok := true

@@ -173,8 +173,8 @@ public class TestHuffmanCoder
                 }
 
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(50000);
-                OutputBitStream bs = new DefaultOutputBitStream(os, 50000);
+                ByteArrayOutputStream os = new ByteArrayOutputStream(size*2);
+                OutputBitStream bs = new DefaultOutputBitStream(os, size);
                 HuffmanEncoder rc = new HuffmanEncoder(bs);
                 long before1 = System.nanoTime();
                 
@@ -191,7 +191,7 @@ public class TestHuffmanCoder
 
                 // Decode
                 byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 50000);
+                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
                 HuffmanDecoder rd = new HuffmanDecoder(bs2);
                 long before2 = System.nanoTime();
                 

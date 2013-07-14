@@ -19,20 +19,28 @@ import (
 	"fmt"
 )
 
-type ByteArrayOutputStream struct {
+type ByteArrayOutputStream struct {	
 	array []byte
 	index int
+	autogrow	bool
 }
 
-func NewByteArrayOutputStream(buffer []byte) (*ByteArrayOutputStream, error) {
+func NewByteArrayOutputStream(buffer []byte, autogrow bool) (*ByteArrayOutputStream, error) {
 	this := new(ByteArrayOutputStream)
 	this.array = buffer
+	this.autogrow = autogrow
 	return this, nil
 }
 
 func (this *ByteArrayOutputStream) Write(b []byte) (n int, err error) {
 	if this.index+len(b) > len(this.array) {
-		return 0, fmt.Errorf("Output buffer too small, required:%v, available:%v", len(b), len(this.array)-this.index)
+		if this.autogrow == true {
+			buffer := make([]byte, this.index+len(b))
+			copy(buffer, this.array[0:this.index])
+			this.array = buffer
+		} else {
+			return 0, fmt.Errorf("Output buffer too small, required:%v, available:%v", len(b), len(this.array)-this.index)
+		}
 	}
 
 	copy(this.array[this.index:], b)
@@ -51,18 +59,25 @@ func (this ByteArrayOutputStream) Sync() error {
 type ByteArrayInputStream struct {
 	array []byte
 	index int
+	autogrow	bool
 }
 
-func NewByteArrayInputStream(buffer []byte) (*ByteArrayInputStream, error) {
+func NewByteArrayInputStream(buffer []byte, autogrow bool) (*ByteArrayInputStream, error) {
 	this := new(ByteArrayInputStream)
 	this.array = buffer
+	this.autogrow = autogrow
 	return this, nil
 }
 
 func (this *ByteArrayInputStream) Read(b []byte) (n int, err error) {
-		fmt.Printf("----- %v %v\n",  len(b), this.index)
 	if this.index+len(b) > len(this.array) {
-		return 0, fmt.Errorf("Input buffer too small, required:%v, available:%v", len(b), len(this.array)-this.index)
+		if this.autogrow == true {
+			buffer := make([]byte, this.index+len(b))
+			copy(buffer, this.array[0:this.index])
+			this.array = buffer
+		} else {
+			return 0, fmt.Errorf("Input buffer too small, required:%v, available:%v", len(b), len(this.array)-this.index)
+		}
 	}
 
 	copy(b, this.array[this.index:this.index+len(b)])
