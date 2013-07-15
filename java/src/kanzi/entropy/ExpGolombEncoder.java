@@ -61,9 +61,9 @@ public final class ExpGolombEncoder extends AbstractEncoder
        {
           //  Count the bits (log2), subtract one, and write that number of zeros
           //  preceding the previous bit string to get the encoded value
-          int log2 = 0;
+          int log2 = 2;
 
-          for ( ; val2>1; val2>>=1)
+          for ( ; val2>=4; val2>>=1)
              log2++;
 
           // Add log2 zeros and 1 one (unary coding), then remainder
@@ -74,7 +74,7 @@ public final class ExpGolombEncoder extends AbstractEncoder
           // 4 => 101 => 00101
           // 5 => 110 => 00110
           // 6 => 111 => 00111
-          n = log2 + (log2 + 1);
+          n = log2 + (log2 - 1);
        }
 
        if (this.signed == true)

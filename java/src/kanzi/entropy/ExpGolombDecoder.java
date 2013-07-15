@@ -44,30 +44,26 @@ public final class ExpGolombDecoder extends AbstractDecoder
     @Override
     public byte decodeByte()
     {
-       int log2;
-       long info = 0;
+       int log2 = 0;
 
        // Decode unsigned
-       for (log2=0; log2<8; log2++)
-       {
-          if (this.bitstream.readBit() == 1)
-             break;
-       }
+       while (this.bitstream.readBit() == 0)
+           log2++;
 
-       if (log2 > 0)
-          info = this.bitstream.readBits(log2);
-
-       byte res = (byte) ((1 << log2) - 1 + info);
+       if (log2 == 0)
+          return 0;
+       
+       long res = (1 << log2) - 1 + this.bitstream.readBits(log2);
 
        // Read signed if necessary
-       if ((res != 0) && (this.signed == true))
+       if (this.signed == true)
        {
            // If res != 0, get the sign (1 for negative values)
            if (this.bitstream.readBit() == 1)
                return (byte) -res;
        }
 
-       return res;
+       return (byte) res;
     }
 
 

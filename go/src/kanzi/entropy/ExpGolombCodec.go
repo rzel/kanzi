@@ -16,8 +16,8 @@ limitations under the License.
 package entropy
 
 import (
-	"kanzi"
 	"errors"
+	"kanzi"
 )
 
 type ExpGolombEncoder struct {
@@ -30,7 +30,7 @@ type ExpGolombEncoder struct {
 // Example: -1 is better compressed as int8 (1 followed by -) than as byte (-1 & 255 = 255)
 func NewExpGolombEncoder(bs kanzi.OutputBitStream, sgn bool) (*ExpGolombEncoder, error) {
 	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
+		return nil, errors.New("Invalid null bitstream parameter")
 	}
 
 	this := new(ExpGolombEncoder)
@@ -51,29 +51,26 @@ func (this *ExpGolombEncoder) EncodeByte(val byte) error {
 		return this.bitstream.WriteBit(1)
 	}
 
-	var val2 byte
+	var emit uint64
 
-	if this.signed == true {
-		sVal := int8(val)
-		//  Take the abs() of 'sVal' 
-		val2 = byte((sVal + (sVal >> 7)) ^ (sVal >> 7))
+	if this.signed == false || val&0x80 == 0 {
+		emit = uint64(val + 1)
 	} else {
-		val2 = val
+		emit = uint64(^val + 2)
 	}
 
-	val2++
-	emit := uint64(val2)
 	var n uint
 
-	if val2 <= 3 {
-		// shortcut when abs(input) = 1 or 2
+	if emit <= 3 {
+		// shortcut when abs(val) = 1 or 2
 		n = 3
 	} else {
 		//  Count the bits (log2), subtract one, and write that number of zeros
 		//  preceding the previous bit string to get the encoded value
-		log2 := uint(0)
+		log2 := uint(2)
+		val2 := emit
 
-		for val2 > 1 {
+		for val2 >= 4 {
 			log2++
 			val2 >>= 1
 		}
@@ -86,7 +83,7 @@ func (this *ExpGolombEncoder) EncodeByte(val byte) error {
 		// 4 => 101 => 00101
 		// 5 => 110 => 00110
 		// 6 => 111 => 00111
-		n = log2 + (log2 + 1)
+		n = log2 + (log2 - 1)
 	}
 
 	if this.signed == true {
@@ -116,7 +113,7 @@ type ExpGolombDecoder struct {
 // If sgn is true, the extracted value is treated as an int8
 func NewExpGolombDecoder(bs kanzi.InputBitStream, sgn bool) (*ExpGolombDecoder, error) {
 	if bs == nil {
-		return nil, errors.New("Bit stream parameter cannot be null")
+		return nil, errors.New("Invalid null bitstream parameter")
 	}
 
 	this := new(ExpGolombDecoder)
@@ -135,9 +132,9 @@ func (this *ExpGolombDecoder) Dispose() {
 // If the decoder is signed, the returned value is a byte encoded int8
 func (this *ExpGolombDecoder) DecodeByte() (byte, error) {
 	// Decode unsigned
-	var log2 uint
+	log2 := uint(0)
 
-	for log2 = 0; log2 < 8; log2++ {
+	for {
 		r, err := this.bitstream.ReadBit()
 
 		if err != nil {
@@ -147,38 +144,37 @@ func (this *ExpGolombDecoder) DecodeByte() (byte, error) {
 		if r == 1 {
 			break
 		}
+
+		log2++
 	}
 
-	info := uint64(0)
+	if log2 == 0 {
+		return byte(0), nil
+	}
 
-	if log2 > 0 {
-		val, err := this.bitstream.ReadBits(log2)
+	val, err := this.bitstream.ReadBits(log2)
+
+	if err != nil {
+		return 0, err
+	}
+
+	res := (1 << log2) - 1 + val
+
+	// Read sign if necessary
+	if this.signed == true {
+		// If res != 0, Get the 'sign', encoded as 1 for negative values
+		sgn, err := this.bitstream.ReadBit()
 
 		if err != nil {
 			return 0, err
 		}
 
-		info = val
-	}
-
-	res := byte((1 << log2) - 1 + info)
-
-	// Read sign if necessary
-	if res != 0 && this.signed == true {
-		// If res != 0, Get the 'sign', encoded as 1 for 'negative values'
-		sgn, err := this.bitstream.ReadBit()
-
-		if err != nil {
-			return res, err
-		}
-
 		if sgn == 1 {
-			sVal := int8(-res)
-			return byte(sVal), nil
+			return byte(^res + 1), nil
 		}
 	}
 
-	return res, nil
+	return byte(res), nil
 }
 
 func (this *ExpGolombDecoder) BitStream() kanzi.InputBitStream {

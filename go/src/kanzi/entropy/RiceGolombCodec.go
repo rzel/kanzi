@@ -16,14 +16,14 @@ limitations under the License.
 package entropy
 
 import (
-	"kanzi"
 	"errors"
+	"kanzi"
 )
 
 type RiceGolombEncoder struct {
 	signed    bool
-	logBase   uint
-	base      uint
+	logBase   uint64
+	base      uint64
 	bitstream kanzi.OutputBitStream
 }
 
@@ -42,8 +42,8 @@ func NewRiceGolombEncoder(bs kanzi.OutputBitStream, sgn bool, logBase uint) (*Ri
 	this := new(RiceGolombEncoder)
 	this.signed = sgn
 	this.bitstream = bs
-	this.logBase = logBase
-	this.base = 1 << logBase
+	this.logBase = uint64(logBase)
+	this.base = uint64(1 << logBase)
 	return this, nil
 }
 
@@ -56,23 +56,21 @@ func (this *RiceGolombEncoder) Dispose() {
 
 func (this *RiceGolombEncoder) EncodeByte(val byte) error {
 	if val == 0 {
-		_, err := this.bitstream.WriteBits(uint64(this.base), uint(this.logBase+1))
+		_, err := this.bitstream.WriteBits(this.base, uint(this.logBase+1))
 		return err
 	}
 
-	var val2 byte
+	var emit uint64
 
-	if this.signed == true {
-		sVal := int8(val)
-		//  Take the abs() of 'sVal' 
-		val2 = byte((sVal + (sVal >> 7)) ^ (sVal >> 7))
+	if this.signed == false || val&0x80 == 0 {
+		emit = uint64(val)
 	} else {
-		val2 = val
+		emit = uint64(^val + 1)
 	}
 
 	// quotient is unary encoded, remainder is binary encoded
-	emit := uint64(this.base | (uint(val2) & (this.base - 1)))
-	n := uint((1 + (uint(val2) >> this.logBase)) + this.logBase)
+	n := uint(1 + (emit >> this.logBase) + this.logBase)
+	emit = this.base | (emit & (this.base - 1))
 
 	if this.signed == true {
 		// Add 0 for positive and 1 for negative sign (considering
@@ -137,30 +135,29 @@ func (this *RiceGolombDecoder) DecodeByte() (byte, error) {
 		bit, err = this.bitstream.ReadBit()
 
 		if err != nil {
-			return byte(0), err
+			return 0, err
 		}
 	}
 
 	// remainder is binary encoded
-	r, err2 := this.bitstream.ReadBits(this.logBase)
+	r, err := this.bitstream.ReadBits(this.logBase)
 
-	if err2 != nil {
-		return byte(0), err2
+	if err != nil {
+		return 0, err
 	}
 
 	res := (q << this.logBase) | int(r)
 
 	if res != 0 && this.signed == true {
-		// If res != 0, Get the 'sign', encoded as 1 for 'negative values'
+		// If res != 0, Get the 'sign', encoded as 1 for negative values
 		bit, err = this.bitstream.ReadBit()
 
 		if err != nil {
-			return byte(res), err
+			return 0, err
 		}
 
 		if bit == 1 {
-			sVal := int8(-res)
-			return byte(sVal), nil
+			return byte(^res + 1), nil
 		}
 	}
 

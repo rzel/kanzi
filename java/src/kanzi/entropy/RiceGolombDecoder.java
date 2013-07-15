@@ -48,15 +48,14 @@ public final class RiceGolombDecoder extends AbstractDecoder
     @Override
     public byte decodeByte()
     {
-       int q = 0;
+       long q = 0;
 
        // quotient is unary encoded
        while (this.bitstream.readBit() == 0)
           q++;
 
        // remainder is binary encoded
-       final int r = (int) this.bitstream.readBits(this.logBase);
-       final int res = (q << this.logBase) | r;
+       final long res = (q << this.logBase) | this.bitstream.readBits(this.logBase);
 
        if ((res != 0) && (this.signed == true))
        {
