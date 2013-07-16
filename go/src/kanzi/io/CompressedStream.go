@@ -184,11 +184,11 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 	var err error
 
 	if _, err = this.obs.WriteBits(BITSTREAM_TYPE, 32); err != nil {
-		return NewIOError("Cannot write bitstream type in header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write bitstream type to header", ERR_WRITE_FILE)
 	}
 
 	if _, err = this.obs.WriteBits(BITSTREAM_FORMAT_VERSION, 7); err != nil {
-		return NewIOError("Cannot write bitstream version in header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write bitstream version to header", ERR_WRITE_FILE)
 	}
 
 	cksum := 0
@@ -198,19 +198,19 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 	}
 
 	if err = this.obs.WriteBit(cksum); err != nil {
-		return NewIOError("Cannot write checksum in header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write checksum to header", ERR_WRITE_FILE)
 	}
 
 	if _, err = this.obs.WriteBits(uint64(this.entropyType&0x7F), 7); err != nil {
-		return NewIOError("Cannot write entropy type in header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write entropy type to header", ERR_WRITE_FILE)
 	}
 
 	if _, err = this.obs.WriteBits(uint64(this.transformType&0x7F), 7); err != nil {
-		return NewIOError("Cannot write transform type in header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write transform type to header", ERR_WRITE_FILE)
 	}
 
 	if _, err = this.obs.WriteBits(uint64(this.blockSize), 26); err != nil {
-		return NewIOError("Cannot write block size in header", ERR_WRITE_FILE)
+		return NewIOError("Cannot write block size to header", ERR_WRITE_FILE)
 	}
 
 	return nil
@@ -218,6 +218,10 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 
 // Implement the kanzi.OutputStream interface
 func (this *CompressedOutputStream) Write(array []byte) (int, error) {
+	if this.closed == true {
+		return 0, NewIOError("Stream closed", ERR_WRITE_FILE)
+	}
+
 	startChunk := 0
 	remaining := len(array)
 	bSize := int(this.blockSize)
@@ -259,17 +263,24 @@ func (this *CompressedOutputStream) Close() error {
 		return nil
 	}
 
-	this.closed = true
-
 	if this.curIdx > 0 {
 		if err := this.processBlock(); err != nil {
 			return err
 		}
+
+		this.curIdx = 0
 	}
 
-	// End block of size 0
-	this.obs.WriteBits(SMALL_BLOCK_MASK, 8)
-	this.obs.Close()
+	// Write end block of size 0
+	if _, err := this.obs.WriteBits(SMALL_BLOCK_MASK, 8); err != nil {
+		return err
+	}
+
+	if _, err := this.obs.Close(); err != nil {
+		return err
+	}
+
+	this.closed = true
 
 	// Release resources
 	this.buffer1 = EMPTY_BYTE_SLICE
@@ -551,11 +562,11 @@ func (this *CompressedInputStream) Close() error {
 		return nil
 	}
 
-	this.closed = true
-
 	if _, err := this.ibs.Close(); err != nil {
 		return err
 	}
+
+	this.closed = true
 
 	// Release resources
 	this.buffer1 = EMPTY_BYTE_SLICE
@@ -566,6 +577,10 @@ func (this *CompressedInputStream) Close() error {
 
 // Implement kanzi.InputStream interface
 func (this *CompressedInputStream) Read(array []byte) (int, error) {
+	if this.closed == true {
+		return 0, NewIOError("Stream closed", ERR_READ_FILE)
+	}
+
 	startChunk := 0
 	remaining := len(array)
 

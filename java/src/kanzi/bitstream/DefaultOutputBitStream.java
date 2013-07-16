@@ -149,7 +149,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
       try
       {
          if (this.position > 0)
-         {
+         {            
             // The buffer contains an incomplete byte at 'position'
             this.os.write(this.buffer, 0, this.position);
             this.written += (this.position << 3);
@@ -167,7 +167,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
       }
       catch (IOException e)
       {
-         throw new BitStreamException(e.getClass().getName(), BitStreamException.INPUT_OUTPUT);
+         throw new BitStreamException(e.getMessage(), BitStreamException.INPUT_OUTPUT);
       }
    }
 
@@ -178,6 +178,9 @@ public final class DefaultOutputBitStream implements OutputBitStream
       if (this.isClosed() == true)
          return;
 
+      final int savedBitIndex = this.bitIndex;
+      final int savedPosition = this.position;
+      
       if (this.bitIndex != 7)
       {
          // Ready to write the incomplete last byte
@@ -185,12 +188,17 @@ public final class DefaultOutputBitStream implements OutputBitStream
          this.bitIndex = 7;
       }
 
-      this.flush();
-      this.closed = true;
-
-      // Force an exception on any subsequent write attempt
-      this.position = this.buffer.length;
-      this.bitIndex = 7;
+      try
+      {
+         this.flush();
+      }
+      catch (BitStreamException e)
+      {
+	 // Revert fields to allow subsequent attempts in case of transient failure
+         this.position = savedPosition;
+         this.bitIndex = savedBitIndex;
+         throw e;
+      }
 
       try
       {
@@ -200,6 +208,12 @@ public final class DefaultOutputBitStream implements OutputBitStream
       {
          throw new BitStreamException(e, BitStreamException.INPUT_OUTPUT);
       }
+
+      this.closed = true;
+
+      // Force an exception on any subsequent write attempt
+      this.position = this.buffer.length;
+      this.bitIndex = 7;
    }
 
 

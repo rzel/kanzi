@@ -16,10 +16,10 @@ limitations under the License.
 package bitstream
 
 import (
-	"kanzi"
 	"errors"
 	"fmt"
 	"io"
+	"kanzi"
 )
 
 type DebugInputBitStream struct {
@@ -72,7 +72,7 @@ func (this *DebugInputBitStream) ReadBit() (int, error) {
 	if this.width > 7 {
 		if (this.lineIndex-1)%this.width == this.width-1 {
 			if this.hexa == true {
-				fmt.Fprintf(this.out, "[%d] ", this.current&0xFF)
+				fmt.Fprintf(this.out, "[%d] ", this.current)
 			}
 
 			fmt.Fprintf(this.out, "\n")
@@ -81,14 +81,14 @@ func (this *DebugInputBitStream) ReadBit() (int, error) {
 			fmt.Fprintf(this.out, " ")
 
 			if this.hexa == true {
-				fmt.Fprintf(this.out, "[%d] ", this.current&0xFF)
+				fmt.Fprintf(this.out, "[%d] ", this.current)
 			}
 		}
 	} else if this.lineIndex&7 == 0 {
 		fmt.Fprintf(this.out, " ")
 
 		if this.hexa == true {
-			fmt.Fprintf(this.out, "[%d] ", this.current&0xFF)
+			fmt.Fprintf(this.out, "[%d] ", this.current)
 		}
 	}
 
@@ -103,9 +103,9 @@ func (this *DebugInputBitStream) ReadBits(length uint) (uint64, error) {
 	}
 
 	for i := uint(1); i <= length; i++ {
-		bit := byte((res >> (length - i)) & 1)
+		bit := (res >> (length - i)) & 1
 		this.current <<= 1
-		this.current |= bit
+		this.current |= byte(bit)
 		this.lineIndex++
 		fmt.Fprintf(this.out, "%d", bit)
 
@@ -116,7 +116,7 @@ func (this *DebugInputBitStream) ReadBits(length uint) (uint64, error) {
 		if this.width > 7 {
 			if this.lineIndex%this.width == 0 {
 				if this.hexa == true {
-					fmt.Fprintf(this.out, "[%d] ", this.current&0xFF)
+					fmt.Fprintf(this.out, "[%d] ", this.current)
 				}
 
 				fmt.Fprintf(this.out, "\n")
@@ -125,14 +125,14 @@ func (this *DebugInputBitStream) ReadBits(length uint) (uint64, error) {
 				fmt.Fprintf(this.out, " ")
 
 				if this.hexa == true {
-					fmt.Fprintf(this.out, "[%d] ", this.current&0xFF)
+					fmt.Fprintf(this.out, "[%d] ", this.current)
 				}
 			}
 		} else if this.lineIndex&7 == 0 {
 			fmt.Fprintf(this.out, " ")
 
 			if this.hexa == true {
-				fmt.Fprintf(this.out, "[%d] ", this.current&0xFF)
+				fmt.Fprintf(this.out, "[%d] ", this.current)
 			}
 		}
 	}

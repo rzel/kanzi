@@ -165,19 +165,32 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 		return true, nil
 	}
 
+	savedBitIndex := this.bitIndex
+	savedPosition := this.position
+
 	if this.bitIndex != 7 {
 		// Ready to write the incomplete last byte
 		this.position++
 		this.bitIndex = 7
 	}
 
-	this.Flush()
+	if err := this.Flush(); err != nil {
+		// Revert fields to allow subsequent attempts in case of transient failure
+		this.bitIndex = savedBitIndex
+		this.position = savedPosition
+		return false, err
+	}
+
+	if err := this.os.Close(); err != nil {
+		return false, err
+	}
+
 	this.closed = true
 
 	// Force an error on any subsequent write attempt
 	this.position = len(this.buffer)
 	this.bitIndex = 7
-	return true, this.os.Close()
+	return true, nil
 }
 
 func (this *DefaultOutputBitStream) Written() uint64 {

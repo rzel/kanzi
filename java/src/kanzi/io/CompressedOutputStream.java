@@ -118,32 +118,32 @@ public class CompressedOutputStream extends OutputStream
          return;
 
       if (this.obs.writeBits(BITSTREAM_TYPE, 32) != 32)
-         throw new kanzi.io.IOException("Cannot write bitstream type in header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write bitstream type to header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBits(BITSTREAM_FORMAT_VERSION, 7) != 7)
-         throw new kanzi.io.IOException("Cannot write bitstream version in header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write bitstream version to header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBit((this.hasher != null) ? 1 : 0) == false)
-         throw new kanzi.io.IOException("Cannot write checksum in header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write checksum to header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBits(this.entropyType & 0x7F, 7) != 7)
-         throw new kanzi.io.IOException("Cannot write entropy type in header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write entropy type to header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBits(this.transformType & 0x7F, 7) != 7)
-         throw new kanzi.io.IOException("Cannot write transform type in header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write transform type to header", Error.ERR_WRITE_FILE);
 
       if (this.obs.writeBits(this.blockSize, 26) != 26)
-         throw new kanzi.io.IOException("Cannot write block size in header", Error.ERR_WRITE_FILE);
+         throw new kanzi.io.IOException("Cannot write block size to header", Error.ERR_WRITE_FILE);
    }
 
 
     /**
      * Writes <code>len</code> bytes from the specified byte array
      * starting at offset <code>off</code> to this output stream.
-     * The general contract for <code>write(b, off, len)</code> is that
-     * some of the bytes in the array <code>b</code> are written to the
-     * output stream in order; element <code>b[off]</code> is the first
-     * byte written and <code>b[off+len-1]</code> is the last byte written
+     * The general contract for <code>write(array, off, len)</code> is that
+     * some of the bytes in the array <code>array</code> are written to the
+     * output stream in order; element <code>array[off]</code> is the first
+     * byte written and <code>array[off+len-1]</code> is the last byte written
      * by this operation.
      * <p>
      * The <code>write</code> method of <code>OutputStream</code> calls
@@ -151,14 +151,14 @@ public class CompressedOutputStream extends OutputStream
      * written out. Subclasses are encouraged to override this method and
      * provide a more efficient implementation.
      * <p>
-     * If <code>b</code> is <code>null</code>, a
+     * If <code>array</code> is <code>null</code>, a
      * <code>NullPointerException</code> is thrown.
      * <p>
      * If <code>off</code> is negative, or <code>len</code> is negative, or
      * <code>off+len</code> is greater than the length of the array
-     * <code>b</code>, then an <tt>IndexOutOfBoundsException</tt> is thrown.
+     * <code>array</code>, then an <tt>IndexOutOfBoundsException</tt> is thrown.
      *
-     * @param      b     the data.
+     * @param      array the data.
      * @param      off   the start offset in the data.
      * @param      len   the number of bytes to write.
      * @exception  IOException  if an I/O error occurs. In particular,
@@ -168,6 +168,12 @@ public class CompressedOutputStream extends OutputStream
     @Override
     public void write(byte[] array, int off, int len) throws IOException 
     {
+      if ((off < 0) || (len < 0) || (len + off > array.length))
+         throw new IndexOutOfBoundsException();
+     
+      if (this.closed == true)
+         throw new kanzi.io.IOException("Stream closed", Error.ERR_WRITE_FILE);
+      
       int remaining = len;
 
       while (remaining > 0)
@@ -212,11 +218,31 @@ public class CompressedOutputStream extends OutputStream
    @Override
    public void write(int b) throws IOException
    {
-      // If the buffer is full, time to encode
-      if (this.iba1.index >= this.iba1.array.length)
-         this.processBlock();
+      try
+      {
+         // If the buffer is full, time to encode
+         if (this.iba1.index >= this.iba1.array.length)
+            this.processBlock();
 
-      this.iba1.array[this.iba1.index++] = (byte) b;
+         this.iba1.array[this.iba1.index++] = (byte) b;
+      }
+      catch (BitStreamException e)
+      {
+         throw new kanzi.io.IOException(e.getMessage(), Error.ERR_READ_FILE);
+      }
+      catch (kanzi.io.IOException e)
+      {
+         throw e;
+      }
+      catch (ArrayIndexOutOfBoundsException e)
+      {
+         // Happens only if the stream is closed
+         throw new kanzi.io.IOException("Stream closed", Error.ERR_READ_FILE);
+      }
+      catch (Exception e)
+      {
+         throw new kanzi.io.IOException(e.getMessage(), Error.ERR_UNKNOWN);
+      }
    }
 
 
@@ -259,19 +285,29 @@ public class CompressedOutputStream extends OutputStream
       if (this.closed == true)
          return;
 
-      this.closed = true;
-
       if (this.iba1.index > 0)
          this.processBlock();
 
-      // End block of size 0
-      this.obs.writeBits(SMALL_BLOCK_MASK, 8);
-      this.obs.close();
-      
+      try
+      {
+         // Write end block of size 0
+         this.obs.writeBits(SMALL_BLOCK_MASK, 8);
+         this.obs.close();
+      }
+      catch (BitStreamException e)
+      {
+         throw new kanzi.io.IOException(e.getMessage(), ((BitStreamException) e).getErrorCode());        
+      }
+
+      this.closed = true;
+
       // Release resources
       this.iba1.array = EMPTY_BYTE_ARRAY;
       this.iba2.array = EMPTY_BYTE_ARRAY;
-      super.close();
+      
+      // Force error on any subsequent write attempt
+      this.iba1.index = -1;
+      this.iba2.index = -1;
    }
 
 
