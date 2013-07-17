@@ -80,12 +80,13 @@ public class CompressedOutputStream extends OutputStream
          throw new NullPointerException("Invalid null output stream parameter");
 
       if (blockSize > MAX_BLOCK_SIZE)
-           throw new IllegalArgumentException("The block size must be at most "+MAX_BLOCK_SIZE);
+         throw new IllegalArgumentException("The block size must be at most "+MAX_BLOCK_SIZE);
 
       if (blockSize < MIN_BLOCK_SIZE)
          throw new IllegalArgumentException("The block size must be at least "+MIN_BLOCK_SIZE);
 
-      this.obs = new DefaultOutputBitStream(os, blockSize);
+      final int bufferSize = (blockSize > 65536) ? blockSize : 65536;
+      this.obs = new DefaultOutputBitStream(os, bufferSize);
 
       // Check entropy type validity (throws if not valid)
       char type = entropyCodec.toUpperCase().charAt(0);

@@ -126,7 +126,13 @@ func NewCompressedOutputStream(entropyCodec string, functionType string, os kanz
 	this := new(CompressedOutputStream)
 	var err error
 
-	if this.obs, err = bitstream.NewDefaultOutputBitStream(os, blockSize); err != nil {
+	bufferSize := blockSize
+	
+	if bufferSize < 65536 {
+		bufferSize = 65536
+	}
+	
+	if this.obs, err = bitstream.NewDefaultOutputBitStream(os, bufferSize); err != nil {
 		return nil, err
 	}
 
