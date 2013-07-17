@@ -41,7 +41,7 @@ public class TestContextResizer
             boolean speed = false;
             int effectPct = 10;
             boolean fileProvided = false;
-
+            
             for (String arg : args)
             {
                arg = arg.trim();
@@ -50,6 +50,7 @@ public class TestContextResizer
                {
                    System.out.println("-help               : display this message");
                    System.out.println("-debug              : display the computed geodesics");
+                   System.out.println("-file=<filename>    : load image file with provided name");
                    System.out.println("-strength=<percent> : number of geodesics to create (in percent of dimension)");
                    System.out.println("-vertical           : process vertical geodesics");
                    System.out.println("-horizontal         : process horizontal geodesics");
@@ -124,7 +125,7 @@ public class TestContextResizer
                 System.out.println("No image file name provided on command line, using default value");
 
             System.out.println("File name set to '" + fileName + "'");
-            System.out.println("Stength set to "+effectPct+"%");
+            System.out.println("Strength set to "+effectPct+"%");
             ImageIcon icon = new ImageIcon(fileName);
             Image image = icon.getImage();
             int w = image.getWidth(null);
@@ -164,7 +165,7 @@ public class TestContextResizer
             
             int min = Math.min(h, w);
             effect = new ContextResizer(w, h, 0, w, dir,
-                    ContextResizer.SHRINK, min, min * effectPct / 100);            
+                    ContextResizer.SHRINK, min, min * effectPct / 100, false);            
             effect.setDebug(debug);
             effect.apply(src, dst);
 
@@ -181,14 +182,30 @@ public class TestContextResizer
             {
                 System.out.println("Speed test");
                 long sum = 0;
-                int iter = 1000;
+                int iter = 500;
+                System.out.println("Accurate mode");
+                effect = new ContextResizer(w, h, 0, w, dir,
+                       ContextResizer.SHRINK, min, min * effectPct/100, false);
 
                 for (int ii=0; ii<iter; ii++)
                 {
                    img.getRaster().getDataElements(0, 0, w, h, src);
                    long before = System.nanoTime();
-                   effect = new ContextResizer(w, h, 0, w, dir,
-                        ContextResizer.SHRINK, min, min * effectPct/100);
+                   effect.apply(src, dst);
+                   long after = System.nanoTime();
+                   sum += (after - before);
+                }
+
+                System.out.println("Elapsed [ms]: "+ sum/1000000+" ("+iter+" iterations)");              
+                System.out.println("Fast mode");
+                sum = 0;
+                effect = new ContextResizer(w, h, 0, w, dir,
+                       ContextResizer.SHRINK, min, min * effectPct/100, true);
+
+                for (int ii=0; ii<iter; ii++)
+                {
+                   img.getRaster().getDataElements(0, 0, w, h, src);
+                   long before = System.nanoTime();
                    effect.apply(src, dst);
                    long after = System.nanoTime();
                    sum += (after - before);

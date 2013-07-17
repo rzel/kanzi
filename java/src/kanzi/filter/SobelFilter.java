@@ -99,31 +99,29 @@ public final class SobelFilter implements VideoEffectWithOffset
     @Override
     public int[] apply(int[] src, int[] dst)
     {
-        int offs = this.offset;
-        int startLine = offs;
+        int startLine = this.offset;
         final int mask_ = this.mask;
         final int h = this.height;
         final int w = this.width;
-        final int len = src.length;
+        final int srcLen = src.length;
         final boolean isVertical = ((this.direction & VERTICAL) != 0) ? true : false;
         final boolean isHorizontal = ((this.direction & HORIZONTAL) != 0) ? true : false;
         final int maxVal = 0x00FFFFFF & mask_;
-        final int shift = (isVertical && isHorizontal) ? 1 : 0;
         boolean isPacked = (this.channels == 3) ? true : false;
 
         for (int y=2; y<h; y++)
         {
-           final int line = (startLine + this.stride >= len) ? startLine : startLine + this.stride;
-           final int endLine = (line + this.stride >= len) ? line : line + this.stride ;
+           final int line = (startLine + this.stride >= srcLen) ? startLine : startLine + this.stride;
+           final int endLine = (line + this.stride >= srcLen) ? line : line + this.stride ;
            final int pixel00 = src[startLine];
-           final int pixel10 = src[line];
-           final int pixel20 = src[endLine];
            final int pixel01 = src[startLine+1];
+           final int pixel10 = src[line];
            final int pixel11 = src[line+1];
+           final int pixel20 = src[endLine];
            final int pixel21 = src[endLine+1];
            int val00, val01, val10, val11, val20, val21;
 
-           if (isPacked)
+           if (isPacked == true)
            {
               // Gray levels
               val00 = (((pixel00 >> 16) & 0xFF) + ((pixel00 >> 8) & 0xFF) + (pixel00 & 0xFF)) / 3;
@@ -149,13 +147,14 @@ public final class SobelFilter implements VideoEffectWithOffset
              final int pixel12 = src[line+x];
              final int pixel22 = src[endLine+x];
              final int val02, val12, val22;
+             int val;
 
-             if (isPacked)
+             if (isPacked == true)
              {
                 // Gray levels
-                val02 = (((pixel02 >> 16) & 0xFF) + ((pixel02 >> 8) & 0xFF) + (pixel02 & 0xFF)) / 3;
-                val12 = (((pixel12 >> 16) & 0xFF) + ((pixel12 >> 8) & 0xFF) + (pixel12 & 0xFF)) / 3;
-                val22 = (((pixel22 >> 16) & 0xFF) + ((pixel22 >> 8) & 0xFF) + (pixel22 & 0xFF)) / 3;
+                val02 = ((((pixel02 >> 16) & 0xFF) + ((pixel02 >> 8) & 0xFF) + (pixel02 & 0xFF)) * 21846) >>> 16;
+                val12 = ((((pixel12 >> 16) & 0xFF) + ((pixel12 >> 8) & 0xFF) + (pixel12 & 0xFF)) * 21846) >>> 16;
+                val22 = ((((pixel22 >> 16) & 0xFF) + ((pixel22 >> 8) & 0xFF) + (pixel22 & 0xFF)) * 21846) >>> 16;
              }
              else
              {
@@ -163,28 +162,26 @@ public final class SobelFilter implements VideoEffectWithOffset
                 val12 = pixel12 & 0xFF;
                 val22 = pixel22 & 0xFF;
              }
-
-             int valH = 0;
-             int valV = 0;
-
-             if (isHorizontal)
+             
+             if (isHorizontal == true)
              {
-                valH = -val00 + val02 - val10 - val10 + val12 + val12 - val20 + val22;
-                valH = (valH + (valH >> 31)) ^ (valH >> 31);
+                val = -val00 + val02 - val10 - val10 + val12 + val12 - val20 + val22;
+                val = (val + (val >> 31)) ^ (val >> 31);
+                 
+                if (isVertical == true)
+                {
+                   int valV = val00 + val01 + val01 + val02 - val20 - val21 - val21 - val22;
+                   valV = (valV + (valV >> 31)) ^ (valV >> 31);
+                   val = (val + valV) >> 1;
+                }
+             }
+             else // if Horizontal==false, then Vertical==true by construct
+             {
+                val = val00 + val01 + val01 + val02 - val20 - val21 - val21 - val22;
+                val = (val + (val >> 31)) ^ (val >> 31);
              }
 
-             if (isVertical)
-             {
-                valV = val00 + val01 + val01 + val02 - val20 - val21 - val21 - val22;
-                valV = (valV + (valV >> 31)) ^ (valV >> 31);
-             }
-
-             int val = (valH + valV) >> shift;
-
-             if (val > 255)
-                dst[line+x-1] = maxVal;
-             else
-                dst[line+x-1] = ((val << 16) | (val << 8) | val) & mask_;
+             dst[line+x-1] = (val > 255) ? maxVal : ((val << 16) | (val << 8) | val) & mask_;
 
              // Slide the 3x3 window (reassign 6 pixels: left + center columns)
              val00 = val01;
@@ -200,7 +197,7 @@ public final class SobelFilter implements VideoEffectWithOffset
           dst[line+w-1] = dst[line+w-2] & mask_;
           startLine = line;
 
-          if (startLine >= len)
+          if (startLine >= srcLen)
              break;
        }
 
@@ -210,7 +207,7 @@ public final class SobelFilter implements VideoEffectWithOffset
        // Duplicate first and last lines
        System.arraycopy(dst, firstLine+this.stride, dst, firstLine, w);
 
-       if (lastLine < len)
+       if (lastLine < srcLen)
           System.arraycopy(dst, lastLine-this.stride, dst, lastLine, w);
 
        return dst;
