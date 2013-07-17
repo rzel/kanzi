@@ -17,8 +17,7 @@ package kanzi.util.color;
 
 import kanzi.ColorModelType;
 
-// One pass converter using a fast bilinear resampler with in-place supersampling
-// A custom resampler can also be provided
+// One pass reversible converter
 public final class ReversibleYUVColorModelConverter implements ColorModelConverter
 {
     private final int height;

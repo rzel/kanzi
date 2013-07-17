@@ -123,13 +123,13 @@ public final class SobelFilter implements VideoEffectWithOffset
 
            if (isPacked == true)
            {
-              // Gray levels
-              val00 = (((pixel00 >> 16) & 0xFF) + ((pixel00 >> 8) & 0xFF) + (pixel00 & 0xFF)) / 3;
-              val01 = (((pixel01 >> 16) & 0xFF) + ((pixel01 >> 8) & 0xFF) + (pixel01 & 0xFF)) / 3;
-              val10 = (((pixel10 >> 16) & 0xFF) + ((pixel10 >> 8) & 0xFF) + (pixel10 & 0xFF)) / 3;
-              val11 = (((pixel11 >> 16) & 0xFF) + ((pixel11 >> 8) & 0xFF) + (pixel11 & 0xFF)) / 3;
-              val20 = (((pixel20 >> 16) & 0xFF) + ((pixel20 >> 8) & 0xFF) + (pixel20 & 0xFF)) / 3;
-              val21 = (((pixel21 >> 16) & 0xFF) + ((pixel21 >> 8) & 0xFF) + (pixel21 & 0xFF)) / 3;
+              // Use Yreversible = (R + G + G + B) >> 2;
+              val00 = (((pixel00 >> 16) & 0xFF) + ((pixel00 >> 7) & 0x1FE) + (pixel00 & 0xFF)) >> 2;
+              val01 = (((pixel01 >> 16) & 0xFF) + ((pixel01 >> 7) & 0x1FE) + (pixel01 & 0xFF)) >> 2;
+              val10 = (((pixel10 >> 16) & 0xFF) + ((pixel10 >> 7) & 0x1FE) + (pixel10 & 0xFF)) >> 2;
+              val11 = (((pixel11 >> 16) & 0xFF) + ((pixel11 >> 7) & 0x1FE) + (pixel11 & 0xFF)) >> 2;
+              val20 = (((pixel20 >> 16) & 0xFF) + ((pixel20 >> 7) & 0x1FE) + (pixel20 & 0xFF)) >> 2;
+              val21 = (((pixel21 >> 16) & 0xFF) + ((pixel21 >> 7) & 0x1FE) + (pixel21 & 0xFF)) >> 2;
            }
            else
            {
@@ -150,11 +150,11 @@ public final class SobelFilter implements VideoEffectWithOffset
              int val;
 
              if (isPacked == true)
-             {
-                // Gray levels
-                val02 = ((((pixel02 >> 16) & 0xFF) + ((pixel02 >> 8) & 0xFF) + (pixel02 & 0xFF)) * 21846) >>> 16;
-                val12 = ((((pixel12 >> 16) & 0xFF) + ((pixel12 >> 8) & 0xFF) + (pixel12 & 0xFF)) * 21846) >>> 16;
-                val22 = ((((pixel22 >> 16) & 0xFF) + ((pixel22 >> 8) & 0xFF) + (pixel22 & 0xFF)) * 21846) >>> 16;
+             {                
+                // Use Yreversible = (R + G + G + B) >> 2;
+                val02 = (((pixel02 >> 16) & 0xFF) + ((pixel02 >> 7) & 0x1FE) + (pixel02 & 0xFF)) >>> 2;
+                val12 = (((pixel12 >> 16) & 0xFF) + ((pixel12 >> 7) & 0x1FE) + (pixel12 & 0xFF)) >>> 2;
+                val22 = (((pixel22 >> 16) & 0xFF) + ((pixel22 >> 7) & 0x1FE) + (pixel22 & 0xFF)) >>> 2;
              }
              else
              {
