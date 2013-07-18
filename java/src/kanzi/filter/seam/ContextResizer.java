@@ -16,8 +16,8 @@ limitations under the License.
 package kanzi.filter.seam;
 
 
-import kanzi.VideoEffect;
 import kanzi.IntSorter;
+import kanzi.VideoEffectWithOffset;
 import kanzi.filter.SobelFilter;
 import kanzi.util.sort.BucketSort;
 import kanzi.util.sort.RadixSort;
@@ -35,7 +35,7 @@ import kanzi.util.sort.RadixSort;
 // Note: the name seam carving is a bit unfortunate, what the algo achieves
 // is detection and removal of the paths of least resistance (energy wise) in
 // the image. These paths really are geodesics.
-public class ContextResizer implements VideoEffect
+public class ContextResizer implements VideoEffectWithOffset
 {
     // Possible directions
     public static final int HORIZONTAL = 1;
