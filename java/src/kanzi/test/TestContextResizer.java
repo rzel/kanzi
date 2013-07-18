@@ -84,7 +84,7 @@ public class TestContextResizer
                   try
                   {
                      int pct = Integer.parseInt(arg);
-                     
+
                      if (pct < 1)
                      {
                          System.err.println("The minimum strength is 1%, the provided value is "+arg);
@@ -113,7 +113,7 @@ public class TestContextResizer
                    System.out.println("Warning: unknown option: ["+ arg + "]");
                }
             }
-           
+
             if ((vertical == false) && (horizontal == false))
             {
                System.out.println("Warning: no direction has been selected, selecting both");
@@ -156,14 +156,20 @@ public class TestContextResizer
 
             Arrays.fill(dst, 0);
             int dir = 0;
+            int min = Integer.MAX_VALUE;
             
             if (vertical == true) 
+            {
                 dir |= ContextResizer.VERTICAL;
+                min = Math.min(min, w);
+            }
             
             if (horizontal == true)
+            {
                 dir |= ContextResizer.HORIZONTAL;
-            
-            int min = Math.min(h, w);
+                min = Math.min(min, h);
+            }
+
             effect = new ContextResizer(w, h, 0, w, dir,
                     ContextResizer.SHRINK, min, min * effectPct / 100, false);            
             effect.setDebug(debug);

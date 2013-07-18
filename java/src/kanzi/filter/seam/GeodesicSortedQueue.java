@@ -16,6 +16,7 @@ limitations under the License.
 package kanzi.filter.seam;
 
 // Not thread safe
+// Tree based sorted queue of geodesics
 /*package*/ class GeodesicSortedQueue
 {
     private final int maxSize;
@@ -32,13 +33,15 @@ package kanzi.filter.seam;
         this.maxSize = maxSize;
         this.nodes = new Node[maxSize+1];
 
+        // Pre-allocate
         for (int i=0; i<this.nodes.length; i++)
            this.nodes[i] = new Node(null, null, i);
     }
 
 
-    // return last value in ordered collection
-    // null value is not allowed
+    // Grow queue until maxSize is reached
+    // Return last value (geodesic with highest cost) in ordered collection
+    // Null input value is not allowed
     public Geodesic add(Geodesic value)
     {
         if (this.size == 0)
@@ -52,77 +55,79 @@ package kanzi.filter.seam;
            return this.tail.value;
         }
 
-        final int cost_ = value.cost; // aliasing
+        final int cost = value.cost; // aliasing
 
-        if (cost_ >= this.tail.value.cost)
+        if (cost >= this.tail.value.cost)
         {
            // Cost too high, do not add
            if (this.size == this.maxSize)
              return this.tail.value;
 
-          // New tail
-          Node node = this.nodes[this.freeNodeIdx++];
-          node.value = value;
-          node.parent = this.tail;
-          this.tail.right = node;
-          this.tail = node;
+           // New node is tail
+           Node node = this.nodes[this.freeNodeIdx++];
+           node.value = value;
+           node.parent = this.tail;
+           this.tail.right = node;
+           this.tail = node;
         }
-        else if (cost_ < this.head.value.cost)
+        else if (cost < this.head.value.cost)
         {
-          // New head
-          Node node = this.nodes[this.freeNodeIdx++];
-          node.value = value;
-          node.parent = this.head;
-          this.head.left = node;
-          this.head = node;
+           // New node is head
+           Node node = this.nodes[this.freeNodeIdx++];
+           node.value = value;
+           node.parent = this.head;
+           this.head.left = node;
+           this.head = node;
         }
-        else // not an extremity
+        else
         {
+           // New node is not an extremity
            Node current = this.root;
 
+           // Locate appropriate position in tree
            while (true)
            {
-             if (cost_ > current.value.cost)
-             {
-               if (current.right != null)
-                 current = current.right;
-               else
-               {
-                 Node node = this.nodes[this.freeNodeIdx++];
-                 node.value = value;
-                 node.parent = current;
-                 current.right = node;
-                 break;
-               }
-             }
-             else
-             {
-               if (current.left != null)
-                 current = current.left;
-               else
-               {
-                 Node node = this.nodes[this.freeNodeIdx++];
-                 node.value = value;
-                 node.parent = current;
-                 current.left = node;
-                 break;
-               }
-             }
-           }
+              if (cost > current.value.cost)
+              {
+                 if (current.right != null)
+                   current = current.right;
+                 else
+                 {
+                    Node node = this.nodes[this.freeNodeIdx++];
+                    node.value = value;
+                    node.parent = current;
+                    current.right = node;
+                    break;
+                 }
+              }
+              else
+              {
+                 if (current.left != null)
+                   current = current.left;
+                 else
+                 {
+                    Node node = this.nodes[this.freeNodeIdx++];
+                    node.value = value;
+                    node.parent = current;
+                    current.left = node;
+                    break;
+                 }
+              }
+           } 
         }
 
         if (this.size >= this.maxSize)
         {
            // Need to recompute tail
-           Node t_ = this.tail;
+           Node last = this.tail;
 
-           // Recycle free node
-           this.freeNodeIdx = t_.idx;
+           // Recycle evicted node
+           this.freeNodeIdx = last.idx;
 
-           if (t_.left != null)
+           if (last.left != null)
            {
-               Node left = t_.left;
-               Node parent = t_.parent;
+               final Node left = last.left;
+               final Node parent = last.parent;
                left.parent = parent;
 
                if (parent != null)
@@ -130,20 +135,22 @@ package kanzi.filter.seam;
                else
                   this.root = left;
                
-               t_.parent = null;
-               t_.left = null;
-               t_ = left;
+               last.parent = null;
+               last.left = null;
+               last = left;
 
-               while (t_.right != null)
-                   t_ = t_.right;
+               while (last.right != null)
+                   last = last.right;
 
-               this.tail = t_;
+               // Set new tail to rightmost descendant of 'left'
+               this.tail = last;
            }
            else
            {
-              this.tail = t_.parent;
+              // Set new tail to parent of current tail
+              this.tail = last.parent;
               this.tail.right = null;
-              t_.parent = null;
+              last.parent = null;
            }
         }
         else
@@ -188,17 +195,17 @@ package kanzi.filter.seam;
     public Geodesic[] toArray(Geodesic[] array)
     {
         if (this.size == 0)
-            return new Geodesic[0];
+           return new Geodesic[0];
 
         if (array.length < this.size)
-            array = new Geodesic[this.size];
+           array = new Geodesic[this.size];
 
         scan(this.root, array, 0);
         return array;
     }
 
 
-    private int scan(Node n, Geodesic[] array, int idx)
+    private static int scan(Node n, Geodesic[] array, int idx)
     {
        if (n.left != null)
           idx = scan(n.left, array, idx);

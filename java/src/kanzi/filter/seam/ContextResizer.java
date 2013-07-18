@@ -49,6 +49,8 @@ public class ContextResizer implements VideoEffect
     private static final int VALUE_MASK = USED_MASK - 1;
     private static final int DEFAULT_BEST_COST = 0x0FFFFFFF;
     private static final int DEFAULT_MAX_COST_PER_PIXEL = 256;
+    private static final int RED_COLOR = 0xFFFF0000;
+    private static final int BLUE_COLOR = 0xFF0000FF;
 
     private int width;
     private int height;
@@ -73,6 +75,9 @@ public class ContextResizer implements VideoEffect
 
 
     // width, height, offset and stride allow to apply the filter on a subset of an image
+    // For packed RGB images, use 3 channels mode for more accurate results (fastMode=false)
+    // and one channel mode (fastMode=true) for faster results.  
+    // For unpacked images, use one channel mode (fastMode=true).
     public ContextResizer(int width, int height, int offset, int stride,
             int direction, int action, int maxSearches, int nbGeodesics,
             boolean fastMode)
@@ -86,8 +91,9 @@ public class ContextResizer implements VideoEffect
     // maxAvgGeoPixCost allows to limit the cost of geodesics: only those with an
     // average cost per pixel less than maxAvgGeoPixCost are allowed (it may be
     // less than nbGeodesics).
-    // if fastMode is selected, the geodesic costs are computed on the blue channel
-    // only, otherwise the 3 R-G-B channels are averaged (gray scale)
+    // For packed RGB images, use 3 channels mode for more accurate results (fastMode=false)
+    // and one channel mode (fastMode=true) for faster results.  
+    // For unpacked images, use one channel mode (fastMode=true).
     public ContextResizer(int width, int height, int offset, int stride,
             int direction, int action, int maxSearches, int nbGeodesics,
              boolean fastMode, int maxAvgGeoPixCost)
@@ -353,14 +359,12 @@ public class ContextResizer implements VideoEffect
     {
         if (((dir & VERTICAL) == 0) && ((dir & HORIZONTAL) == 0))
            return false;
+               
+        if (((dir & VERTICAL) != 0) && ((dir & HORIZONTAL) != 0))
+           return false;
         
         if (geodesics.length == 0)
-            return true ;
-
-        if (dir == VERTICAL)
-            this.width += geodesics.length;
-        else
-            this.height += geodesics.length;
+           return true ;
 
         int srcStart = this.offset;
         int dstStart = this.offset;
@@ -377,7 +381,7 @@ public class ContextResizer implements VideoEffect
             endi = this.height;
             incStart = 1;
             incIdx = this.stride;
-            color = 0xFF0000FF;
+            color = BLUE_COLOR;
         }
         else
         {
@@ -385,10 +389,10 @@ public class ContextResizer implements VideoEffect
             endi = this.width;
             incStart = this.stride;
             incIdx = 1;
-            color = 0xFFFF0000;           
+            color = RED_COLOR;           
         }
 
-        for (int j=0; j<endj; j++)
+        for (int j=endj-1; j>=0; j--)
         {
             // Find all the pixels belonging to geodesics in this line
             for (int k=0; k<linePositions.length; k++)
@@ -399,91 +403,70 @@ public class ContextResizer implements VideoEffect
                 this.sorter.sort(linePositions, 0, linePositions.length);
 
             int posIdx = 0;
-            int pos = linePositions[posIdx];
             int srcIdx = srcStart;
             int dstIdx = dstStart;
-            int lastGeoPixPos = linePositions[linePositions.length-1];
-
-            // Start the line, no test for geodesic pixels required
-            if ((dir == VERTICAL) && (pos >= 32))
+            final int endPosIdx = linePositions.length;
+            int pos = 0;
+            
+            while (posIdx < endPosIdx)
             {
-               // Speed up copy
-               System.arraycopy(src, srcIdx, dst, dstIdx, pos);
-               srcIdx += pos;
-               dstIdx += pos;
-            }
-            else
-            {
-               // Either incIdx != 1 or not enough pixels for arraycopy to be worth it
-               copy(src, srcIdx, dst, dstIdx, pos, incIdx);               
-               srcIdx += (pos * incIdx);
-               dstIdx += (pos * incIdx);
-            }
-
-            int previous = (srcIdx > srcStart) ? src[srcIdx-incIdx] : src[srcStart];
-            int r_prev = (previous >> 16) & 0xFF;
-            int g_prev = (previous >> 8)  & 0xFF;
-            int b_prev =  previous & 0xFF;
-
-            for (int x=pos; x<=lastGeoPixPos; )
-            {
-                // Is the pixel part of a geodesic ?
-                if (x == pos)
-                {
-                    // Insert new pixel into the destination
-                    if (this.debug == true)
-                    {
-                       dst[dstIdx] = color;
+                int newPos = linePositions[posIdx];
+                final int len = newPos - pos;
+                
+                if (len > 0)
+                {     
+                   if ((dir == VERTICAL) && (len >= 32))
+                   {
+                       // Speed up copy
+                       System.arraycopy(src, srcIdx, dst, dstIdx, len);
+                       srcIdx += len;
+                       dstIdx += len;
                     }
                     else
                     {
-                       int r = r_prev;
-                       int g = g_prev;
-                       int b = b_prev;
-                       previous = src[srcIdx];
-                       r_prev = (previous >> 16) & 0xFF;
-                       g_prev = (previous >> 8)  & 0xFF;
-                       b_prev =  previous & 0xFF;
-                       r = (r + r_prev) >> 1;
-                       g = (g + g_prev) >> 1;
-                       b = (b + b_prev) >> 1;
-                       dst[dstIdx] = (r << 16) | (g << 8) | b;
+                       copy(src, srcIdx, dst, dstIdx, len, incIdx);
+                       srcIdx += (len * incIdx);
+                       dstIdx += (len * incIdx);
                     }
+                
+                   pos = newPos;
+                }
 
-                    dstIdx += incIdx;
-
-                    // Get the next pixel insertion position in this line
-                    if (x != lastGeoPixPos)
-                    {
-                       posIdx++;
-                       pos = linePositions[posIdx];
-                    }
-
-                    x++;
+                // Insert new pixel into the destination
+                if (this.debug == true)
+                {
+                   dst[dstIdx] = color;
                 }
                 else
                 {
-                   copy(src, srcIdx, dst, dstIdx, pos-x, incIdx);
-                   srcIdx += ((pos-x) * incIdx);
-                   dstIdx += ((pos-x) * incIdx);
-                   x = pos;
+                   final int pix = src[srcIdx]; 
+                   final int r = (pix >> 16) & 0xFF;
+                   final int g = (pix >> 8)  & 0xFF;
+                   final int b =  pix & 0xFF;
+                   dst[dstIdx] = (r << 16) | (g << 8) | b;
                 }
+
+                pos++;
+                dstIdx += incIdx;
+                posIdx++;
             }
 
+            final int len = endi - pos;
+            
             // Finish the line, no more test for geodesic pixels required
-            if ((dir == VERTICAL) && (endi - lastGeoPixPos >= 32))
+            if ((dir == VERTICAL) && (len >= 32))
             {
                // Speed up copy
-               System.arraycopy(src, srcIdx, dst, dstIdx, endi-lastGeoPixPos-1);
-               srcIdx += (endi-lastGeoPixPos-1);
-               dstIdx += (endi-lastGeoPixPos-1);
+               System.arraycopy(src, srcIdx, dst, dstIdx, len);
+               srcIdx += len;
+               dstIdx += len;
             }
             else
             {
                // Either incIdx != 1 or not enough pixels for arraycopy to be worth it
-               copy(src, srcIdx, dst, dstIdx, endi-lastGeoPixPos-1, incIdx);
-               srcIdx += ((endi-lastGeoPixPos-1) * incIdx);
-               dstIdx += ((endi-lastGeoPixPos-1) * incIdx);
+               copy(src, srcIdx, dst, dstIdx, len, incIdx);
+               srcIdx += (len * incIdx);
+               dstIdx += (len * incIdx);
             }
 
             srcStart += incStart;
@@ -492,16 +475,19 @@ public class ContextResizer implements VideoEffect
         
         return true;
     }
-
-
+    
+    
     // dir must be either VERTICAL or HORIZONTAL
     public boolean removeGeodesics(Geodesic[] geodesics, int[] src, int[] dst, int dir)
     {
         if (((dir & VERTICAL) == 0) && ((dir & HORIZONTAL) == 0))
            return false;
                
+        if (((dir & VERTICAL) != 0) && ((dir & HORIZONTAL) != 0))
+           return false;
+               
         if (geodesics.length == 0)
-            return true;
+           return true;
 
         final int[] linePositions = new int[geodesics.length];
         final int endj;
@@ -516,7 +502,7 @@ public class ContextResizer implements VideoEffect
             endLine = this.height;
             incIdx = this.stride;
             incStart = 1;
-            color = 0xFF0000FF;
+            color = BLUE_COLOR;
         }
         else
         {
@@ -524,7 +510,7 @@ public class ContextResizer implements VideoEffect
             endLine = this.width;
             incIdx = 1;
             incStart = this.stride;
-            color = 0xFFFF0000;
+            color = RED_COLOR;
         }
 
         int srcStart = this.offset;
@@ -551,7 +537,7 @@ public class ContextResizer implements VideoEffect
                 final int nextPos = linePositions[posIdx];
                 final int len = nextPos - pos;
 
-                // Is the pixel part of a geodesic ?
+                // Copy pixels not belonging to a geodesic
                 if (len > 0)
                 {
                     if ((dir == VERTICAL) && (len >= 32))
@@ -572,7 +558,7 @@ public class ContextResizer implements VideoEffect
                     pos = nextPos;
                 }
 
-                // Color the pixel or remove it ?
+                // Mark or remove pixel belonging to a geodesic
                 if (this.debug == true)
                 {
                     dst[dstIdx] = color;
@@ -581,8 +567,6 @@ public class ContextResizer implements VideoEffect
 
                 pos++;
                 srcIdx += incIdx;
-
-                // Get the next pixel removal position in this line
                 posIdx++;
             }
 
@@ -608,22 +592,20 @@ public class ContextResizer implements VideoEffect
             dstStart += incStart;
         }
 
-//        if (this.debug == false)
-//        {
-//            if (dir == VERTICAL)
-//                this.width -= geodesics.length;
-//            else
-//                this.height -= geodesics.length;
-//        }
-        
         return true;
     }
 
 
     // dir must be either VERTICAL or HORIZONTAL
     public Geodesic[] computeGeodesics(int[] src, int dir)
-    {
-        int dim = (dir == HORIZONTAL) ? this.height : this.width;
+    {          
+        if (((dir & VERTICAL) == 0) && ((dir & HORIZONTAL) == 0))
+           return new Geodesic[0];
+               
+        if (((dir & VERTICAL) != 0) && ((dir & HORIZONTAL) != 0))
+           return new Geodesic[0];
+
+        final int dim = (dir == HORIZONTAL) ? this.height : this.width;
         int[] firstPositions = new int[this.maxSearches];
         int n = 0;
 
@@ -648,6 +630,12 @@ public class ContextResizer implements VideoEffect
     // dir must be either VERTICAL or HORIZONTAL
     public Geodesic[] computeGeodesics(int[] src, int dir, int[] firstPositions)
     {
+        if (((dir & VERTICAL) == 0) && ((dir & HORIZONTAL) == 0))
+           return new Geodesic[0];
+               
+        if (((dir & VERTICAL) != 0) && ((dir & HORIZONTAL) != 0))
+           return new Geodesic[0];
+
         return this.computeGeodesics_(src, dir, firstPositions, this.maxSearches);
     }
 
@@ -890,8 +878,9 @@ public class ContextResizer implements VideoEffect
     
     private int[] calculateCosts(int[] src, int[] costs_)
     {
-        // Use 3 channels for more accurate results and one channel (blue) for
-        // faster results.
+        // For packed RGB images, use 3 channels mode for more accurate results and 
+        // one channel mode (blue) for faster results.  
+        // For unpacked images, use one channel mode (Y for YUV or any for RGB).
         SobelFilter gradientFilter = new SobelFilter(this.width, this.height,
                 this.offset, this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
                 this.sobelMode, SobelFilter.COST);

@@ -207,7 +207,7 @@ public final class SobelFilter implements VideoEffectWithOffset
        // Duplicate first and last lines
        System.arraycopy(dst, firstLine+this.stride, dst, firstLine, w);
 
-       if (lastLine < srcLen)
+       if (lastLine + w < dst.length)
           System.arraycopy(dst, lastLine-this.stride, dst, lastLine, w);
 
        return dst;
