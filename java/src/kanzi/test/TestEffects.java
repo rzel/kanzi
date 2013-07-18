@@ -121,7 +121,7 @@ public class TestEffects
             x = 256 + rnd.nextInt(10);
             y =  64 + rnd.nextInt(60);
             boolean bump = true;
-            effects[3] = new MovingEffect(new LightingEffect(dw, dh, y*w+x, w, dw/2, dh/2, dw/3, 100, bump),
+            effects[3] = new MovingEffect(new LightingEffect(dw, dh, y*w+x, w, dw/2, dh/2, dw/2, 100, bump),
                     x, y, -1, -1, ((bump==false)?"Lighting":"Lighting+Bump"));
             x = 128 + rnd.nextInt(10);
             y =  64 + rnd.nextInt(60);
@@ -131,9 +131,6 @@ public class TestEffects
             for (MovingEffect e : effects)
             {
                e.effect.apply(tmp, dest);
-               int[] t = tmp;
-               tmp = dest;
-               tmp = t;
             }
 
             img2.getRaster().setDataElements(0, 0, w, h, dest);
@@ -152,7 +149,7 @@ public class TestEffects
             int nn = 0;
             int nn0 = 0;
             long delta = 0;
-            String sfps = "";
+            String sfps;
             int len = fileNames.length;
             int idx = 0;
 
@@ -190,10 +187,6 @@ public class TestEffects
 
                   if ((e.y < (h/16)) && (e.vy < 0))
                      e.vy = - e.vy;
-
-                  int[] t = tmp;
-                  tmp = dest;
-                  tmp = t;
                }
 
                img2.getRaster().setDataElements(0, 0, w, h, dest);
