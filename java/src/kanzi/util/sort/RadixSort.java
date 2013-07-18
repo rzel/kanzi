@@ -86,7 +86,7 @@ public final class RadixSort implements IntSorter, ByteSorter
         final int bSize = this.bufferSize; // aliasing
         final int mask = this.maskRadix;
         final int digits = (this.logMaxValue < 0) ? 32 / this.bitsRadix
-                : this.logMaxValue / this.bitsRadix;
+                : (this.logMaxValue + this.bitsRadix - 1) / this.bitsRadix;
 
         for (int j=0; j<length; j++)
             this.queues[j].store((int[]) null);
@@ -135,7 +135,7 @@ public final class RadixSort implements IntSorter, ByteSorter
         final int bSize = this.bufferSize; // aliasing
         final int mask = this.maskRadix;
         final int digits = (this.logMaxValue < 0) ? 8 / this.bitsRadix
-                : this.logMaxValue / this.bitsRadix;
+                : (this.logMaxValue + this.bitsRadix - 1) / this.bitsRadix;
 
         for (int j=0; j<length; j++)
             this.queues[j].store((byte[]) null);
