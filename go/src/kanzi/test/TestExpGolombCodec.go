@@ -205,9 +205,10 @@ func TestSpeed() {
 			delta2 += after.Sub(before).Nanoseconds()
 		}
 
+		prod := int64(iter) * int64(size)
 		fmt.Printf("Encode [ms]      : %d\n", delta1/1000000)
-		fmt.Printf("Throughput [KB/s]: %d\n", (int64(iter*size))*1000000/delta1*1000/1024)
+		fmt.Printf("Throughput [KB/s]: %d\n", prod*1000000/delta1*1000/1024)
 		fmt.Printf("Decode [ms]      : %d\n", delta2/1000000)
-		fmt.Printf("Throughput [KB/s]: %d\n", (int64(iter*size))*1000000/delta2*1000/1024)
+		fmt.Printf("Throughput [KB/s]: %d\n", prod*1000000/delta2*1000/1024)
 	}
 }

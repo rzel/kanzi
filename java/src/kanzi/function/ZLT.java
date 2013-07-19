@@ -175,10 +175,10 @@ public final class ZLT implements ByteFunction
          }
 
          // Regular data processing
-         if (val > 0xFE)
+         if (val == 0xFF)
          {
             srcIdx++;
-            val += (src[srcIdx] & 0x01);
+            val += src[srcIdx];
          }
 
          dst[dstIdx] = (byte) (val - 1);

@@ -24,6 +24,13 @@ public class TestBWT
     public static void main(String[] args)
     {
         System.out.println("TestBWT");
+        testCorrectness();
+        testSpeed();
+    }
+    
+    
+    public static void testCorrectness()
+    {
         System.out.println("\nCorrectness test");
 
         // Test behavior
@@ -47,7 +54,7 @@ public class TestBWT
 
                for (int i=0; i<buf1.length; i++)
                {
-                   buf1[i] = (byte) (65 + rnd.nextInt(32));
+                   buf1[i] = (byte) (65 + rnd.nextInt(4*ii));
                }
 
                buf1[buf1.length-1] = (byte) 0;
@@ -74,44 +81,64 @@ public class TestBWT
                System.exit(1);
             }
         }
+    }
+    
+    
+    public static void testSpeed()
+    {
+         System.out.println("\nSpeed test");
+         int iter = 2000;
+         int size = 256*1024;
+         long delta1 = 0;
+         long delta2 = 0;
+         byte[] buf1 = new byte[size];
+         byte[] buf2 = new byte[size];
+         System.out.println("Iterations: "+iter);
+         System.out.println("Transform size: "+size);
 
+         for (int jj = 0; jj < 3; jj++)
+         {
+             BWT bwt = new BWT(size);
+             java.util.Random random = new java.util.Random();
+             long before, after;
 
-        // Test Speed
-        {
-            System.out.println("\nSpeed test");
-            int iter = 2000;
-            long delta1 = 0;
-            long delta2 = 0;
+             for (int ii = 0; ii < iter; ii++)
+             {
+                 for (int i = 0; i < size; i++)
+                     buf1[i] = (byte) (random.nextInt(255) + 1);
 
-            for (int jj = 0; jj < 20; jj++)
-            {
-                int size = 8192;
-                byte[] buf1 = new byte[size];
-                BWT bwt = new BWT(size);
-                java.util.Random random = new java.util.Random();
+                 buf1[size-1] = 0;
+                 System.arraycopy(buf1, 0, buf2, 0, size);
+                 before = System.nanoTime();
+                 bwt.forward(buf2, 0);
+                 after = System.nanoTime();
+                 delta1 += (after - before);
+                 before = System.nanoTime();
+                 bwt.inverse(buf2, 0);
+                 after = System.nanoTime();
+                 delta2 += (after - before);
+             
+               int idx = -1;
 
-                for (int i = 0; i < size; i++)
-                    buf1[i] = (byte) (random.nextInt(64) + 1);
+               // Sanity check
+               for (int i=0; i<size; i++)
+               {
+                  if (buf1[i] != buf2[i])
+                  {
+                     idx = i;
+                     break;
+                  }
+               }
 
-                buf1[size-1] = 0;
-                long before, after;
+               if (idx >= 0)
+                  System.out.println("Failure at index "+idx+" ("+buf1[idx]+"<->"+buf2[idx]+")");             
+             }
+         }
 
-                for (int ii = 0; ii < iter; ii++)
-                {
-                    before = System.nanoTime();
-                    byte[] buf2 = bwt.forward(buf1, 0);
-                    after = System.nanoTime();
-                    delta1 += (after - before);
-                    before = System.nanoTime();
-                    bwt.inverse(buf2, 0);
-                    after = System.nanoTime();
-                    delta2 += (after - before);
-                }
-            }
-
-            System.out.println("Iterations: "+iter);
-            System.out.println("Forward transform [ms]: " + delta1 / 1000000);
-            System.out.println("Inverse transform [ms]: " + delta2 / 1000000);
-        }
+         final long prod = (long) iter * (long) size;
+         System.out.println("Forward transform [ms] : " + delta1 / 1000000);
+         System.out.println("Throughput [KB/s]      : " + prod * 1000000L / delta1 * 1000L / 1024);
+         System.out.println("Inverse transform [ms] : " + delta2 / 1000000);
+         System.out.println("Throughput [KB/s]      : " + prod * 1000000L / delta2 * 1000L / 1024);
     }
 }

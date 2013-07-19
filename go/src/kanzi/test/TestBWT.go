@@ -16,18 +16,25 @@ limitations under the License.
 package main
 
 import (
-	"kanzi/transform"
 	"fmt"
+	"kanzi/transform"
 	"math/rand"
 	"os"
 	"time"
 )
 
 func main() {
-	fmt.Printf("TestBWT\n")
+	fmt.Printf("\nTestBWT")
+	TestCorrectness()
+	TestSpeed()
+}
 
+func TestCorrectness() {
+	fmt.Printf("\n\nCorrectness test")
+
+	// Test behavior
 	for ii := 0; ii < 20; ii++ {
-		fmt.Printf("\nCorrectness test %v\n", ii)
+		fmt.Printf("\nTest %v\n", ii)
 		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 		size := uint(0)
@@ -42,7 +49,7 @@ func main() {
 			buf1 = make([]byte, size)
 
 			for i := 0; i < len(buf1); i++ {
-				buf1[i] = byte(65 + rnd.Intn(32))
+				buf1[i] = byte(65 + rnd.Intn(4*ii))
 			}
 
 			buf1[len(buf1)-1] = byte(0)
@@ -84,47 +91,55 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
 
+func TestSpeed() {
 	fmt.Printf("\nSpeed test")
 	iter := 2000
+	size := 256 * 1024
 	delta1 := int64(0)
 	delta2 := int64(0)
+	buf1 := make([]byte, size)
+	buf2 := make([]byte, size)
+	fmt.Printf("\nIterations: %v", iter)
+	fmt.Printf("\nTransform size: %v\n", size)
 
-	for jj := 0; jj < 20; jj++ {
-		size := 8192
-		buf1 := make([]byte, size)
-		var buf2 []byte
+
+	for jj := 0; jj < 3; jj++ {
 		bwt, _ := transform.NewBWT(0)
 		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-		for i := range buf1 {
-			buf1[i] = byte(rnd.Intn(64) & 63)
-		}
-
-		buf1[size-1] = 0
-
 		for i := 0; i < iter; i++ {
+			for i := range buf1 {
+				buf1[i] = byte(rnd.Intn(255) + 1)
+			}
+
+			buf1[size-1] = 0
+			copy(buf2, buf1)
 			before := time.Now()
-			buf2 = bwt.Forward(buf1)
+			bwt.Forward(buf2)
 			after := time.Now()
 			delta1 += after.Sub(before).Nanoseconds()
 			before = time.Now()
 			bwt.Inverse(buf2)
 			after = time.Now()
 			delta2 += after.Sub(before).Nanoseconds()
-		}
 
-		// Sanity check
-		for i := range buf1 {
-			if buf1[i] != buf2[i] {
-				println("Error at index %v: %v<->%v\n", i, buf1[i], buf2[i])
-				os.Exit(1)
+			// Sanity check
+			for i := range buf1 {
+				if buf1[i] != buf2[i] {
+					println("Error at index %v: %v<->%v\n", i, buf1[i], buf2[i])
+					os.Exit(1)
+				}
 			}
 		}
-	}
 
-	fmt.Printf("\nIterations: %v", iter)
-	fmt.Printf("\nBWT Forward transform [ms]: %v", delta1/1000000)
-	fmt.Printf("\nBWT Inverse transform [ms]: %v", delta2/1000000)
-	println()
+		println()
+		prod := int64(iter) * int64(size)
+		fmt.Printf("BWT Forward transform [ms]: %v\n", delta1/1000000)
+		fmt.Printf("Throughput [KB/s]         : %d\n", prod*1000000/delta1*1000/1024)
+		fmt.Printf("BWT Inverse transform [ms]: %v\n", delta2/1000000)
+		fmt.Printf("Throughput [KB/s]         : %d\n", prod*1000000/delta1*1000/1024)
+		println()
+	}
 }

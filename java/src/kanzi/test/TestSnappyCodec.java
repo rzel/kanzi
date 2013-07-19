@@ -256,10 +256,11 @@ public class TestSnappyCodec
             if (idx >= 0)
                System.out.println("Failure at index "+idx+" ("+iba1.array[idx]+"<->"+iba3.array[idx]+")");
 
+            final long prod = (long) iter * (long) size;
             System.out.println("Snappy encoding [ms]: " + delta1 / 1000000);
-            System.out.println("Throughput [MB/s]   : " + ((long) (iter*size)) * 1000000L / delta1 * 1000L / (1024*1024));
+            System.out.println("Throughput [MB/s]   : " + prod * 1000000L / delta1 * 1000L / (1024*1024));
             System.out.println("Snappy decoding [ms]: " + delta2 / 1000000);
-            System.out.println("Throughput [MB/s]   : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
+            System.out.println("Throughput [MB/s]   : " + prod * 1000000L / delta2 * 1000L / (1024*1024));
          }
      }
 }

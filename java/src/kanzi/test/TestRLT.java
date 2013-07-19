@@ -177,7 +177,7 @@ public class TestRLT
       byte[] reverse;
       Random rnd = new Random();
       final int iter = 50000;
-      final int size = 30000;
+      final int size = 50000;
       System.out.println("\n\nSpeed test");
       System.out.println("Iterations: "+iter);
       
@@ -190,26 +190,26 @@ public class TestRLT
          IndexedByteArray iba2 = new IndexedByteArray(output, 0);
          IndexedByteArray iba3 = new IndexedByteArray(reverse, 0);
 
-         // Generate random data with runs
-         int n = 0;
-                 
-         while (n < input.length)        
-         {
-            byte val = (byte) (rnd.nextInt() & 255);
-            input[n++] = val;
-            int run = rnd.nextInt() & 255;
-            run -= 200;
-            
-            while ((--run > 0) && (n < input.length))       
-               input[n++] = val;
-         }
-
          long before, after;
          long delta1 = 0;
          long delta2 = 0;
 
          for (int ii = 0; ii < iter; ii++)
-         {
+         { 
+            // Generate random data with runs
+            int n = 0;
+
+            while (n < input.length)        
+            {
+               byte val = (byte) (rnd.nextInt() & 255);
+               input[n++] = val;
+               int run = rnd.nextInt() & 255;
+               run -= 200;
+
+               while ((--run > 0) && (n < input.length))       
+                  input[n++] = val;
+            }
+          
             RLT rlt = new RLT(); // Required to reset internal attributes
             iba1.index = 0;
             iba2.index = 0;
@@ -223,11 +223,8 @@ public class TestRLT
                
             after = System.nanoTime();
             delta1 += (after - before);
-         }
 
-         for (int ii = 0; ii < iter; ii++)
-         {
-            RLT rlt = new RLT(); // Required to reset internal attributes
+            rlt = new RLT(); // Required to reset internal attributes
             iba3.index = 0;
             iba2.index = 0;
             before = System.nanoTime();
@@ -257,10 +254,11 @@ public class TestRLT
          if (idx >= 0)
             System.out.println("Failure at index "+idx+" ("+iba1.array[idx]+"<->"+iba3.array[idx]+")");
          
+         final long prod = (long) iter * (long) size;
          System.out.println("RLT encoding [ms] : " + delta1 / 1000000);
-         System.out.println("Throughput [MB/s] : " + ((long) (iter*size)) * 1000000L / delta1 * 1000L / (1024*1024));
+         System.out.println("Throughput [MB/s] : " + prod * 1000000L / delta1 * 1000L / (1024*1024));
          System.out.println("RLT decoding [ms] : " + delta2 / 1000000);
-         System.out.println("Throughput [MB/s] : " + ((long) (iter*size)) * 1000000L / delta2 * 1000L / (1024*1024));
+         System.out.println("Throughput [MB/s] : " + prod * 1000000L / delta2 * 1000L / (1024*1024));
       }
    }
 }

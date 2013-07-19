@@ -26,6 +26,15 @@ public class TestDistanceCoder
 
     public static void main(String[] args)
     {
+       System.out.println("TestDistanceCoder");
+       testCorrectness();
+       testSpeed();
+    }
+    
+    
+    public static void testCorrectness()
+    {
+        System.out.println("Correctness test");
         byte[] input;
         byte[] values = new byte[4096];
         Random rnd =  new Random();
@@ -34,11 +43,6 @@ public class TestDistanceCoder
         for (int i=1; i<values.length; i++)
            values[i] = (byte) (values[i-1] + rnd.nextInt(5) - 3);
         
-        System.out.println("Test Distance Codec");
-        
-        // Correctness test
-        System.out.println("Correctness test\n");
-
         for (int ii=0; ii<3; ii++)
         {
             if (ii == 1)
@@ -115,14 +119,25 @@ public class TestDistanceCoder
 
             System.out.println("\nIdentical");
         }
+    }
     
+    
+    public static void testSpeed()
+    {
         // Speed test  
         System.out.println("\n\nSpeed test\n");
-        input = values;
+        final int size = 10000;
+        byte[] input = new byte[size];
+        byte[] values = new byte[size];
+
+        Random rnd =  new Random();
+        values[0] = (byte) 64;
+        
+        for (int i=1; i<values.length; i++)
+           values[i] = (byte) (values[i-1] + rnd.nextInt(5) - 3);
          
-        final int size = input.length;
         IndexedByteArray src = new IndexedByteArray(new byte[size], 0);
-        IndexedByteArray dst = new IndexedByteArray(new byte[Math.max(size, 256)], 0); // can be bigger than original !
+        IndexedByteArray dst = new IndexedByteArray(new byte[size], 0);
         IndexedByteArray inv = new IndexedByteArray(new byte[size], 0);
         System.arraycopy(input, 0, src.array, 0, size);
         DistanceCodec codec = new DistanceCodec(size);
@@ -162,10 +177,10 @@ public class TestDistanceCoder
         }
         
 
-        System.out.println("Iterations: "+iter);
-        System.out.println("Encode [ms]       : " +delta1/1000000L);
-        System.out.println("Throughput [KB/s] : " +((long) (iter*size)) * 1000000L / delta1 * 1000L / 1024L);
-        System.out.println("Decode [ms]       : " +delta2/1000000L);
-        System.out.println("Throughput [KB/s] : " +((long) (iter*size)) * 1000000L / delta2 * 1000L / 1024L);
+        final long prod = (long) iter * (long) size;
+        System.out.println("Encode [ms]       : " + delta1/1000000L);
+        System.out.println("Throughput [KB/s] : " + prod * 1000000L / delta1 * 1000L / 1024L);
+        System.out.println("Decode [ms]       : " + delta2/1000000L);
+        System.out.println("Throughput [KB/s] : " + prod * 1000000L / delta2 * 1000L / 1024L);
     }
 }

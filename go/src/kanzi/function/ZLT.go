@@ -155,9 +155,9 @@ func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
 		}
 
 		// Regular data processing
-		if val > 0xFE {
+		if val == 0xFF {
 			srcIdx++
-			val += (src[srcIdx] & 0x01)
+			val += src[srcIdx]
 		}
 
 		dst[dstIdx] = val - 1

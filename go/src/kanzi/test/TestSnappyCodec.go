@@ -217,10 +217,11 @@ func main() {
 			os.Exit(1)
 		}
 
+		prod := int64(iter) * int64(size)
 		fmt.Printf("\nSnappy encoding [ms]: %v", delta1/1000000)
-		fmt.Printf("\nThroughput [MB/s]   : %d", (int64(iter*size))*1000000/delta1*1000/(1024*1024))
+		fmt.Printf("\nThroughput [MB/s]   : %d", prod*1000000/delta1*1000/(1024*1024))
 		fmt.Printf("\nSnappy decoding [ms]: %v", delta2/1000000)
-		fmt.Printf("\nThroughput [MB/s]   : %d", (int64(iter*size))*1000000/delta2*1000/(1024*1024))
+		fmt.Printf("\nThroughput [MB/s]   : %d", prod*1000000/delta2*1000/(1024*1024))
 		println()
 	}
 }
