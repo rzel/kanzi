@@ -377,9 +377,8 @@ public class CompressedInputStream extends InputStream
       try
       {
          // Extract header directly from bitstream
-         InputBitStream bs = ed.getBitStream();
-         final long read = bs.read();
-         byte mode = (byte) (bs.readBits(8) & 0xFF);
+         final long read = this.ibs.read();
+         byte mode = (byte) this.ibs.readBits(8);
          int compressedLength;
          int checksum1 = 0;
 
@@ -392,7 +391,7 @@ public class CompressedInputStream extends InputStream
             final int dataSize = mode & 0x03;
             final int length = dataSize << 3;
             final int mask = (1 << length) - 1;
-            compressedLength = (int) (bs.readBits(length) & mask);
+            compressedLength = (int) (this.ibs.readBits(length) & mask);
          }
 
          if (compressedLength == 0)
@@ -403,7 +402,7 @@ public class CompressedInputStream extends InputStream
 
          // Extract checksum from bit stream (if any)
          if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
-            checksum1 = (int) bs.readBits(32);
+            checksum1 = (int) this.ibs.readBits(32);
 
          if (this.transformType == 'N')
             this.iba2.array = data.array; // share buffers if no transform
@@ -444,7 +443,7 @@ public class CompressedInputStream extends InputStream
          if (this.ds != null)
          {
             this.ds.print("Block "+this.blockId+": "+
-                   ((bs.read()-read)/8) + " => " +
+                   ((this.ibs.read()-read)/8) + " => " +
                     compressedLength + " => " + decoded);
 
             if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))

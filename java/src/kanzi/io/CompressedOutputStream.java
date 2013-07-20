@@ -422,17 +422,16 @@ public class CompressedOutputStream extends OutputStream
          // Rebuild the entropy encoder to reset block statistics
          ee = new EntropyCodecFactory().newEncoder(this.obs, (byte) this.entropyType);
 
-         // Write block 'header' (mode + compressed length)
-         final OutputBitStream bs = ee.getBitStream();
-         final long written = bs.written();
-         bs.writeBits(mode, 8);
+         // Write block 'header' (mode + compressed length);
+         final long written = this.obs.written();
+         this.obs.writeBits(mode, 8);
 
          if (dataSize > 0)
-            bs.writeBits(compressedLength, 8*dataSize);
+            this.obs.writeBits(compressedLength, 8*dataSize);
 
          // Write checksum (unless small block)
          if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
-            bs.writeBits(checksum, 32);
+            this.obs.writeBits(checksum, 32);
 
          // Entropy encode block
          final int encoded = ee.encode(this.iba2.array, 0, compressedLength);
@@ -448,8 +447,8 @@ public class CompressedOutputStream extends OutputStream
          {
             this.ds.print("Block "+this.blockId+": "+
                    blockLength + " => " + encoded + " => " +
-                  ((bs.written()-written)/8L)+" ("+
-                  ((bs.written()-written)*100L/(long)(blockLength*8))+"%)");
+                  ((this.obs.written()-written)/8L)+" ("+
+                  ((this.obs.written()-written)*100L/(long)(blockLength*8))+"%)");
 
             if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
                this.ds.print("  [" + Integer.toHexString(checksum) + "]");

@@ -388,19 +388,18 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 	}
 
 	// Write block 'header' (mode + compressed length)
-	bs := ee.BitStream()
-	written := bs.Written()
-	bs.WriteBits(uint64(mode), 8)
+	written := this.obs.Written()
+	this.obs.WriteBits(uint64(mode), 8)
 
 	if dataSize > 0 {
-		if _, err = bs.WriteBits(uint64(compressedLength), 8*dataSize); err != nil {
+		if _, err = this.obs.WriteBits(uint64(compressedLength), 8*dataSize); err != nil {
 			return NewIOError(err.Error(), ERR_WRITE_FILE)
 		}
 	}
 
 	// Write checksum (unless small block)
 	if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
-		if _, err = bs.WriteBits(uint64(checksum), 32); err != nil {
+		if _, err = this.obs.WriteBits(uint64(checksum), 32); err != nil {
 			return NewIOError(err.Error(), ERR_WRITE_FILE)
 		}
 	}
@@ -418,8 +417,8 @@ func (this *CompressedOutputStream) encode(data []byte) error {
 	// Print info if debug writer is not nil
 	if this.debugWriter != nil {
 		fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d (%d%%)", this.blockId,
-			blockLength, encoded, (bs.Written()-written)/8,
-			(bs.Written()-written)*100/uint64(blockLength*8))
+			blockLength, encoded, (this.obs.Written()-written)/8,
+			(this.obs.Written()-written)*100/uint64(blockLength*8))
 
 		if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
 			fmt.Fprintf(this.debugWriter, "  [%x]", checksum)
@@ -663,9 +662,8 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 	defer ed.Dispose()
 
 	// Extract header directly from bitstream
-	bs := ed.BitStream()
-	read := bs.Read()
-	r, err := bs.ReadBits(8)
+	read := this.ibs.Read()
+	r, err := this.ibs.ReadBits(8)
 
 	if err != nil {
 		return 0, NewIOError(err.Error(), ERR_READ_FILE)
@@ -682,7 +680,7 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 		length := dataSize << 3
 		mask := uint64(1<<length) - 1
 
-		if r, err = bs.ReadBits(length); err != nil {
+		if r, err = this.ibs.ReadBits(length); err != nil {
 			return 0, NewIOError(err.Error(), ERR_READ_FILE)
 		}
 
@@ -700,7 +698,7 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 
 	// Extract checksum from bit stream (if any)
 	if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK) == 0 {
-		if r, err = bs.ReadBits(32); err != nil {
+		if r, err = this.ibs.ReadBits(32); err != nil {
 			return 0, NewIOError(err.Error(), ERR_READ_FILE)
 		}
 
@@ -749,7 +747,7 @@ func (this *CompressedInputStream) decode(data []byte) (int, error) {
 		// Print info if debug writer is not nil
 		if this.debugWriter != nil {
 			fmt.Fprintf(this.debugWriter, "Block %d: %d => %d => %d", this.blockId,
-				(bs.Read()-read)/8, compressedLength, decoded)
+				(this.ibs.Read()-read)/8, compressedLength, decoded)
 
 			if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
 				fmt.Fprintf(this.debugWriter, "  [%x]", checksum1)

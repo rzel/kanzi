@@ -139,23 +139,8 @@ public final class LZ4Codec implements ByteFunction
       return token;
    }
 
-
    @Override
    public boolean forward(IndexedByteArray source, IndexedByteArray destination)
-   {
-      final int count = (this.size > 0) ? this.size : source.array.length - source.index;
-
-      if (destination.array.length - destination.index < getMaxEncodedLength(count))
-         return false;
-
-      return (count < LZ4_64K_LIMIT) ?
-         this.doForward(source, destination, source.index, HASH_LOG_64K) :
-         this.doForward(source, destination, 0, HASH_LOG);
-   }
-
-
-   private boolean doForward(IndexedByteArray source, IndexedByteArray destination,
-           final int base, final int hashLog)
    {
       final int srcIdx0 = source.index;
       final int dstIdx0 = destination.index;
@@ -163,12 +148,17 @@ public final class LZ4Codec implements ByteFunction
       final byte[] dst = destination.array;
       final int count = (this.size > 0) ? this.size : src.length - srcIdx0;
 
+      if (destination.array.length - destination.index < getMaxEncodedLength(count))
+         return false;
+
       if (count <= MIN_LENGTH)
       {
          emitLiterals(source, destination, count, true);
          return true;
       }
 
+      final int base = (count < LZ4_64K_LIMIT) ? source.index : 0;
+      final int hashLog = (count < LZ4_64K_LIMIT) ? HASH_LOG_64K : HASH_LOG;
       final int hashShift = 32 - hashLog;
       final int srcEnd = srcIdx0 + count;
       final int srcLimit = srcEnd - LAST_LITERALS;

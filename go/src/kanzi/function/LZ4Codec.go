@@ -155,24 +155,17 @@ func (this *LZ4Codec) Forward(src, dst []byte) (uint, uint, error) {
 		return 0, 0, fmt.Errorf("Output buffer is too small - size: %d, required %d", len(dst), n)
 	}
 
-	if count < LZ4_64K_LIMIT {
-		return this.doForward(src, dst, HASH_LOG_64K)
-	} else {
-		return this.doForward(src, dst, HASH_LOG)
-	}
-}
-
-func (this *LZ4Codec) doForward(src []byte, dst []byte,
-	hashLog uint) (uint, uint, error) {
-	count := int(this.size)
-
-	if this.size == 0 {
-		count = len(src)
-	}
-
 	if count < MIN_LENGTH {
 		srcIdx, dstIdx, _ := emitLiterals(src, dst, count, true)
 		return uint(srcIdx), uint(dstIdx), error(nil)
+	}
+	
+	var hashLog uint
+
+	if count < LZ4_64K_LIMIT {
+		hashLog = HASH_LOG_64K
+	} else {
+		hashLog = HASH_LOG
 	}
 
 	hashShift := 32 - hashLog
