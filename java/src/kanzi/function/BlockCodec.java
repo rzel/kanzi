@@ -130,12 +130,6 @@ public class BlockCodec implements ByteFunction
       if (zlt.forward(this.buffer, output) == false)
          return false;
 
-      // If the ZLT did not compress, exit
-      if (((this.buffer.index < blockSize) ||
-          (output.index > output.array.length) ||
-          (output.index - savedOIdx - headerSizeBytes > blockSize)))
-         return false;
-
       // Write block header (mode + primary index)
       // 'mode' contains size of primaryIndex in bits (bits 6 to 4)
       // the size is divided by 4 and decreased by one
@@ -153,7 +147,7 @@ public class BlockCodec implements ByteFunction
       for (int i=1; i<headerSizeBytes; i++)
       {
          shift -= 8;
-         output.array[savedOIdx+i] = (byte) ((primaryIndex >> shift) & 0xFF);
+         output.array[savedOIdx+i] = (byte) (primaryIndex >>> shift);
       }
 
       return true;
@@ -195,7 +189,6 @@ public class BlockCodec implements ByteFunction
          primaryIndex |= ((input.array[input.index++] & 0xFF) << shift);
       }
 
-      final int savedIIdx = input.index;
       final int savedOIdx = output.index;
       ZLT zlt = new ZLT(compressedLength);
 
@@ -203,15 +196,8 @@ public class BlockCodec implements ByteFunction
       if (zlt.inverse(input, output) == false)
          return false;
 
-      // If output is too small, return error
-      if (input.index - savedIIdx < compressedLength)
-         return false;
-
       final int blockSize = output.index - savedOIdx;
       output.index = savedOIdx;
-
-      if (output.array.length < output.index + blockSize)
-         return false;
 
       // Apply Move-To-Front Inverse Transform
       this.mtft.setSize(blockSize);

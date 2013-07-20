@@ -32,7 +32,7 @@ import (
 // mode: bit 7 is unused for now
 //       bits 6-4 (contains the size in bits of the primary index - 1) / 4
 //       bits 3-0 4 highest bits of primary index
-// primary index: remaining bits (up to 3 bytes)       
+// primary index: remaining bits (up to 3 bytes)
 //
 // EG: Mode=0bx.100.xxxx primary index is (4+1)*4=20 bits long
 //     Mode=0bx.000.xxxx primary index is (0+1)*4=4 bits long
@@ -145,22 +145,14 @@ func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 		return 0, 0, err
 	}
 
-	// Apply Zero Length Encoding 
+	// Apply Zero Length Encoding
 	iIdx, oIdx, err := zlt.Forward(this.buffer, dst[headerSizeBytes:])
 
 	if err != nil {
 		return 0, 0, err
 	}
-	
+
 	oIdx += headerSizeBytes
-
-	if (oIdx > uint(len(dst))) || (oIdx > blockSize) {
-		return 0, 0, errors.New("ZLT failed: output buffer too small")
-	}
-
-	if iIdx < blockSize {
-		return 0, 0, errors.New("ZLT failed: input buffer too small")
-	}
 
 	// Write block header (mode + primary index)
 	// 'mode' contains size of primaryIndex in bits (bits 6 to 4)
@@ -177,7 +169,7 @@ func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 
 	for i := uint(1); i < headerSizeBytes; i++ {
 		shift -= 8
-		dst[i] = byte((primaryIndex >> shift) & 0xFF)
+		dst[i] = byte(primaryIndex >> shift)
 	}
 
 	return iIdx, oIdx, nil
@@ -203,7 +195,7 @@ func (this *BlockCodec) Inverse(src, dst []byte) (uint, uint, error) {
 	if (shift & 7) == 4 {
 		shift -= 4
 		primaryIndex |= uint(mode & 0x0F) << shift
-	}	
+	}
 
 	// Extract BWT primary index
 	for i := uint(1); i < headerSizeBytes; i++ {
@@ -211,32 +203,21 @@ func (this *BlockCodec) Inverse(src, dst []byte) (uint, uint, error) {
 		primaryIndex |= uint(src[i]) << shift
 	}
 
-	// Apply Zero Length Decoding 
+	// Apply Zero Length Decoding
 	zlt, err := NewZLT(compressedLength)
 
 	if err != nil {
 		return 0, 0, err
 	}
 
-	iIdx, oIdx, err := zlt.Inverse(src[headerSizeBytes:], dst)   
-   iIdx += headerSizeBytes
-   
+	iIdx, oIdx, err := zlt.Inverse(src[headerSizeBytes:], dst)
+	iIdx += headerSizeBytes
+
 	if err != nil {
 		return iIdx, oIdx, err
 	}
 
-	// If buffer is too small, return error 
-	if iIdx < compressedLength {
-		errMsg := fmt.Sprintf("ZLT failed: input buffer length: %d, required: %d", iIdx, compressedLength)
-		return iIdx, oIdx, errors.New(errMsg)
-	}
-
 	blockSize := oIdx
-	
-	if blockSize > uint(len(dst)) {
-		errMsg := fmt.Sprintf("ZLT failed: output buffer length: %d, required: %d", len(dst), blockSize)
-		return iIdx, oIdx, errors.New(errMsg)
-	}
 
 	// Apply Move-To-Front Inverse Transform
 	this.mtft.SetSize(blockSize)
