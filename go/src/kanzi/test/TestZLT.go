@@ -25,14 +25,21 @@ import (
 
 func main() {
 	fmt.Printf("TestZLT\n")
+	TestCorrectness()
+	TestSpeed()
+}
+
+func TestCorrectness() {
+	fmt.Printf("Correctness test\n")
 
 	for ii := 0; ii < 20; ii++ {
-		fmt.Printf("\nCorrectness test %v\n", ii)
+		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		fmt.Printf("\nTest %v\n", ii)
 
 		arr := make([]int, 64)
 
 		for i := range arr {
-			val := rand.Intn(100) - 16
+			val := rnd.Intn(100) - 16
 
 			if val >= 33 {
 				val = 0
@@ -51,7 +58,11 @@ func main() {
 		}
 
 		for i := range arr {
-			input[i] = byte(arr[i])
+			if i == len(arr)/2 {
+				input[i] = 255
+			} else {
+				input[i] = byte(arr[i])
+			}
 		}
 
 		zlt, _ := function.NewZLT(0)
@@ -101,7 +112,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
 
+func TestSpeed() {
 	iter := 50000
 	size := 30000
 	fmt.Printf("\n\nSpeed test\n")
@@ -109,7 +122,7 @@ func main() {
 
 	for jj := 0; jj < 3; jj++ {
 		input := make([]byte, size)
-		output := make([]byte, len(input))
+		output := make([]byte, len(input)*2)
 		reverse := make([]byte, len(input))
 
 		// Generate random data with runs
@@ -120,12 +133,11 @@ func main() {
 		delta2 := int64(0)
 
 		for n < len(input) {
-			val := byte(rand.Intn(3))
+			val := byte(rand.Intn(7))
 			input[n] = val
 			n++
-			run := rand.Intn(255)
-			run -= 200
-			run--
+			run := rand.Intn(128)
+			run -= 100
 
 			for run > 0 && n < len(input) {
 				input[n] = val

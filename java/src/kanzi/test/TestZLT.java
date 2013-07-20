@@ -66,7 +66,10 @@ public class TestZLT
 
          for (int i = 0; i < arr.length; i++)
          {
-            input[i] = (byte) (arr[i] & 255);
+            if (i == arr.length / 2)
+               input[i] = (byte) 255;
+            else
+               input[i] = (byte) (arr[i] & 255);
          }
 
          ZLT zlt = new ZLT();
@@ -141,7 +144,7 @@ public class TestZLT
       for (int jj=0; jj<3; jj++)
       {
          input = new byte[size];
-         output = new byte[size];
+         output = new byte[size*2];
          res = new byte[size];
          IndexedByteArray iba1 = new IndexedByteArray(input, 0);
          IndexedByteArray iba2 = new IndexedByteArray(output, 0);
@@ -158,10 +161,10 @@ public class TestZLT
 
              while (n < input.length)        
              {
-                byte val = (byte) (rnd.nextInt() & 3);
+                byte val = (byte) rnd.nextInt(255);
                 input[n++] = val;
-                int run = rnd.nextInt() & 255;
-                run -= 200;
+                int run = rnd.nextInt(128);
+                run -= 100;
 
                 while ((--run > 0) && (n < input.length))       
                    input[n++] = val;

@@ -24,8 +24,12 @@ import (
 )
 
 func main() {
-	fmt.Printf("TestRLT\n\n")
+	fmt.Printf("TestRLT\n")
+	TestCorrectness()
+	TestSpeed()
+}
 
+func TestCorrectness() {
 	fmt.Printf("Correctness test\n")
 
 	for ii := 0; ii < 20; ii++ {
@@ -133,7 +137,9 @@ func main() {
 
 		fmt.Printf("Identical\n")
 	}
+}
 
+func TestSpeed() {
 	iter := 50000
 	size := 30000
 	fmt.Printf("\n\nSpeed test\n")
@@ -141,7 +147,7 @@ func main() {
 
 	for jj := 0; jj < 3; jj++ {
 		input := make([]byte, size)
-		output := make([]byte, len(input))
+		output := make([]byte, len(input)*2)
 		reverse := make([]byte, len(input))
 
 		// Generate random data with runs
@@ -150,12 +156,11 @@ func main() {
 		delta2 := int64(0)
 
 		for n < len(input) {
-			val := byte(rand.Intn(3))
+			val := byte(rand.Intn(255))
 			input[n] = val
 			n++
-			run := rand.Intn(255)
-			run -= 200
-			run--
+			run := rand.Intn(128)
+			run -= 100
 
 			for run > 0 && n < len(input) {
 				input[n] = val

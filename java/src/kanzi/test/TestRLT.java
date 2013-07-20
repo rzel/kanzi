@@ -184,7 +184,7 @@ public class TestRLT
       for (int jj=0; jj<3; jj++)
       {
          input = new byte[size];
-         output = new byte[size];
+         output = new byte[size*2];
          reverse = new byte[size];
          IndexedByteArray iba1 = new IndexedByteArray(input, 0);
          IndexedByteArray iba2 = new IndexedByteArray(output, 0);
@@ -201,10 +201,10 @@ public class TestRLT
 
             while (n < input.length)        
             {
-               byte val = (byte) (rnd.nextInt() & 255);
+               byte val = (byte) rnd.nextInt(255);
                input[n++] = val;
-               int run = rnd.nextInt() & 255;
-               run -= 200;
+               int run = rnd.nextInt(128);
+               run -= 100;
 
                while ((--run > 0) && (n < input.length))       
                   input[n++] = val;

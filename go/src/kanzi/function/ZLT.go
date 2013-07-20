@@ -51,6 +51,7 @@ func (this *ZLT) Forward(src, dst []byte) (uint, uint, error) {
 	}
 
 	dstEnd := uint(len(dst))
+	dstEnd2 := dstEnd - 2
 	runLength := 1
 	srcIdx := uint(0)
 	dstIdx := uint(0)
@@ -75,8 +76,8 @@ func (this *ZLT) Forward(src, dst []byte) (uint, uint, error) {
 				log2++
 			}
 
-			if dstIdx > dstEnd-log2 {
-				return srcIdx, dstIdx, errors.New("Cannot write run length to output buffer: full!")
+			if dstIdx >= dstEnd-log2 {
+				break
 			}
 
 			// Write every bit as a byte except the most significant one
@@ -91,8 +92,8 @@ func (this *ZLT) Forward(src, dst []byte) (uint, uint, error) {
 		}
 
 		if val >= 0xFE {
-			if dstIdx > dstEnd-2 {
-				return srcIdx, dstIdx, errors.New("Cannot write value to output buffer: full!")
+			if dstIdx >= dstEnd2 {
+				break
 			}
 
 			dst[dstIdx] = 0xFF
@@ -140,7 +141,7 @@ func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
 			// Generate the run length bit by bit (but force MSB)
 			runLength = 1
 
-			for val <= 1 {
+			for {
 				runLength = (runLength << 1) | int(val)
 				srcIdx++
 
@@ -149,6 +150,10 @@ func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
 				}
 
 				val = src[srcIdx]
+				
+				if val > 1 {
+					break
+				}	
 			}
 
 			continue
@@ -157,10 +162,16 @@ func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
 		// Regular data processing
 		if val == 0xFF {
 			srcIdx++
-			val += src[srcIdx]
+			
+			if srcIdx >= srcEnd {
+				break
+			}	
+						
+			dst[dstIdx] = 0xFE + src[srcIdx]
+		} else {
+			dst[dstIdx] = val - 1
 		}
-
-		dst[dstIdx] = val - 1
+		
 		dstIdx++
 		srcIdx++
 	}

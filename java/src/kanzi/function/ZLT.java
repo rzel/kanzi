@@ -62,6 +62,7 @@ public final class ZLT implements ByteFunction
       final byte[] dst = destination.array;
       final int srcEnd = (this.size == 0) ? src.length : srcIdx + this.size;
       final int dstEnd = dst.length;
+      final int dstEnd2 = dstEnd - 2;
       int runLength = 1;
 
       while ((srcIdx < srcEnd) && (dstIdx < dstEnd))
@@ -85,12 +86,8 @@ public final class ZLT implements ByteFunction
             for (int val2=runLength>>1; val2>1; val2>>=1)
                log2++;
 
-            if (dstIdx > dstEnd - log2)
-            {
-               source.index = srcIdx;
-               destination.index = dstIdx;
-               return false;
-            }
+            if (dstIdx >= dstEnd - log2)
+               break;
 
             // Write every bit as a byte except the most significant one
             while (log2 > 0)
@@ -107,12 +104,8 @@ public final class ZLT implements ByteFunction
 
          if (val >= 0xFE)
          {
-            if (dstIdx > dstEnd - 2)
-            {
-               source.index = srcIdx;
-               destination.index = dstIdx;
-               return false;
-            }
+            if (dstIdx >= dstEnd2)
+               break;
 
             dst[dstIdx++] = (byte) 0xFF;
             dst[dstIdx++] = (byte) (val - 0xFE);
@@ -178,10 +171,17 @@ public final class ZLT implements ByteFunction
          if (val == 0xFF)
          {
             srcIdx++;
-            val += src[srcIdx];
-         }
 
-         dst[dstIdx] = (byte) (val - 1);
+            if (srcIdx >= srcEnd)
+               break;
+            
+            dst[dstIdx] = (byte) (0xFE + src[srcIdx]);
+         }
+         else
+         {         
+            dst[dstIdx] = (byte) (val - 1);
+         }
+         
          dstIdx++;
          srcIdx++;
       }

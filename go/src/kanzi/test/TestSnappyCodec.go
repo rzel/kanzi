@@ -24,8 +24,12 @@ import (
 )
 
 func main() {
-	fmt.Printf("TestSnappyCodec\n\n")
+	fmt.Printf("TestSnappyCodec\n")
+	TestCorrectness()
+	TestSpeed()
+}
 
+func TestCorrectness() {
 	fmt.Printf("Correctness test\n")
 
 	for ii := 0; ii < 20; ii++ {
@@ -140,7 +144,9 @@ func main() {
 
 		fmt.Printf("Identical\n")
 	}
+}
 
+func TestSpeed() {
 	iter := 50000
 	size := 30000
 	fmt.Printf("\n\nSpeed test\n")
