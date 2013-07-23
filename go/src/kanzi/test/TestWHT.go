@@ -16,9 +16,9 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"kanzi"
 	"kanzi/transform"
-	"fmt"
 	"math/rand"
 	"time"
 )
@@ -102,8 +102,10 @@ func main() {
 		dim := 4 << uint(dimIdx)
 		fmt.Printf("\n\nDimension %v", dim)
 		blockSize := dim * dim
-		data1 := make([]int, blockSize)
-		data2 := make([]int, blockSize)
+		data1 := make([]int, blockSize+20)
+		data2 := make([]int, blockSize+20)
+		data3 := make([]int, blockSize+20)
+		var data []int
 
 		for nn := 0; nn < 20; nn++ {
 			fmt.Printf("\nInput %v: ", nn)
@@ -115,32 +117,40 @@ func main() {
 					data1[i] = rand.Intn(nn * 10)
 				}
 
-				data2[i] = data1[i]
+				data3[i] = data1[i]
 				fmt.Printf("%v ", data1[i])
 			}
 
-			whts[dimIdx].Forward(data1)
 			fmt.Printf("\nOutput: ")
+			start := (nn & 1) * nn
 
-			for i := 0; i < blockSize; i++ {
-				fmt.Printf("%v ", data1[i])
+			if nn <= 10 {
+				data = data1
+			} else {
+				data = data2
+			}
+			
+			whts[dimIdx].Forward(data1, data[start:])
+			
+			for i := start; i < start+blockSize; i++ {
+				fmt.Printf("%v ", data[i])
 			}
 
-			whts[dimIdx].Inverse(data1)
+			whts[dimIdx].Inverse(data[start:], data2)
 			fmt.Printf("\nResult: ")
 			badIdx := -1
 
 			for i := 0; i < blockSize; i++ {
-				fmt.Printf("%v ", data1[i])
+				fmt.Printf("%v ", data2[i])
 
-				if data1[i] != data2[i] {
+				if data3[i] != data2[i] {
 					badIdx = i
 					break
 				}
 			}
 
 			if badIdx >= 0 {
-				fmt.Printf("\nError at index %v: %v <-> %v", badIdx, data1[badIdx], data2[badIdx])
+				fmt.Printf("\nError at index %v: %v <-> %v", badIdx, data3[badIdx], data2[badIdx])
 				break
 			}
 
@@ -167,11 +177,11 @@ func main() {
 
 		for i := 0; i < iter; i++ {
 			before := time.Now()
-			wht8.Forward(data[i%100])
+			wht8.Forward(data[i%100], data[i%100])
 			after := time.Now()
 			delta1 += after.Sub(before).Nanoseconds()
 			before = time.Now()
-			wht8.Inverse(data[i%100])
+			wht8.Inverse(data[i%100], data[i%100])
 			after = time.Now()
 			delta2 += after.Sub(before).Nanoseconds()
 		}

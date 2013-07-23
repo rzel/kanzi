@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.transform;
 
+import kanzi.IndexedIntArray;
 import kanzi.IntTransform;
 
 
@@ -47,40 +48,37 @@ public final class WHT8 implements IntTransform
     }
 
 
-    public int[] forward(int[] block)
-    {
-        return this.compute(block, 0, this.fScale);
-    }
-
-
     // Not thread safe
     @Override
-    public int[] forward(int[] block, int blkptr)
+    public boolean forward(IndexedIntArray src, IndexedIntArray dst)
     {
-        return this.compute(block, blkptr, this.fScale);
+        return compute(src, dst, this.data, this.fScale);
     }
 
 
     // Not thread safe
     // Result multiplied by sqrt(2) or 8*sqrt(2) if 'scale' is set to false
-    private int[] compute(int[] block, int blkptr, int shift)
+    private static boolean compute(IndexedIntArray src, IndexedIntArray dst, int[] buffer, int shift)
     {
+        final int[] input = src.array;
+        final int[] output = dst.array;
+        final int srcIdx = src.index;
+        final int dstIdx = dst.index;        
         int dataptr = 0;
-        final int end = blkptr + 64;
-        final int[] buffer = this.data;
 
         // Pass 1: process rows.
-        for (int i=blkptr; i<end; i+=8)
+        for (int i=0; i<64; i+=8)
         {
             // Aliasing for speed
-            final int x0 = block[i];
-            final int x1 = block[i+1];
-            final int x2 = block[i+2];
-            final int x3 = block[i+3];
-            final int x4 = block[i+4];
-            final int x5 = block[i+5];
-            final int x6 = block[i+6];
-            final int x7 = block[i+7];
+            final int si = srcIdx + i;
+            final int x0 = input[si];
+            final int x1 = input[si+1];
+            final int x2 = input[si+2];
+            final int x3 = input[si+3];
+            final int x4 = input[si+4];
+            final int x5 = input[si+5];
+            final int x6 = input[si+6];
+            final int x7 = input[si+7];
 
             final int a0 = x0 + x1;
             final int a1 = x2 + x3;
@@ -113,11 +111,10 @@ public final class WHT8 implements IntTransform
         }
 
         dataptr = 0;
-        final int end2 = blkptr + 8;
         final int adjust = (1 << shift) >> 1;
 
         // Pass 2: process columns.
-        for (int i=blkptr; i<end2; i++)
+        for (int i=0; i<8; i++)
         {
             // Aliasing for speed
             final int x0 = buffer[dataptr];
@@ -147,33 +144,29 @@ public final class WHT8 implements IntTransform
             final int b6 = a4 - a5;
             final int b7 = a6 - a7;
 
-            block[i]    = (b0 + b1 + adjust) >> shift;
-            block[i+8]  = (b2 + b3 + adjust) >> shift;
-            block[i+16] = (b4 + b5 + adjust) >> shift;
-            block[i+24] = (b6 + b7 + adjust) >> shift;
-            block[i+32] = (b0 - b1 + adjust) >> shift;
-            block[i+40] = (b2 - b3 + adjust) >> shift;
-            block[i+48] = (b4 - b5 + adjust) >> shift;
-            block[i+56] = (b6 - b7 + adjust) >> shift;
+            final int di = dstIdx + i;
+            output[di]    = (b0 + b1 + adjust) >> shift;
+            output[di+8]  = (b2 + b3 + adjust) >> shift;
+            output[di+16] = (b4 + b5 + adjust) >> shift;
+            output[di+24] = (b6 + b7 + adjust) >> shift;
+            output[di+32] = (b0 - b1 + adjust) >> shift;
+            output[di+40] = (b2 - b3 + adjust) >> shift;
+            output[di+48] = (b4 - b5 + adjust) >> shift;
+            output[di+56] = (b6 - b7 + adjust) >> shift;
 
             dataptr++;
         }
 
-        return block;
-    }
-
-
-    // The transform is symmetric (except, potentially, for scaling)
-    public int[] inverse(int[] block)
-    {
-        return this.compute(block, 0, this.iScale);
+        src.index += 64;
+        dst.index += 64;
+        return true;
     }
 
 
     @Override
-    public int[] inverse(int[] block, int blkptr)
+    public boolean inverse(IndexedIntArray src, IndexedIntArray dst)
     {
-        return this.compute(block, blkptr, this.iScale);
+        return compute(src, dst, this.data, this.iScale);
     }
 
 }

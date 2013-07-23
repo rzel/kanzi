@@ -18,7 +18,18 @@ package kanzi;
 
 public interface IntTransform
 {
-    public int[] forward(int[] block, int blkptr);
-    
-    public int[] inverse(int[] block, int blkptr);
+   // Indexed arrays are required rather than just arrays and indexes
+   // Since the number of integers in input and output of the transform may differ
+   // the arrays may not be big enough and the number of processed integers may
+   // vary. The indexes in the indexed array instance can be updated to reflect
+   // this fact.
+   public boolean forward(IndexedIntArray src, IndexedIntArray dst);
+
+
+   // Indexed arrays are required rather than just arrays and indexes
+   // Since the number of integers in input and output of the transform may differ
+   // the arrays may not be big enough and the number of processed integers may
+   // vary. The indexes in the indexed array instance can be updated to reflect
+   // this fact.
+   public boolean inverse(IndexedIntArray src, IndexedIntArray dst);
 }

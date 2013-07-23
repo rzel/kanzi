@@ -16,23 +16,10 @@ limitations under the License.
 package kanzi;
 
 
-// A byte function is an operation that takes an array of bytes as input and
-// turns it into another array of bytes. The size of the returned array is not
-// known in advance (by the caller).
-public interface ByteFunction
+// A byte function is an operation that transforms the input byte array and writes
+// the result in the output byte array. The result may have a different size.
+// The function may fail if input and output array are the same array.
+// The index of input and output arrays are updated appropriately.
+public interface ByteFunction extends ByteTransform
 {
-   // Indexed arrays are required rather than just arrays and indexes
-   // Since the number of bytes in input and output of the transform may differ
-   // the arrays may not be big enough and the number of processed bytes may
-   // vary. The indexes in the indexed array instance can be updated to reflect
-   // this fact.
-   public boolean forward(IndexedByteArray src, IndexedByteArray dst);
-
-
-   // Indexed arrays are required rather than just arrays and indexes
-   // Since the number of bytes in input and output of the transform may differ
-   // the arrays may not be big enough and the number of processed bytes may
-   // vary. The indexes in the indexed array instance can be updated to reflect
-   // this fact.
-   public boolean inverse(IndexedByteArray src, IndexedByteArray dst);
 }

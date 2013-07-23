@@ -15,21 +15,24 @@ limitations under the License.
 
 package kanzi.transform;
 
+import kanzi.IndexedIntArray;
 import kanzi.IntTransform;
 
 
 // Discrete Wavelet Transform Cohen-Daubechies-Fauveau 9/7 for 2D signals
 public class DWT_CDF_9_7 implements IntTransform
 {
-    private static final int SHIFT  = 12;
-    private static final int ADJUST = 1 << (SHIFT - 1);
+    private static final int SHIFT_12  = 12;
+    private static final int ADJUST_12 = 1 << (SHIFT_12 - 1);
+    private static final int SHIFT_11  = 11;
+    private static final int ADJUST_11 = 1 << (SHIFT_11 - 1);
 
-    private static final int PREDICT_1 = 6497; // with SHIFT = 12
-    private static final int UPDATE_1  = 217;  // with SHIFT = 12
-    private static final int PREDICT_2 = 3616; // with SHIFT = 12
-    private static final int UPDATE_2  = 1817; // with SHIFT = 12
-    private static final int SCALING_1 = 4709; // with SHIFT = 12
-    private static final int SCALING_2 = 3562; // with SHIFT = 12
+    private static final int PREDICT1 = 6497; // with SHIFT = 12
+    private static final int UPDATE1  = 217;  // with SHIFT = 12
+    private static final int PREDICT2 = 3616; // with SHIFT = 12
+    private static final int UPDATE2  = 1817; // with SHIFT = 12
+    private static final int SCALING1 = 4709; // with SHIFT = 12
+    private static final int SCALING2 = 3562; // with SHIFT = 12
 
     private final int[] data;
     private final int width;
@@ -109,22 +112,33 @@ public class DWT_CDF_9_7 implements IntTransform
     // Calculate the forward discrete wavelet transform of the 2D input signal
     // Not thread safe because this.data is modified
     @Override
-    public int[] forward(int[] block, int blkptr)
+    public boolean forward(IndexedIntArray src, IndexedIntArray dst)
     {
+        if (src.array.length < this.width*this.height)
+           return false;
+
+        if (dst.array.length < this.width*this.height)
+           return false;
+        
+        if ((src.array != dst.array) || (src.index != dst.index))
+        {
+           System.arraycopy(src.array, src.index, dst.array, dst.index, this.width*this.height);
+        }
+        
         for (int i=0; i<this.steps; i++)
         {
            // First, vertical transform
-           block = forward(block, blkptr, this.width, 1, this.width>>i, this.height>>i);
+           this.forward(dst.array, dst.index, this.width, 1, this.width>>i, this.height>>i);
 
            // Then horizontal transform on the updated signal
-           block = forward(block, blkptr, 1, this.width, this.height>>i, this.width>>i);
+           this.forward(dst.array, dst.index, 1, this.width, this.height>>i, this.width>>i);
         }
 
-        return block;
+        return true;
     }
 
 
-    private int[] forward(int[] block, int blkptr, int stride, int inc, int dim1, int dim2)
+    private void forward(int[] block, int blkptr, int stride, int inc, int dim1, int dim2)
     {
         final int stride2 = stride << 1;
         final int endOffs = blkptr + (dim1 * inc);
@@ -133,67 +147,60 @@ public class DWT_CDF_9_7 implements IntTransform
         for (int offset=blkptr; offset<endOffs; offset+=inc)
         {
             final int end = offset + (dim2 - 2) * stride;
-            long tmp;
             int prev = block[offset];
             
             // First lifting stage : Predict 1
             for (int i=offset+stride; i<end; i+=stride2)
             {
                 final int next = block[i+stride];
-                tmp = (PREDICT_1 * (prev + next));
-                block[i] -= ((tmp + ADJUST) >> SHIFT);
+                final int val = (((PREDICT1 * (prev + next))) + ADJUST_12) >> SHIFT_12;
+                block[i] -= val;
                 prev = next;
             }
 
-            tmp = PREDICT_1 * block[end] ;
-            block[end+stride] -= (((tmp + tmp) + ADJUST) >> SHIFT);
+            block[end+stride] -= (((PREDICT1 * block[end]) + ADJUST_11) >> SHIFT_11);
             prev = block[offset+stride];
 
             // Second lifting stage : Update 1
             for (int i=offset+stride2; i<=end; i+=stride2)
             {
-                int next = block[i+stride];
-                tmp = UPDATE_1 * (prev + next);
-                block[i] -= ((tmp + ADJUST) >> SHIFT);
+                final int next = block[i+stride];
+                final int val = ((UPDATE1 * (prev + next))+ ADJUST_12) >> SHIFT_12;
+                block[i] -= val;
                 prev = next;
             }
 
-            tmp = UPDATE_1 * block[offset+stride];
-            block[offset] -= (((tmp + tmp) + ADJUST) >> SHIFT);
+            block[offset] -= (((UPDATE1 * block[offset+stride]) + ADJUST_11) >> SHIFT_11);
             prev = block[offset];
 
             // Third lifting stage : Predict 2
             for (int i=offset+stride; i<end; i+=stride2)
             {
                 final int next = block[i+stride];
-                tmp = PREDICT_2 * (prev + next);
-                block[i] += ((tmp + ADJUST) >> SHIFT);
+                final int val = ((PREDICT2 * (prev + next)) + ADJUST_12) >> SHIFT_12;
+                block[i] += val;
                 prev = next;
             }
 
-            tmp = PREDICT_2 * block[end];
-            block[end+stride] += (((tmp + tmp) + ADJUST) >> SHIFT);
+            block[end+stride] += (((PREDICT2 * block[end]) + ADJUST_11) >> SHIFT_11);
             prev = block[offset+stride];
 
             // Fourth lifting stage : Update 2
             for (int i=offset+stride2; i<=end; i+=stride2)
             {
                 final int next = block[i+stride];
-                tmp = (UPDATE_2 * (prev + next));
-                block[i] += ((tmp + ADJUST) >> SHIFT);
+                final int val = ((UPDATE2 * (prev + next)) + ADJUST_12) >> SHIFT_12;
+                block[i] += val;
                 prev = next;
             }
 
-            tmp = UPDATE_2 * block[offset+stride];
-            block[offset] += (((tmp + tmp) + ADJUST) >> SHIFT);
+            block[offset] += (((UPDATE2 * block[offset+stride]) + ADJUST_11) >> SHIFT_11);
 
             // Scale
             for (int i=offset; i<=end; i+=stride2)
             {
-                tmp = block[i] * SCALING_1;
-                block[i] = (int) ((tmp + ADJUST) >> SHIFT);
-                tmp = block[i+stride] * SCALING_2;
-                block[i+stride] = (int) ((tmp + ADJUST) >> SHIFT);
+                block[i] = ((block[i] * SCALING1) + ADJUST_12) >> SHIFT_12;
+                block[i+stride] = ((block[i+stride] * SCALING2) + ADJUST_12) >> SHIFT_12;
             }
 
             // De-interleave sub-bands
@@ -210,30 +217,39 @@ public class DWT_CDF_9_7 implements IntTransform
             for (int i=offset; i<=end; i+=stride)
                 block[i] = this.data[i];
         }
-
-        return block;
     }
 
 
     // Calculate the reverse discrete wavelet transform of the 2D input signal
     // Not thread safe because this.data is modified
     @Override
-    public int[] inverse(int[] block, int blkptr)
+    public boolean inverse(IndexedIntArray src, IndexedIntArray dst)
     {
+        if (src.array.length < this.width*this.height)
+           return false;
+
+        if (dst.array.length < this.width*this.height)
+           return false;
+        
+        if ((src.array != dst.array) || (src.index != dst.index))
+        {
+           System.arraycopy(src.array, src.index, dst.array, dst.index, this.width*this.height);
+        }       
+
         for (int i=this.steps-1; i>=0; i--)
         {
            // First horizontal transform
-           block = inverse(block, blkptr, 1, this.width, this.height>>i, this.width>>i);
+           this.inverse(dst.array, dst.index, 1, this.width, this.height>>i, this.width>>i);
 
            // Then vertical transform on the updated signal
-           block = inverse(block, blkptr, this.width, 1, this.width>>i, this.height>>i);
+           this.inverse(dst.array, dst.index, this.width, 1, this.width>>i, this.height>>i);
         }
 
-        return block;
+        return true;
     }
 
-
-    private int[] inverse(int[] block, int blkptr, int stride, int inc, int dim1, int dim2)
+    
+    private void inverse(int[] block, int blkptr, int stride, int inc, int dim1, int dim2)
     {
         final int stride2 = stride << 1;
         final int endOffs = blkptr + (dim1 * inc);
@@ -243,7 +259,6 @@ public class DWT_CDF_9_7 implements IntTransform
         {
             final int end = offset + (dim2 - 2) * stride;
             final int endj = offset + half;
-            long tmp;
 
             // Interleave sub-bands
             for (int i=offset; i<=end; i+=stride)
@@ -260,10 +275,8 @@ public class DWT_CDF_9_7 implements IntTransform
             // Reverse scale
             for (int i=offset; i<=end; i+=stride2)
             {
-                tmp = block[i] * SCALING_2;
-                block[i] = (int) ((tmp + ADJUST) >> SHIFT);
-                tmp = block[i+stride] * SCALING_1;
-                block[i+stride] = (int) ((tmp + ADJUST) >> SHIFT);
+                block[i] = ((block[i] * SCALING2) + ADJUST_12) >> SHIFT_12;
+                block[i+stride] = ((block[i+stride] * SCALING1) + ADJUST_12) >> SHIFT_12;
             }
 
             // Reverse Update 2
@@ -271,56 +284,49 @@ public class DWT_CDF_9_7 implements IntTransform
 
             for (int i=offset+stride2; i<=end; i+=stride2)
             {
-                int next = block[i+stride];
-                tmp = (UPDATE_2 * (prev + next));
-                block[i] -= ((tmp + ADJUST) >> SHIFT);
+                final int next = block[i+stride];
+                final int val = ((UPDATE2 * (prev + next)) + ADJUST_12) >> SHIFT_12;
+                block[i] -= val;
                 prev = next;
             }
 
-            tmp = UPDATE_2 * block[offset+stride];
-            block[offset] -= (((tmp + tmp) + ADJUST) >> SHIFT);
+            block[offset] -= (((UPDATE2 * block[offset+stride]) + ADJUST_11) >> SHIFT_11);
             prev = block[offset];
 
             // Reverse Predict 2
             for (int i=offset+stride; i<end; i+=stride2)
             {
                 final int next = block[i+stride];
-                tmp = PREDICT_2 * (prev + next);
-                block[i] -= ((tmp + ADJUST) >> SHIFT);
+                final int val = ((PREDICT2 * (prev + next)) + ADJUST_12) >> SHIFT_12;
+                block[i] -= val;
                 prev = next;
             }
 
-            tmp = PREDICT_2 * block[end];
-            block[end+stride] -= (((tmp + tmp) + ADJUST) >> SHIFT);
+            block[end+stride] -= (((PREDICT2 * block[end]) + ADJUST_11) >> SHIFT_11);
             prev = block[offset+stride];
 
             // Reverse Update 1
             for (int i=offset+stride2; i<=end; i+=stride2)
             {
                 final int next = block[i+stride];
-                tmp = UPDATE_1 * (prev + next);
-                block[i] += ((tmp + ADJUST) >> SHIFT);
+                final int val = ((UPDATE1 * (prev + next)) + ADJUST_12) >> SHIFT_12;
+                block[i] += val;
                 prev = next;
             }
 
-            tmp = UPDATE_1 * block[offset+stride];
-            block[offset] += (((tmp + tmp) + ADJUST) >> SHIFT);
+            block[offset] += (((UPDATE1 * block[offset+stride]) + ADJUST_11) >> SHIFT_11);
             prev = block[offset];
 
             // Reverse Predict 1
             for (int i=offset+stride; i<end; i+=stride2)
             {
                 final int next = block[i+stride];
-                tmp = PREDICT_1 * (prev + next);
-                block[i] += ((tmp + ADJUST) >> SHIFT);
+                final int val = ((PREDICT1 * (prev + next)) + ADJUST_12) >> SHIFT_12;
+                block[i] += val;
                 prev = next;
             }
 
-            tmp = PREDICT_1 * block[end];
-            block[end+stride] += (((tmp + tmp) + ADJUST) >> SHIFT);
+            block[end+stride] += (((PREDICT1 * block[end]) + ADJUST_11) >> SHIFT_11);
         }
-
-        return block;
     }
-
 }

@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.transform;
 
+import kanzi.IndexedIntArray;
 import kanzi.IntTransform;
 
 
@@ -53,46 +54,48 @@ public final class DCT8 implements IntTransform
 
     private final int fShift;
     private final int iShift;
-    private final int[] data;
+    private final IndexedIntArray data;
  
 
     public DCT8()
     {
        this.fShift = 10;
        this.iShift = 20;
-       this.data = new int[64];
+       this.data = new IndexedIntArray(new int[64], 0);
     }
     
-
-    public int[] forward(int[] block)
-    {
-       return this.forward(block, 0);
-    }
-
 
     @Override
-    public int[] forward(int[] block, int blkptr)
+    public boolean forward(IndexedIntArray src, IndexedIntArray dst)
     {
-       this.computeForward(block, blkptr, this.data, 0, 5);
-       this.computeForward(this.data, 0, block, blkptr, this.fShift-5);
-       return block;
+       this.data.index = 0;
+       computeForward(src, this.data, 5);
+       computeForward(this.data, dst, this.fShift-5);
+       src.index += 64;
+       dst.index += 64;
+       return true;
     }
     
     
-    private int[] computeForward(int[] input, int iIdx, int[] output, int oIdx, int shift)
+    private static void computeForward(IndexedIntArray src, IndexedIntArray dst, int shift)
     {
-       final int round = (shift == 0) ? 0 : 1 << (shift - 1);
+       final int[] input = src.array;
+       final int[] output = dst.array;
+       final int srcIdx = src.index;
+       final int dstIdx = dst.index;        
+       final int round = (1 << shift) >> 1;
        
        for (int i=0; i<8; i++)
        {
-          final int x0  = input[iIdx];
-          final int x1  = input[iIdx+1];
-          final int x2  = input[iIdx+2];
-          final int x3  = input[iIdx+3];
-          final int x4  = input[iIdx+4];
-          final int x5  = input[iIdx+5];
-          final int x6  = input[iIdx+6];
-          final int x7  = input[iIdx+7];
+          final int si = srcIdx + (i << 3);
+          final int x0  = input[si];
+          final int x1  = input[si+1];
+          final int x2  = input[si+2];
+          final int x3  = input[si+3];
+          final int x4  = input[si+4];
+          final int x5  = input[si+5];
+          final int x6  = input[si+6];
+          final int x7  = input[si+7];
        
           final int a0 = x0 + x7;
           final int a1 = x1 + x6;
@@ -108,54 +111,51 @@ public final class DCT8 implements IntTransform
           final int b2 = a0 - a5;
           final int b3 = a1 - a4;
           
-          final int j = oIdx + i;
-
-          output[j]    = ((W0* b0) + (W1 *b1) + round) >> shift;
-          output[j+8]  = ((W8* a2) + (W9 *a3) + (W10*a6) + (W11*a7) + round) >> shift;
-          output[j+16] = ((W16*b2) + (W17*b3) + round) >> shift;
-          output[j+24] = ((W24*a2) + (W25*a3) + (W26*a6) + (W27*a7) + round) >> shift;
-          output[j+32] = ((W32*b0) + (W33*b1) + round) >> shift;
-          output[j+40] = ((W40*a2) + (W41*a3) + (W42*a6) + (W43*a7) + round) >> shift;
-          output[j+48] = ((W48*b2) + (W49*b3) + round) >> shift;
-          output[j+56] = ((W56*a2) + (W57*a3) + (W58*a6) + (W59*a7) + round) >> shift;
-        
-          iIdx += 8;
+          final int di = dstIdx + i;
+          output[di]    = ((W0* b0) + (W1 *b1) + round) >> shift;
+          output[di+8]  = ((W8* a2) + (W9 *a3) + (W10*a6) + (W11*a7) + round) >> shift;
+          output[di+16] = ((W16*b2) + (W17*b3) + round) >> shift;
+          output[di+24] = ((W24*a2) + (W25*a3) + (W26*a6) + (W27*a7) + round) >> shift;
+          output[di+32] = ((W32*b0) + (W33*b1) + round) >> shift;
+          output[di+40] = ((W40*a2) + (W41*a3) + (W42*a6) + (W43*a7) + round) >> shift;
+          output[di+48] = ((W48*b2) + (W49*b3) + round) >> shift;
+          output[di+56] = ((W56*a2) + (W57*a3) + (W58*a6) + (W59*a7) + round) >> shift;
+          
        }
-    
-       return output;
-    }
-
-
-    public int[] inverse(int[] block)
-    {
-       return this.inverse(block, 0);
     }
 
 
     @Override
-    public int[] inverse(int[] block, int blkptr)
+    public boolean inverse(IndexedIntArray src, IndexedIntArray dst)
     {
-       this.computeInverse(block, blkptr, this.data, 0, 10);
-       this.computeInverse(this.data, 0, block, blkptr, this.iShift-10);
-       return block;
+       this.data.index = 0;
+       computeInverse(src, this.data, 10);
+       computeInverse(this.data, dst, this.iShift-10);
+       src.index += 64;
+       dst.index += 64;
+       return true;
     }
     
     
-    private int[] computeInverse(int[] input, int iIdx, int[] output, int oIdx, int shift)
+    private static void computeInverse(IndexedIntArray src, IndexedIntArray dst, int shift)
     {
-       final int round = (shift == 0) ? 0 : 1 << (shift - 1);
+       final int[] input = src.array;
+       final int[] output = dst.array;
+       final int srcIdx = src.index;
+       final int dstIdx = dst.index;        
+       final int round = (1 << shift) >> 1;
        
        for (int i=0; i<8; i++)
        {
-          final int j = iIdx + i;
-          final int x0 = input[j];
-          final int x1 = input[j+8];
-          final int x2 = input[j+16];
-          final int x3 = input[j+24];
-          final int x4 = input[j+32];
-          final int x5 = input[j+40];
-          final int x6 = input[j+48];
-          final int x7 = input[j+56];
+          final int si = srcIdx + i;
+          final int x0 = input[si];
+          final int x1 = input[si+8];
+          final int x2 = input[si+16];
+          final int x3 = input[si+24];
+          final int x4 = input[si+32];
+          final int x5 = input[si+40];
+          final int x6 = input[si+48];
+          final int x7 = input[si+56];
           
           final int a0 = (W8 *x1) + (W24*x3) + (W40*x5) + (W56*x7);
           final int a1 = (W9 *x1) + (W25*x3) + (W41*x5) + (W57*x7);
@@ -180,19 +180,16 @@ public final class DCT8 implements IntTransform
           final int c6 = (b1 - a1 + round) >> shift;
           final int c7 = (b0 - a0 + round) >> shift;
           
-          output[oIdx]   = (c0 >= MAX_VAL) ? MAX_VAL : ((c0 <= MIN_VAL) ? MIN_VAL : c0);
-          output[oIdx+1] = (c1 >= MAX_VAL) ? MAX_VAL : ((c1 <= MIN_VAL) ? MIN_VAL : c1);
-          output[oIdx+2] = (c2 >= MAX_VAL) ? MAX_VAL : ((c2 <= MIN_VAL) ? MIN_VAL : c2);
-          output[oIdx+3] = (c3 >= MAX_VAL) ? MAX_VAL : ((c3 <= MIN_VAL) ? MIN_VAL : c3);
-          output[oIdx+4] = (c4 >= MAX_VAL) ? MAX_VAL : ((c4 <= MIN_VAL) ? MIN_VAL : c4);
-          output[oIdx+5] = (c5 >= MAX_VAL) ? MAX_VAL : ((c5 <= MIN_VAL) ? MIN_VAL : c5);
-          output[oIdx+6] = (c6 >= MAX_VAL) ? MAX_VAL : ((c6 <= MIN_VAL) ? MIN_VAL : c6);
-          output[oIdx+7] = (c7 >= MAX_VAL) ? MAX_VAL : ((c7 <= MIN_VAL) ? MIN_VAL : c7);
-
-          oIdx += 8;
+          final int di = dstIdx + (i << 3);
+          output[di]   = (c0 >= MAX_VAL) ? MAX_VAL : ((c0 <= MIN_VAL) ? MIN_VAL : c0);
+          output[di+1] = (c1 >= MAX_VAL) ? MAX_VAL : ((c1 <= MIN_VAL) ? MIN_VAL : c1);
+          output[di+2] = (c2 >= MAX_VAL) ? MAX_VAL : ((c2 <= MIN_VAL) ? MIN_VAL : c2);
+          output[di+3] = (c3 >= MAX_VAL) ? MAX_VAL : ((c3 <= MIN_VAL) ? MIN_VAL : c3);
+          output[di+4] = (c4 >= MAX_VAL) ? MAX_VAL : ((c4 <= MIN_VAL) ? MIN_VAL : c4);
+          output[di+5] = (c5 >= MAX_VAL) ? MAX_VAL : ((c5 <= MIN_VAL) ? MIN_VAL : c5);
+          output[di+6] = (c6 >= MAX_VAL) ? MAX_VAL : ((c6 <= MIN_VAL) ? MIN_VAL : c6);
+          output[di+7] = (c7 >= MAX_VAL) ? MAX_VAL : ((c7 <= MIN_VAL) ? MIN_VAL : c7);
        }
-       
-       return output;
     }
 
 }

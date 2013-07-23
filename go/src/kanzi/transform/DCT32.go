@@ -105,21 +105,17 @@ func NewDCT32() (*DCT32, error) {
 	return this, nil
 }
 
-func (this *DCT32) Forward(block []int) []int {
-	this.computeForward(block, this.data, 7)
-	this.computeForward(this.data, block, this.fShift-7)
-	return block
+func (this *DCT32) Forward(src, dst []int) (uint, uint, error) {
+	computeForward32(src, this.data, 7)
+	computeForward32(this.data, dst, this.fShift-7)
+	return 1024, 1024, nil
 }
 
-func (this *DCT32) computeForward(input []int, output []int, shift uint) []int {
+func computeForward32(input, output []int, shift uint) {
 	iIdx := 0
-	round := 0
+	round := (1 << shift) >> 1
 
-	if shift != 0 {
-		round = 1 << (shift - 1)
-	}
-
-	for i := uint(0); i < 32; i++ {
+	for i := 0; i < 32; i++ {
 		x0 := input[iIdx]
 		x1 := input[iIdx+1]
 		x2 := input[iIdx+2]
@@ -186,7 +182,7 @@ func (this *DCT32) computeForward(input []int, output []int, shift uint) []int {
 		a30 := x14 - x17
 		a31 := x15 - x16
 
-		for n := uint(32); n < 1024; n += 64 {
+		for n := 32; n < 1024; n += 64 {
 			output[i+n] = ((w[n] * a2) + (w[n+1] * a3) + (w[n+2] * a6) + (w[n+3] * a7) +
 				(w[n+4] * a10) + (w[n+5] * a11) + (w[n+6] * a14) + (w[n+7] * a15) +
 				(w[n+8] * a18) + (w[n+9] * a19) + (w[n+10] * a22) + (w[n+11] * a23) +
@@ -254,24 +250,19 @@ func (this *DCT32) computeForward(input []int, output []int, shift uint) []int {
 		iIdx += 32
 	}
 
-	return output
 }
 
-func (this *DCT32) Inverse(block []int) []int {
-	this.ComputeInverse(block, this.data, 10)
-	this.ComputeInverse(this.data, block, this.iShift-10)
-	return block
+func (this *DCT32) Inverse(src, dst []int) (uint, uint, error) {
+	computeInverse32(src, this.data, 10)
+	computeInverse32(this.data, dst, this.iShift-10)
+	return 1024, 1024, nil
 }
 
-func (this *DCT32) ComputeInverse(input []int, output []int, shift uint) []int {
+func computeInverse32(input, output []int, shift uint) {
 	oIdx := 0
-	round := 0
+	round := (1 << shift) >> 1
 
-	if shift != 0 {
-		round = 1 << (shift - 1)
-	}
-
-	for i := uint(0); i < 32; i++ {
+	for i := 0; i < 32; i++ {
 		x0 := input[i]
 		x1 := input[i+32]
 		x2 := input[i+64]
@@ -494,6 +485,4 @@ func (this *DCT32) ComputeInverse(input []int, output []int, shift uint) []int {
 
 		oIdx += 32
 	}
-
-	return output
 }

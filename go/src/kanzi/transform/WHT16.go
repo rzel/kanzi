@@ -38,35 +38,35 @@ func NewWHT16(scale bool) (*WHT16, error) {
 	return this, nil
 }
 
-// For perfect reconstruction, forward results are scaled by 16 unless 
+// For perfect reconstruction, forward results are scaled by 16 unless
 // parameter is set to false (in which case rounding may introduce errors)
-func (this *WHT16) Forward(block []int) []int {
-	return this.compute(block, this.fScale)
+func (this *WHT16) Forward(src, dst []int) (uint, uint, error) {
+	return this.compute(src, dst, this.fScale)
 }
 
-func (this *WHT16) compute(block []int, shift uint) []int {
+func (this *WHT16) compute(input, output []int, shift uint) (uint, uint, error) {
 	dataptr := 0
 	buffer := this.data // alias
 
 	// Pass 1: process rows.
 	for i := 0; i < 256; i += 16 {
 		// Aliasing for speed
-		x0 := block[i]
-		x1 := block[i+1]
-		x2 := block[i+2]
-		x3 := block[i+3]
-		x4 := block[i+4]
-		x5 := block[i+5]
-		x6 := block[i+6]
-		x7 := block[i+7]
-		x8 := block[i+8]
-		x9 := block[i+9]
-		x10 := block[i+10]
-		x11 := block[i+11]
-		x12 := block[i+12]
-		x13 := block[i+13]
-		x14 := block[i+14]
-		x15 := block[i+15]
+		x0 := input[i]
+		x1 := input[i+1]
+		x2 := input[i+2]
+		x3 := input[i+3]
+		x4 := input[i+4]
+		x5 := input[i+5]
+		x6 := input[i+6]
+		x7 := input[i+7]
+		x8 := input[i+8]
+		x9 := input[i+9]
+		x10 := input[i+10]
+		x11 := input[i+11]
+		x12 := input[i+12]
+		x13 := input[i+13]
+		x14 := input[i+14]
+		x15 := input[i+15]
 
 		a0 := x0 + x1
 		a1 := x2 + x3
@@ -213,30 +213,30 @@ func (this *WHT16) compute(block []int, shift uint) []int {
 		a14 = b12 - b13
 		a15 = b14 - b15
 
-		block[i] = (a0 + a1 + adjust) >> shift
-		block[i+16] = (a2 + a3 + adjust) >> shift
-		block[i+32] = (a4 + a5 + adjust) >> shift
-		block[i+48] = (a6 + a7 + adjust) >> shift
-		block[i+64] = (a8 + a9 + adjust) >> shift
-		block[i+80] = (a10 + a11 + adjust) >> shift
-		block[i+96] = (a12 + a13 + adjust) >> shift
-		block[i+112] = (a14 + a15 + adjust) >> shift
-		block[i+128] = (a0 - a1 + adjust) >> shift
-		block[i+144] = (a2 - a3 + adjust) >> shift
-		block[i+160] = (a4 - a5 + adjust) >> shift
-		block[i+176] = (a6 - a7 + adjust) >> shift
-		block[i+192] = (a8 - a9 + adjust) >> shift
-		block[i+208] = (a10 - a11 + adjust) >> shift
-		block[i+224] = (a12 - a13 + adjust) >> shift
-		block[i+240] = (a14 - a15 + adjust) >> shift
+		output[i] = (a0 + a1 + adjust) >> shift
+		output[i+16] = (a2 + a3 + adjust) >> shift
+		output[i+32] = (a4 + a5 + adjust) >> shift
+		output[i+48] = (a6 + a7 + adjust) >> shift
+		output[i+64] = (a8 + a9 + adjust) >> shift
+		output[i+80] = (a10 + a11 + adjust) >> shift
+		output[i+96] = (a12 + a13 + adjust) >> shift
+		output[i+112] = (a14 + a15 + adjust) >> shift
+		output[i+128] = (a0 - a1 + adjust) >> shift
+		output[i+144] = (a2 - a3 + adjust) >> shift
+		output[i+160] = (a4 - a5 + adjust) >> shift
+		output[i+176] = (a6 - a7 + adjust) >> shift
+		output[i+192] = (a8 - a9 + adjust) >> shift
+		output[i+208] = (a10 - a11 + adjust) >> shift
+		output[i+224] = (a12 - a13 + adjust) >> shift
+		output[i+240] = (a14 - a15 + adjust) >> shift
 
 		dataptr++
 	}
 
-	return block
+	return 256, 256, nil
 }
 
 // The transform is symmetric (except, potentially, for scaling)
-func (this *WHT16) Inverse(block []int) []int {
-	return this.compute(block, this.iScale)
+func (this *WHT16) Inverse(src, dst []int) (uint, uint, error) {
+	return this.compute(src, dst, this.iScale)
 }

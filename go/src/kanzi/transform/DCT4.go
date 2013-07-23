@@ -47,18 +47,14 @@ func NewDCT4() (*DCT4, error) {
 	return this, nil
 }
 
-func (this *DCT4) Forward(block []int) []int {
-	this.computeForward(block, this.data, 4)
-	this.computeForward(this.data, block, this.fShift-4)
-	return block
+func (this *DCT4) Forward(src, dst []int) (uint, uint, error) {
+	computeForward4(src, this.data, 4)
+	computeForward4(this.data, dst, this.fShift-4)
+	return 16, 16, nil
 }
 
-func (this *DCT4) computeForward(input []int, output []int, shift uint) []int {
-	round := 0
-
-	if shift != 0 {
-		round = 1 << (shift - 1)
-	}
+func computeForward4(input []int, output []int, shift uint) {
+	round := (1 << shift) >> 1
 
 	x0 := input[0]
 	x1 := input[1]
@@ -110,22 +106,16 @@ func (this *DCT4) computeForward(input []int, output []int, shift uint) []int {
 	output[13] = ((W4_12 * a6) + (W4_13 * a7) + round) >> shift
 	output[14] = ((W4_12 * a10) + (W4_13 * a11) + round) >> shift
 	output[15] = ((W4_12 * a14) + (W4_13 * a15) + round) >> shift
-
-	return output
 }
 
-func (this *DCT4) Inverse(block []int) []int {
-	this.computeInverse(block, this.data, 10)
-	this.computeInverse(this.data, block, this.iShift-10)
-	return block
+func (this *DCT4) Inverse(src, dst []int) (uint, uint, error) {
+	computeInverse4(src, this.data, 10)
+	computeInverse4(this.data, dst, this.iShift-10)
+	return 16, 16, nil
 }
 
-func (this *DCT4) computeInverse(input []int, output []int, shift uint) []int {
-	round := 0
-
-	if shift != 0 {
-		round = 1 << (shift - 1)
-	}
+func computeInverse4(input, output []int, shift uint) {
+	round := (1 << shift) >> 1
 
 	x0 := input[0]
 	x1 := input[1]
@@ -194,6 +184,4 @@ func (this *DCT4) computeInverse(input []int, output []int, shift uint) []int {
 	output[13] = kanzi.Clamp(b13, MIN_VAL4, MAX_VAL4)
 	output[14] = kanzi.Clamp(b14, MIN_VAL4, MAX_VAL4)
 	output[15] = kanzi.Clamp(b15, MIN_VAL4, MAX_VAL4)
-
-	return output
 }

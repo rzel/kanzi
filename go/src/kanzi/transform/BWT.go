@@ -56,7 +56,7 @@ package transform
 //         ppi\0  8  -> 6
 //          pi\0  9  -> 5
 //           i\0  10 -> 0
-// Suffix array        10 7 4 1 0 9 8 6 3 5 2 => ipss\0mpissii (+ primary index 4)                 
+// Suffix array        10 7 4 1 0 9 8 6 3 5 2 => ipss\0mpissii (+ primary index 4)
 // The suffix array and permutation vector are equal when the input is 0 terminated
 // In this example, for a non \0 terminated string the output is pssmipissii.
 // The insertion of a guard is done internally and is entirely transparent.
@@ -99,67 +99,76 @@ func (this *BWT) SetSize(sz uint) {
 	this.size = sz
 }
 
-func (this *BWT) Forward(input []byte) []byte {
-	length := int(this.size)
+func (this *BWT) Forward(src, dst []byte) (uint, uint, error) {
+	count := int(this.size)
 
 	if this.size == 0 {
-		length = len(input)
+		count = len(src)
 	}
 
-	if length < 2 {
-		return input
+	if count < 2 {
+		if count == 1 {
+			dst[0] = src[0]
+		}
+
+		return uint(count), uint(count), nil
 	}
 
-	// Dynamic memory allocation
-	if len(this.data) < length {
-		this.data = make([]int, length)
+	// Lazy dynamic memory allocation
+	if len(this.data) < count {
+		this.data = make([]int, count)
 	}
 
-	if len(this.buffer1) < length {
-		this.buffer1 = make([]int, length)
+	// Lazy dynamic memory allocation
+	if len(this.buffer1) < count {
+		this.buffer1 = make([]int, count)
 	}
 
 	data_ := this.data
 
-	for i := 0; i < length; i++ {
-		data_[i] = int(input[i])
+	for i := 0; i < count; i++ {
+		data_[i] = int(src[i])
 	}
 
 	// Suffix array
 	sa := this.buffer1
-	pIdx := computeSuffixArray(this.data, sa, 0, length, 256, true)
-	input[0] = byte(this.data[length-1])
+	pIdx := computeSuffixArray(this.data, sa, 0, count, 256, true)
+	dst[0] = byte(this.data[count-1])
 
 	for i := uint(0); i < pIdx; i++ {
-		input[i+1] = byte(sa[i])
+		dst[i+1] = byte(sa[i])
 	}
 
-	for i := int(pIdx+1); i < length; i++ {
-		input[i] = byte(sa[i])
+	for i := int(pIdx + 1); i < count; i++ {
+		dst[i] = byte(sa[i])
 	}
 
 	this.SetPrimaryIndex(pIdx)
-	return input
+	return uint(count), uint(count), nil
 }
 
-func (this *BWT) Inverse(input []byte) []byte {
-	length := int(this.size)
+func (this *BWT) Inverse(src, dst []byte) (uint, uint, error) {
+	count := int(this.size)
 
 	if this.size == 0 {
-		length = len(input)
+		count = len(src)
 	}
 
-	if length < 2 {
-		return input
+	if count < 2 {
+		if count == 1 {
+			dst[0] = src[0]
+		}
+
+		return uint(count), uint(count), nil
 	}
 
 	// Aliasing
 	buckets_ := this.buckets
 	data_ := this.data
 
-	// Dynamic memory allocation
-	if len(this.data) < length {
-		data_ = make([]int, length)
+	// Lazy dynamic memory allocation
+	if len(this.data) < count {
+		data_ = make([]int, count)
 	}
 
 	// Create histogram
@@ -170,18 +179,18 @@ func (this *BWT) Inverse(input []byte) []byte {
 	// Build array of packed index + value (assumes block size < 2^24)
 	// Start with the primary index position
 	pIdx := int(this.PrimaryIndex())
-	val := int(input[0])
+	val := int(src[0])
 	data_[pIdx] = (buckets_[val] << 8) | val
 	buckets_[val]++
 
 	for i := 0; i < pIdx; i++ {
-		val = int(input[i+1])
+		val = int(src[i+1])
 		data_[i] = (buckets_[val] << 8) | val
 		buckets_[val]++
 	}
 
-	for i := pIdx + 1; i < length; i++ {
-		val = int(input[i])
+	for i := pIdx + 1; i < count; i++ {
+		val = int(src[i])
 		data_[i] = (buckets_[val] << 8) | val
 		buckets_[val]++
 	}
@@ -198,13 +207,13 @@ func (this *BWT) Inverse(input []byte) []byte {
 	idx := pIdx
 
 	// Build inverse
-	for i := length - 1; i >= 0; i-- {
+	for i := count - 1; i >= 0; i-- {
 		ptr := data_[idx]
-		input[i] = byte(ptr)
+		dst[i] = byte(ptr)
 		idx = (ptr >> 8) + buckets_[ptr&0xFF]
 	}
 
-	return input
+	return uint(count), uint(count), nil
 }
 
 func getCounts(src []int, dst []int, n, k int) {

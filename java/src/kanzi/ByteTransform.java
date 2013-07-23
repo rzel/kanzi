@@ -20,12 +20,19 @@ package kanzi;
 // turns it into another array of bytes of the same size.
 public interface ByteTransform
 {
-    // Applies the transform on the provided array starting at the provided
-    // index. Return the modified array of bytes.
-    public byte[] forward(byte[] block, int idx);
-    
-    // Applies the inverse transform on the provided array starting at the 
-    // provided index. Return the modified array of bytes.
-    public byte[] inverse(byte[] block, int idx);
+   // Indexed arrays are required rather than just arrays and indexes
+   // Since the number of bytes in input and output of the transform may differ
+   // the arrays may not be big enough and the number of processed bytes may
+   // vary. The indexes in the indexed array instance can be updated to reflect
+   // this fact.
+   public boolean forward(IndexedByteArray src, IndexedByteArray dst);
+
+
+   // Indexed arrays are required rather than just arrays and indexes
+   // Since the number of bytes in input and output of the transform may differ
+   // the arrays may not be big enough and the number of processed bytes may
+   // vary. The indexes in the indexed array instance can be updated to reflect
+   // this fact.
+   public boolean inverse(IndexedByteArray src, IndexedByteArray dst);
 }
 

@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.transform;
 
+import kanzi.IndexedIntArray;
 import kanzi.IntTransform;
 
 
@@ -47,72 +48,67 @@ public final class WHT32 implements IntTransform
     }
 
 
-    public int[] forward(int[] block)
-    {
-        return this.compute(block, 0, this.fScale);
-    }
-
-
     // Not thread safe
     @Override
-    public int[] forward(int[] block, int blkptr)
+    public boolean forward(IndexedIntArray src, IndexedIntArray dst)
     {
-        return this.compute(block, blkptr, this.fScale);
+        return this.compute(src, dst, this.fScale);
     }
 
 
     // Not thread safe
     // Result multiplied by sqrt(2) or 16*sqrt(2) if 'scale' is set to false
-    private int[] compute(int[] block, int blkptr, int shift)
+    private boolean compute(IndexedIntArray src, IndexedIntArray dst, int shift)
     {
-       this.processRows(block, blkptr);
-       this.processColumns(block, blkptr, shift);
-       return block;
+       processRows(src.array, src.index, this.data);
+       processColumns(this.data, dst.array, dst.index, shift);
+       src.index += 1024;
+       dst.index += 1024;
+       return true;
     }
 
 
-    private void processRows(int[] block, int blkptr)
+    private static void processRows(int[] input, int srcIdx, int[] buffer)
     {
         int dataptr = 0;
-        final int end = blkptr + 1024;
-        final int[] buffer = this.data;
 
         // Pass 1: process rows.
-        for (int i=blkptr; i<end; i+=32)
+        for (int i=0; i<1024; i+=32)
         {
             // Aliasing for speed
-            final int x0  = block[i];
-            final int x1  = block[i+1];
-            final int x2  = block[i+2];
-            final int x3  = block[i+3];
-            final int x4  = block[i+4];
-            final int x5  = block[i+5];
-            final int x6  = block[i+6];
-            final int x7  = block[i+7];
-            final int x8  = block[i+8];
-            final int x9  = block[i+9];
-            final int x10 = block[i+10];
-            final int x11 = block[i+11];
-            final int x12 = block[i+12];
-            final int x13 = block[i+13];
-            final int x14 = block[i+14];
-            final int x15 = block[i+15];
-            final int x16 = block[i+16];
-            final int x17 = block[i+17];
-            final int x18 = block[i+18];
-            final int x19 = block[i+19];
-            final int x20 = block[i+20];
-            final int x21 = block[i+21];
-            final int x22 = block[i+22];
-            final int x23 = block[i+23];
-            final int x24 = block[i+24];
-            final int x25 = block[i+25];
-            final int x26 = block[i+26];
-            final int x27 = block[i+27];
-            final int x28 = block[i+28];
-            final int x29 = block[i+29];
-            final int x30 = block[i+30];
-            final int x31 = block[i+31];
+            final int si = srcIdx + i;
+            final int x0  = input[si];
+            final int x1  = input[si+1];
+            final int x2  = input[si+2];
+            final int x3  = input[si+3];
+            final int x4  = input[si+4];
+            final int x5  = input[si+5];
+            final int x6  = input[si+6];
+            final int x7  = input[si+7];
+            final int x8  = input[si+8];
+            final int x9  = input[si+9];
+            final int x10 = input[si+10];
+            final int x11 = input[si+11];
+            final int x12 = input[si+12];
+            final int x13 = input[si+13];
+            final int x14 = input[si+14];
+            final int x15 = input[si+15];
+            final int x16 = input[si+16];
+            final int x17 = input[si+17];
+            final int x18 = input[si+18];
+            final int x19 = input[si+19];
+            final int x20 = input[si+20];
+            final int x21 = input[si+21];
+            final int x22 = input[si+22];
+            final int x23 = input[si+23];
+            final int x24 = input[si+24];
+            final int x25 = input[si+25];
+            final int x26 = input[si+26];
+            final int x27 = input[si+27];
+            final int x28 = input[si+28];
+            final int x29 = input[si+29];
+            final int x30 = input[si+30];
+            final int x31 = input[si+31];
 
             int a0  = x0  + x1;
             int a1  = x2  + x3;
@@ -284,15 +280,13 @@ public final class WHT32 implements IntTransform
      }
 
 
-     private void processColumns(int[] block, int blkptr, int shift)
-     {
+     private static void processColumns(int[] buffer, int[] output, int dstIdx, int shift)
+     {    
         int dataptr = 0;
-        final int end = blkptr + 32;
-        final int[] buffer = this.data;
         final int adjust = (1 << shift) >> 1;
 
         // Pass 2: process columns.
-        for (int i=blkptr; i<end; i++)
+        for (int i=0; i<32; i++)
         {
             // Aliasing for speed
             final int x0  = buffer[dataptr];
@@ -460,55 +454,49 @@ public final class WHT32 implements IntTransform
             b30 = a28 - a29;
             b31 = a30 - a31;
 
-            block[i]      = (b0  + b1  + adjust) >> shift;
-            block[i+32]   = (b2  + b3  + adjust) >> shift;
-            block[i+64]   = (b4  + b5  + adjust) >> shift;
-            block[i+96]   = (b6  + b7  + adjust) >> shift;
-            block[i+128]  = (b8  + b9  + adjust) >> shift;
-            block[i+160]  = (b10 + b11 + adjust) >> shift;
-            block[i+192]  = (b12 + b13 + adjust) >> shift;
-            block[i+224]  = (b14 + b15 + adjust) >> shift;
-            block[i+256]  = (b16 + b17 + adjust) >> shift;
-            block[i+288]  = (b18 + b19 + adjust) >> shift;
-            block[i+320]  = (b20 + b21 + adjust) >> shift;
-            block[i+352]  = (b22 + b23 + adjust) >> shift;
-            block[i+384]  = (b24 + b25 + adjust) >> shift;
-            block[i+416]  = (b26 + b27 + adjust) >> shift;
-            block[i+448]  = (b28 + b29 + adjust) >> shift;
-            block[i+480]  = (b30 + b31 + adjust) >> shift;
-            block[i+512]  = (b0  - b1  + adjust) >> shift;
-            block[i+544]  = (b2  - b3  + adjust) >> shift;
-            block[i+576]  = (b4  - b5  + adjust) >> shift;
-            block[i+608]  = (b6  - b7  + adjust) >> shift;
-            block[i+640]  = (b8  - b9  + adjust) >> shift;
-            block[i+672]  = (b10 - b11 + adjust) >> shift;
-            block[i+704]  = (b12 - b13 + adjust) >> shift;
-            block[i+736]  = (b14 - b15 + adjust) >> shift;
-            block[i+768]  = (b16 - b17 + adjust) >> shift;
-            block[i+800]  = (b18 - b19 + adjust) >> shift;
-            block[i+832]  = (b20 - b21 + adjust) >> shift;
-            block[i+864]  = (b22 - b23 + adjust) >> shift;
-            block[i+896]  = (b24 - b25 + adjust) >> shift;
-            block[i+928]  = (b26 - b27 + adjust) >> shift;
-            block[i+960]  = (b28 - b29 + adjust) >> shift;
-            block[i+992]  = (b30 - b31 + adjust) >> shift;
+            final int di = dstIdx + i;
+            output[di]      = (b0  + b1  + adjust) >> shift;
+            output[di+32]   = (b2  + b3  + adjust) >> shift;
+            output[di+64]   = (b4  + b5  + adjust) >> shift;
+            output[di+96]   = (b6  + b7  + adjust) >> shift;
+            output[di+128]  = (b8  + b9  + adjust) >> shift;
+            output[di+160]  = (b10 + b11 + adjust) >> shift;
+            output[di+192]  = (b12 + b13 + adjust) >> shift;
+            output[di+224]  = (b14 + b15 + adjust) >> shift;
+            output[di+256]  = (b16 + b17 + adjust) >> shift;
+            output[di+288]  = (b18 + b19 + adjust) >> shift;
+            output[di+320]  = (b20 + b21 + adjust) >> shift;
+            output[di+352]  = (b22 + b23 + adjust) >> shift;
+            output[di+384]  = (b24 + b25 + adjust) >> shift;
+            output[di+416]  = (b26 + b27 + adjust) >> shift;
+            output[di+448]  = (b28 + b29 + adjust) >> shift;
+            output[di+480]  = (b30 + b31 + adjust) >> shift;
+            output[di+512]  = (b0  - b1  + adjust) >> shift;
+            output[di+544]  = (b2  - b3  + adjust) >> shift;
+            output[di+576]  = (b4  - b5  + adjust) >> shift;
+            output[di+608]  = (b6  - b7  + adjust) >> shift;
+            output[di+640]  = (b8  - b9  + adjust) >> shift;
+            output[di+672]  = (b10 - b11 + adjust) >> shift;
+            output[di+704]  = (b12 - b13 + adjust) >> shift;
+            output[di+736]  = (b14 - b15 + adjust) >> shift;
+            output[di+768]  = (b16 - b17 + adjust) >> shift;
+            output[di+800]  = (b18 - b19 + adjust) >> shift;
+            output[di+832]  = (b20 - b21 + adjust) >> shift;
+            output[di+864]  = (b22 - b23 + adjust) >> shift;
+            output[di+896]  = (b24 - b25 + adjust) >> shift;
+            output[di+928]  = (b26 - b27 + adjust) >> shift;
+            output[di+960]  = (b28 - b29 + adjust) >> shift;
+            output[di+992]  = (b30 - b31 + adjust) >> shift;
 
             dataptr++;
         }
     }
 
 
-    // The transform is symmetric (except, potentially, for scaling)
-    public int[] inverse(int[] block)
-    {
-        return this.compute(block, 0, this.iScale);
-    }
-
-
     @Override
-    public int[] inverse(int[] block, int blkptr)
+    public boolean inverse(IndexedIntArray src, IndexedIntArray dst)
     {
-        return this.compute(block, blkptr, this.iScale);
+        return compute(src, dst, this.iScale);
     }
 
 }

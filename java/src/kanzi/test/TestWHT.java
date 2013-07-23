@@ -16,6 +16,7 @@ limitations under the License.
 package kanzi.test;
 
 import java.util.Random;
+import kanzi.IndexedIntArray;
 import kanzi.IntTransform;
 import kanzi.transform.WHT16;
 import kanzi.transform.WHT32;
@@ -107,9 +108,13 @@ public class TestWHT
                   final int dim = 4 << dimIdx;
                   System.out.println("\nWHT"+dim+" correctness");
                   final int blockSize = dim * dim;
-                  int[] data1 = new int[blockSize];
-                  int[] data2 = new int[blockSize];
-                  WHT4 wht = new WHT4();
+                  int[] data1 = new int[blockSize+20]; // source
+                  int[] data2 = new int[blockSize+20]; // destination
+                  int[] data3 = new int[blockSize+20]; // source copy
+                  int[] data;
+                  IndexedIntArray iia1 = new IndexedIntArray(data1, 0);
+                  IndexedIntArray iia2 = new IndexedIntArray(data2, 0);
+
                   Random rnd = new Random();
 
                   for (int nn=0; nn<20; nn++)
@@ -123,29 +128,56 @@ public class TestWHT
                         else
                           data1[i] = rnd.nextInt(nn*10);
 
-                        data2[i] = data1[i];
+                        data3[i] = data1[i];
                         System.out.print(data1[i]);
-                        System.out.print("  ");
+                        System.out.print(" ");
                      }
 
-                     wht.forward(data1, 0);
+                     int start = (nn & 1) * nn;
+
+                     if (nn <= 10) 
+                        data = data1;
+                     else 
+                        data = data2;
+                     
+                     iia1.array = data1;
+                     iia1.index = 0;
+                     iia2.array = data;
+                     iia2.index = start;
+                     whts[dimIdx].forward(iia1, iia2);
                      System.out.println();
                      System.out.println("Output");
 
                      for (int i=0; i<blockSize; i++)
                      {
-                        System.out.print(data1[i]);
+                        System.out.print(data[i]);
                         System.out.print(" ");
                      }
 
-                     wht.inverse(data1, 0);
+                     iia1.array = data2;
+                     iia1.index = 0;
+                     iia2.index = start;
+                     whts[dimIdx].inverse(iia2, iia1);
                      System.out.println();
                      System.out.println("Result");
+                     int badIdx = -1;
 
                      for (int i=0; i<blockSize; i++)
                      {
-                        System.out.print(data1[i]);
-                        System.out.print((data1[i] != data2[i]) ? "! " : "= ");
+                        System.out.print(data2[i]+" ");
+                        
+                        if (data3[i] != data2[i])
+                        {
+                           badIdx = i;
+                           break;
+                        }
+                     }
+
+                     if (badIdx >= 0) 
+                     {
+                        System.out.println("Error at index "+badIdx+": "+ 
+                                data3[badIdx]+" <-> "+data2[badIdx]);
+                        System.exit(1);
                      }
 
                      System.out.println("\n");
@@ -180,16 +212,20 @@ public class TestWHT
                             data[i][j] = rnd.nextInt(10+i+j*10);
                     }
 
+                    IndexedIntArray iia = new IndexedIntArray(data[0], 0);
                     long before, after;
 
                     for (int i=0; i<iter; i++)
                     {
+                       iia.array = data[i % 100];
                        before = System.nanoTime();
-                       wht.forward(data[i%100], 0);
+                       iia.index = 0;
+                       wht.forward(iia, iia);
                        after = System.nanoTime();
                        delta1 += (after-before);
                        before = System.nanoTime();
-                       wht.inverse(data[i%100], 0);
+                       iia.index = 0;
+                       wht.inverse(iia, iia);
                        after = System.nanoTime();
                        delta2 += (after-before);
                     }

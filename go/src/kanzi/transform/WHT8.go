@@ -38,28 +38,28 @@ func NewWHT8(scale bool) (*WHT8, error) {
 	return this, nil
 }
 
-// For perfect reconstruction, forward results are scaled by 8*sqrt(2) unless 
+// For perfect reconstruction, forward results are scaled by 8*sqrt(2) unless
 // the parameter is set to false (scaled by sqrt(2), in which case rounding
 // may introduce errors)
-func (this *WHT8) Forward(block []int) []int {
-	return this.compute(block, this.fScale)
+func (this *WHT8) Forward(src, dst []int) (uint, uint, error) {
+	return this.compute(src, dst, this.fScale)
 }
 
-func (this *WHT8) compute(block []int, shift uint) []int {
+func (this *WHT8) compute(input, output []int, shift uint) (uint, uint, error) {
 	dataptr := 0
 	buffer := this.data // alias
 
 	// Pass 1: process rows.
 	for i := 0; i < 64; i += 8 {
 		// Aliasing for speed
-		x0 := block[i]
-		x1 := block[i+1]
-		x2 := block[i+2]
-		x3 := block[i+3]
-		x4 := block[i+4]
-		x5 := block[i+5]
-		x6 := block[i+6]
-		x7 := block[i+7]
+		x0 := input[i]
+		x1 := input[i+1]
+		x2 := input[i+2]
+		x3 := input[i+3]
+		x4 := input[i+4]
+		x5 := input[i+5]
+		x6 := input[i+6]
+		x7 := input[i+7]
 
 		a0 := x0 + x1
 		a1 := x2 + x3
@@ -124,22 +124,22 @@ func (this *WHT8) compute(block []int, shift uint) []int {
 		b6 := a4 - a5
 		b7 := a6 - a7
 
-		block[i] = (b0 + b1 + adjust) >> shift
-		block[i+8] = (b2 + b3 + adjust) >> shift
-		block[i+16] = (b4 + b5 + adjust) >> shift
-		block[i+24] = (b6 + b7 + adjust) >> shift
-		block[i+32] = (b0 - b1 + adjust) >> shift
-		block[i+40] = (b2 - b3 + adjust) >> shift
-		block[i+48] = (b4 - b5 + adjust) >> shift
-		block[i+56] = (b6 - b7 + adjust) >> shift
+		output[i] = (b0 + b1 + adjust) >> shift
+		output[i+8] = (b2 + b3 + adjust) >> shift
+		output[i+16] = (b4 + b5 + adjust) >> shift
+		output[i+24] = (b6 + b7 + adjust) >> shift
+		output[i+32] = (b0 - b1 + adjust) >> shift
+		output[i+40] = (b2 - b3 + adjust) >> shift
+		output[i+48] = (b4 - b5 + adjust) >> shift
+		output[i+56] = (b6 - b7 + adjust) >> shift
 
 		dataptr++
 	}
 
-	return block
+	return 64, 64, nil
 }
 
 // The transform is symmetric (except, potentially, for scaling)
-func (this *WHT8) Inverse(block []int) []int {
-	return this.compute(block, this.iScale)
+func (this *WHT8) Inverse(src, dst []int) (uint, uint, error) {
+	return this.compute(src, dst, this.iScale)
 }

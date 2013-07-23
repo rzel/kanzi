@@ -147,13 +147,19 @@ public class TestDWT
       for (int val2=dim+1; val2>1; val2>>=1)
           log2++;
 
-      yDWT.forward(y, 0);      
+      iia1.array = y;
+      iia1.index = 0;
+      yDWT.forward(iia1, iia1);      
 
       // If Y444, we could also drop the highest frequency blocks for u & v
       // by dividing dim by 2 for these 2 components. That would be similar
       // to using y420 (but faster ... and higher quality)
-      uvDWT.forward(u, 0);
-      uvDWT.forward(v, 0);
+      iia1.array = u;
+      iia1.index = 0;
+      uvDWT.forward(iia1, iia1);
+      iia1.array = v;
+      iia1.index = 0;
+      uvDWT.forward(iia1, iia1);
 
       int levels = log2 - 4;
 
@@ -218,9 +224,15 @@ public class TestDWT
       uvFilter.inverse(iia2, iia1);
 
       // Inverse
-      yDWT.inverse(y, 0);
-      uvDWT.inverse(u, 0);
-      uvDWT.inverse(v, 0);
+      iia1.array = y;
+      iia1.index = 0;
+      yDWT.inverse(iia1, iia1);
+      iia1.array = u;
+      iia1.index = 0;
+      uvDWT.inverse(iia1, iia1);
+      iia1.array = v;
+      iia1.index = 0;
+      uvDWT.inverse(iia1, iia1);
 
       cvt.convertYUVtoRGB(y, u, v, iia2.array, cmType);
 

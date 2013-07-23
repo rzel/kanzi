@@ -15,18 +15,30 @@ limitations under the License.
 
 package kanzi
 
+// An integer function is an operation that takes an array of integers as input and
+// and turns it into another array of integers. The size of the returned array
+// is not known in advance (by the caller).
+// Return index in src, index in dst and error
 type IntTransform interface {
-	Forward(block []int) []int
+	Forward(src, dst []int) (uint, uint, error)
 
-	Inverse(block []int) []int
+	Inverse(src, dst []int) (uint, uint, error)
 }
 
+// A byte function is an operation that takes an array of bytes as input and
+// turns it into another array of bytes. The size of the returned array is not
+// known in advance (by the caller).
+// Return index in src, index in dst and error
 type ByteTransform interface {
-	Forward(block []byte) []byte
+	Forward(src, dst []byte) (uint, uint, error)
 
-	Inverse(block []byte) []byte
+	Inverse(src, dst []byte) (uint, uint, error)
 }
 
+// An integer function is an operation that transforms the input int array and writes
+// the result in the output int array. The result may have a different size.
+// The function may fail if input and output array are the same array.
+// The index of input and output arrays are updated appropriately.
 // Return index in src, index in dst and error
 type IntFunction interface {
 	Forward(src, dst []int) (uint, uint, error)
@@ -34,6 +46,9 @@ type IntFunction interface {
 	Inverse(src, dst []int) (uint, uint, error)
 }
 
+// A byte function is an operation that transforms the input byte array and writes
+// the result in the output byte array. The result may have a different size.
+// The function may fail if input and output array are the same array.
 // Return index in src, index in dst and error
 type ByteFunction interface {
 	Forward(src, dst []byte) (uint, uint, error)
@@ -98,7 +113,7 @@ type EntropyDecoder interface {
 	// Decode the next chunk of data from the bitstream and return as a byte
 	DecodeByte() (byte, error)
 
-	// Decode the next chunk of data from the bitstream and return in the 
+	// Decode the next chunk of data from the bitstream and return in the
 	// provided buffer.
 	Decode(block []byte) (int, error)
 
@@ -110,3 +125,44 @@ type EntropyDecoder interface {
 	Dispose()
 }
 
+func SameIntSlices(slice1, slice2 []int, checkLengths bool) bool {
+	if &slice1 == &slice2 {
+		return true
+	}
+
+	if checkLengths == true && len(slice1) != len(slice2) {
+		return false
+	}
+
+	saved := slice1[0]
+	slice2[0] = ^slice2[0]
+
+	if slice1[0] == saved {
+		slice2[0] = ^slice2[0]
+		return false
+	}
+
+	slice2[0] = ^slice2[0]
+	return true
+}
+
+func SameByteSlices(slice1, slice2 []byte, checkLengths bool) bool {
+	if &slice1 == &slice2 {
+		return true
+	}
+
+	if checkLengths == true && len(slice1) != len(slice2) {
+		return false
+	}
+
+	saved := slice1[0]
+	slice2[0] = ^slice2[0]
+
+	if slice1[0] == saved {
+		slice2[0] = ^slice2[0]
+		return false
+	}
+
+	slice2[0] = ^slice2[0]
+	return true
+}

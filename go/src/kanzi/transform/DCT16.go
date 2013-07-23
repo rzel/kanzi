@@ -127,21 +127,17 @@ func NewDCT16() (*DCT16, error) {
 	return this, nil
 }
 
-func (this *DCT16) Forward(block []int) []int {
-	this.computeForward(block, this.data, 6)
-	this.computeForward(this.data, block, this.fShift-6)
-	return block
+func (this *DCT16) Forward(src, dst []int) (uint, uint, error) {
+	computeForward16(src, this.data, 6)
+	computeForward16(this.data, dst, this.fShift-6)
+	return 256, 256, nil
 }
 
-func (this *DCT16) computeForward(input []int, output []int, shift uint) []int {
+func computeForward16(input, output []int, shift uint) {
 	iIdx := 0
-	round := 0
+	round := (1 << shift) >> 1
 
-	if shift != 0 {
-		round = 1 << (shift - 1)
-	}
-
-	for i := uint(0); i < 16; i++ {
+	for i := 0; i < 16; i++ {
 		x0 := input[iIdx]
 		x1 := input[iIdx+1]
 		x2 := input[iIdx+2]
@@ -218,24 +214,19 @@ func (this *DCT16) computeForward(input []int, output []int, shift uint) []int {
 		iIdx += 16
 	}
 
-	return output
 }
 
-func (this *DCT16) Inverse(block []int) []int {
-	this.computeInverse(block, this.data, 10)
-	this.computeInverse(this.data, block, this.iShift-10)
-	return block
+func (this *DCT16) Inverse(src, dst []int) (uint, uint, error) {
+	computeInverse16(src, this.data, 10)
+	computeInverse16(this.data, dst, this.iShift-10)
+	return 256, 256, nil
 }
 
-func (this *DCT16) computeInverse(input []int, output []int, shift uint) []int {
+func computeInverse16(input, output []int, shift uint) {
 	oIdx := 0
-	round := 0
+	round := (1 << shift) >> 1
 
-	if shift != 0 {
-		round = 1 << (shift - 1)
-	}
-
-	for i := uint(0); i < 16; i++ {
+	for i := 0; i < 16; i++ {
 		x0 := input[i]
 		x1 := input[i+16]
 		x2 := input[i+32]
@@ -324,6 +315,4 @@ func (this *DCT16) computeInverse(input []int, output []int, shift uint) []int {
 
 		oIdx += 16
 	}
-
-	return output
 }

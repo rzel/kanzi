@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.transform;
 
+import kanzi.IndexedIntArray;
 import kanzi.IntTransform;
 
 
@@ -43,45 +44,42 @@ public final class WHT4 implements IntTransform
     }
 
 
-    public int[] forward(int[] block)
-    {
-        return this.compute(block, 0, this.fScale);
-    }
-
-
-    // Thread safe
     @Override
-    public int[] forward(int[] block, int blkptr)
+    public boolean forward(IndexedIntArray src, IndexedIntArray dst)
     {
-        return this.compute(block, blkptr, this.fScale);
+       return compute(src, dst, this.fScale);       
     }
 
 
     // Result multiplied by 4 if 'scale' is set to false
-    private int[] compute(int[] block, int blkptr, int shift)
+    private static boolean compute(IndexedIntArray src, IndexedIntArray dst, int shift)
     {
        int b0, b1, b2, b3, b4, b5, b6, b7;
        int b8, b9, b10, b11, b12, b13, b14, b15;
+       final int[] input = src.array;
+       final int[] output = dst.array;
+       final int srcIdx = src.index;
+       final int dstIdx = dst.index;        
 
        // Pass 1: process rows.
        {
          // Aliasing for speed
-         final int x0  = block[blkptr];
-         final int x1  = block[blkptr+1];
-         final int x2  = block[blkptr+2];
-         final int x3  = block[blkptr+3];
-         final int x4  = block[blkptr+4];
-         final int x5  = block[blkptr+5];
-         final int x6  = block[blkptr+6];
-         final int x7  = block[blkptr+7];
-         final int x8  = block[blkptr+8];
-         final int x9  = block[blkptr+9];
-         final int x10 = block[blkptr+10];
-         final int x11 = block[blkptr+11];
-         final int x12 = block[blkptr+12];
-         final int x13 = block[blkptr+13];
-         final int x14 = block[blkptr+14];
-         final int x15 = block[blkptr+15];
+         final int x0  = input[srcIdx];
+         final int x1  = input[srcIdx+1];
+         final int x2  = input[srcIdx+2];
+         final int x3  = input[srcIdx+3];
+         final int x4  = input[srcIdx+4];
+         final int x5  = input[srcIdx+5];
+         final int x6  = input[srcIdx+6];
+         final int x7  = input[srcIdx+7];
+         final int x8  = input[srcIdx+8];
+         final int x9  = input[srcIdx+9];
+         final int x10 = input[srcIdx+10];
+         final int x11 = input[srcIdx+11];
+         final int x12 = input[srcIdx+12];
+         final int x13 = input[srcIdx+13];
+         final int x14 = input[srcIdx+14];
+         final int x15 = input[srcIdx+15];
 
          final int a0  = x0  + x1;
          final int a1  = x2  + x3;
@@ -139,39 +137,34 @@ public final class WHT4 implements IntTransform
 
          final int adjust = (1 << shift) >> 1;
 
-         block[blkptr]    = (a0  + a1  + adjust) >> shift;
-         block[blkptr+4]  = (a2  + a3  + adjust) >> shift;
-         block[blkptr+8]  = (a0  - a1  + adjust) >> shift;
-         block[blkptr+12] = (a2  - a3  + adjust) >> shift;
-         block[blkptr+1]  = (a4  + a5  + adjust) >> shift;
-         block[blkptr+5]  = (a6  + a7  + adjust) >> shift;
-         block[blkptr+9]  = (a4  - a5  + adjust) >> shift;
-         block[blkptr+13] = (a6  - a7  + adjust) >> shift;
-         block[blkptr+2]  = (a8  + a9  + adjust) >> shift;
-         block[blkptr+6]  = (a10 + a11 + adjust) >> shift;
-         block[blkptr+10] = (a8  - a9  + adjust) >> shift;
-         block[blkptr+14] = (a10 - a11 + adjust) >> shift;
-         block[blkptr+3]  = (a12 + a13 + adjust) >> shift;
-         block[blkptr+7]  = (a14 + a15 + adjust) >> shift;
-         block[blkptr+11] = (a12 - a13 + adjust) >> shift;
-         block[blkptr+15] = (a14 - a15 + adjust) >> shift;
+         output[dstIdx]    = (a0  + a1  + adjust) >> shift;
+         output[dstIdx+4]  = (a2  + a3  + adjust) >> shift;
+         output[dstIdx+8]  = (a0  - a1  + adjust) >> shift;
+         output[dstIdx+12] = (a2  - a3  + adjust) >> shift;
+         output[dstIdx+1]  = (a4  + a5  + adjust) >> shift;
+         output[dstIdx+5]  = (a6  + a7  + adjust) >> shift;
+         output[dstIdx+9]  = (a4  - a5  + adjust) >> shift;
+         output[dstIdx+13] = (a6  - a7  + adjust) >> shift;
+         output[dstIdx+2]  = (a8  + a9  + adjust) >> shift;
+         output[dstIdx+6]  = (a10 + a11 + adjust) >> shift;
+         output[dstIdx+10] = (a8  - a9  + adjust) >> shift;
+         output[dstIdx+14] = (a10 - a11 + adjust) >> shift;
+         output[dstIdx+3]  = (a12 + a13 + adjust) >> shift;
+         output[dstIdx+7]  = (a14 + a15 + adjust) >> shift;
+         output[dstIdx+11] = (a12 - a13 + adjust) >> shift;
+         output[dstIdx+15] = (a14 - a15 + adjust) >> shift;
        }
 
-       return block;
-    }
-
-
-    // The transform is symmetric (except, potentially, for scaling)
-    public int[] inverse(int[] block)
-    {
-        return this.compute(block, 0, this.iScale);
+       src.index += 16;
+       dst.index += 16;
+       return true;
     }
 
 
     @Override
-    public int[] inverse(int[] block, int blkptr)
+    public boolean inverse(IndexedIntArray src, IndexedIntArray dst)
     {
-        return this.compute(block, blkptr, this.iScale);
+        return compute(src, dst, this.iScale);
     }
 
 }

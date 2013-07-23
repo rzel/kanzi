@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.transform;
 
+import kanzi.IndexedIntArray;
 import kanzi.IntTransform;
 
 
@@ -96,71 +97,72 @@ public final class DCT32 implements IntTransform
             
     private final int fShift;
     private final int iShift;
-    private final int[] data;
+    private final IndexedIntArray data;
 
     
     public DCT32()
     {
        this.fShift = 14;
        this.iShift = 20;
-       this.data = new int[1024];
-    }
-
-
-    public int[] forward(int[] block)
-    {
-       return this.forward(block, 0);
+       this.data = new IndexedIntArray(new int[1024], 0);
     }
 
 
     @Override
-    public int[] forward(int[] block, int blkptr)
+    public boolean forward(IndexedIntArray src, IndexedIntArray dst)
     {
-       this.computeForward(block, blkptr, this.data, 0, 7);
-       this.computeForward(this.data, 0, block, blkptr, this.fShift-7);
-       return block;
+       this.data.index = 0;
+       computeForward(src, this.data, 7);
+       computeForward(this.data, dst, this.fShift-7);
+       src.index += 1024;
+       dst.index += 1024;
+       return true;
     }
     
     
-    private int[] computeForward(int[] input, int iIdx, int[] output, int oIdx, int shift)
+    private static void computeForward(IndexedIntArray src, IndexedIntArray dst, int shift)
     {       
-       final int round = (shift == 0) ? 0 : 1 << (shift - 1);
-       int offs = iIdx;
+       final int[] input = src.array;
+       final int[] output = dst.array;
+       final int srcIdx = src.index;
+       final int dstIdx = dst.index;        
+       final int round = (1 << shift) >> 1;
 
        for (int i=0; i<32; i++)
        {
-          final int x0  = input[offs];
-          final int x1  = input[offs+1];
-          final int x2  = input[offs+2];
-          final int x3  = input[offs+3];
-          final int x4  = input[offs+4];
-          final int x5  = input[offs+5];
-          final int x6  = input[offs+6];
-          final int x7  = input[offs+7];
-          final int x8  = input[offs+8];
-          final int x9  = input[offs+9];
-          final int x10 = input[offs+10];
-          final int x11 = input[offs+11];
-          final int x12 = input[offs+12];
-          final int x13 = input[offs+13];
-          final int x14 = input[offs+14];
-          final int x15 = input[offs+15];
-          final int x16 = input[offs+16];
-          final int x17 = input[offs+17];
-          final int x18 = input[offs+18];
-          final int x19 = input[offs+19];
-          final int x20 = input[offs+20];
-          final int x21 = input[offs+21];
-          final int x22 = input[offs+22];
-          final int x23 = input[offs+23];
-          final int x24 = input[offs+24];
-          final int x25 = input[offs+25];
-          final int x26 = input[offs+26];
-          final int x27 = input[offs+27];
-          final int x28 = input[offs+28];
-          final int x29 = input[offs+29];
-          final int x30 = input[offs+30];
-          final int x31 = input[offs+31];
+          final int si = srcIdx + (i << 5);
+          final int x0  = input[si];
+          final int x1  = input[si+1];
+          final int x2  = input[si+2];
+          final int x3  = input[si+3];
+          final int x4  = input[si+4];
+          final int x5  = input[si+5];
+          final int x6  = input[si+6];
+          final int x7  = input[si+7];
+          final int x8  = input[si+8];
+          final int x9  = input[si+9];
+          final int x10 = input[si+10];
+          final int x11 = input[si+11];
+          final int x12 = input[si+12];
+          final int x13 = input[si+13];
+          final int x14 = input[si+14];
+          final int x15 = input[si+15];
+          final int x16 = input[si+16];
+          final int x17 = input[si+17];
+          final int x18 = input[si+18];
+          final int x19 = input[si+19];
+          final int x20 = input[si+20];
+          final int x21 = input[si+21];
+          final int x22 = input[si+22];
+          final int x23 = input[si+23];
+          final int x24 = input[si+24];
+          final int x25 = input[si+25];
+          final int x26 = input[si+26];
+          final int x27 = input[si+27];
+          final int x28 = input[si+28];
+          final int x29 = input[si+29];
+          final int x30 = input[si+30];
+          final int x31 = input[si+31];
 
           final int a0  = x0  + x31;
           final int a1  = x1  + x30;
@@ -195,14 +197,14 @@ public final class DCT32 implements IntTransform
           final int a30 = x14 - x17;
           final int a31 = x15 - x16;
           
-          final int j = oIdx + i;
+          final int di = dstIdx + i;
 
           for (int n=32; n<1024; n+=64)
           {
-             output[j+n] = ((W[n]   *a2)  + (W[n+1] *a3)  + (W[n+2] *a6)  + (W[n+3] *a7)  + 
-                            (W[n+4] *a10) + (W[n+5] *a11) + (W[n+6] *a14) + (W[n+7] *a15) + 
-                            (W[n+8] *a18) + (W[n+9] *a19) + (W[n+10]*a22) + (W[n+11]*a23) + 
-                            (W[n+12]*a26) + (W[n+13]*a27) + (W[n+14]*a30) + (W[n+15]*a31) + round) >> shift;
+             output[di+n] = ((W[n]   *a2)  + (W[n+1] *a3)  + (W[n+2] *a6)  + (W[n+3] *a7)  + 
+                             (W[n+4] *a10) + (W[n+5] *a11) + (W[n+6] *a14) + (W[n+7] *a15) + 
+                             (W[n+8] *a18) + (W[n+9] *a19) + (W[n+10]*a22) + (W[n+11]*a23) + 
+                             (W[n+12]*a26) + (W[n+13]*a27) + (W[n+14]*a30) + (W[n+15]*a31) + round) >> shift;
           }
           
           final int b0  = a0 + a29;
@@ -222,23 +224,23 @@ public final class DCT32 implements IntTransform
           final int b14 = a12 - a17;
           final int b15 = a13 - a16;
           
-          output[j+64]  = ((W[64] *b2)  + (W[65] *b3)  + (W[66] *b6)  + (W[67] *b7)  + 
-                           (W[68] *b10) + (W[69] *b11) + (W[70] *b14) + (W[71] *b15) + round) >> shift;
-          output[j+192] = ((W[192]*b2)  + (W[193]*b3)  + (W[194]*b6)  + (W[195]*b7)  + 
-                           (W[196]*b10) + (W[197]*b11) + (W[198]*b14) + (W[199]*b15) + round) >> shift;
-          output[j+320] = ((W[320]*b2)  + (W[321]*b3)  + (W[322]*b6)  + (W[323]*b7)  + 
-                           (W[324]*b10) + (W[325]*b11) + (W[326]*b14) + (W[327]*b15) + round) >> shift;
-          output[j+448] = ((W[448]*b2)  + (W[449]*b3)  + (W[450]*b6)  + (W[451]*b7)  + 
-                           (W[452]*b10) + (W[453]*b11) + (W[454]*b14) + (W[455]*b15) + round) >> shift;
-          output[j+576] = ((W[576]*b2)  + (W[577]*b3)  + (W[578]*b6)  + (W[579]*b7)  + 
-                           (W[580]*b10) + (W[581]*b11) + (W[582]*b14) + (W[583]*b15) + round) >> shift;
-          output[j+704] = ((W[704]*b2)  + (W[705]*b3)  + (W[706]*b6)  + (W[707]*b7)  + 
-                           (W[708]*b10) + (W[709]*b11) + (W[710]*b14) + (W[711]*b15) + round) >> shift;
-          output[j+832] = ((W[832]*b2)  + (W[833]*b3)  + (W[834]*b6)  + (W[835]*b7)  + 
-                           (W[836]*b10) + (W[837]*b11) + (W[838]*b14) + (W[839]*b15) + round) >> shift;
-          output[j+960] = ((W[960]*b2)  + (W[961]*b3)  + (W[962]*b6)  + (W[963]*b7)  + 
-                           (W[964]*b10) + (W[965]*b11) + (W[966]*b14) + (W[967]*b15) + round) >> shift;
-
+          output[di+64]  = ((W[64] *b2)  + (W[65] *b3)  + (W[66] *b6)  + (W[67] *b7)  + 
+                            (W[68] *b10) + (W[69] *b11) + (W[70] *b14) + (W[71] *b15) + round) >> shift;
+          output[di+192] = ((W[192]*b2)  + (W[193]*b3)  + (W[194]*b6)  + (W[195]*b7)  + 
+                            (W[196]*b10) + (W[197]*b11) + (W[198]*b14) + (W[199]*b15) + round) >> shift;
+          output[di+320] = ((W[320]*b2)  + (W[321]*b3)  + (W[322]*b6)  + (W[323]*b7)  + 
+                            (W[324]*b10) + (W[325]*b11) + (W[326]*b14) + (W[327]*b15) + round) >> shift;
+          output[di+448] = ((W[448]*b2)  + (W[449]*b3)  + (W[450]*b6)  + (W[451]*b7)  + 
+                            (W[452]*b10) + (W[453]*b11) + (W[454]*b14) + (W[455]*b15) + round) >> shift;
+          output[di+576] = ((W[576]*b2)  + (W[577]*b3)  + (W[578]*b6)  + (W[579]*b7)  + 
+                            (W[580]*b10) + (W[581]*b11) + (W[582]*b14) + (W[583]*b15) + round) >> shift;
+          output[di+704] = ((W[704]*b2)  + (W[705]*b3)  + (W[706]*b6)  + (W[707]*b7)  + 
+                            (W[708]*b10) + (W[709]*b11) + (W[710]*b14) + (W[711]*b15) + round) >> shift;
+          output[di+832] = ((W[832]*b2)  + (W[833]*b3)  + (W[834]*b6)  + (W[835]*b7)  + 
+                            (W[836]*b10) + (W[837]*b11) + (W[838]*b14) + (W[839]*b15) + round) >> shift;
+          output[di+960] = ((W[960]*b2)  + (W[961]*b3)  + (W[962]*b6)  + (W[963]*b7)  + 
+                            (W[964]*b10) + (W[965]*b11) + (W[966]*b14) + (W[967]*b15) + round) >> shift;
+ 
           final int c0 = b0 + b13;
           final int c1 = b1 + b12;
           final int c2 = b0 - b13;
@@ -248,84 +250,79 @@ public final class DCT32 implements IntTransform
           final int c6 = b4 - b9;
           final int c7 = b5 - b8;
 
-          output[j+128] = ((W[128]*c2) + (W[129]*c3) + (W[130]*c6) + (W[131]*c7) + round) >> shift;
-          output[j+384] = ((W[384]*c2) + (W[385]*c3) + (W[386]*c6) + (W[387]*c7) + round) >> shift;
-          output[j+640] = ((W[640]*c2) + (W[641]*c3) + (W[642]*c6) + (W[643]*c7) + round) >> shift;
-          output[j+896] = ((W[896]*c2) + (W[897]*c3) + (W[898]*c6) + (W[899]*c7) + round) >> shift;
+          output[di+128] = ((W[128]*c2) + (W[129]*c3) + (W[130]*c6) + (W[131]*c7) + round) >> shift;
+          output[di+384] = ((W[384]*c2) + (W[385]*c3) + (W[386]*c6) + (W[387]*c7) + round) >> shift;
+          output[di+640] = ((W[640]*c2) + (W[641]*c3) + (W[642]*c6) + (W[643]*c7) + round) >> shift;
+          output[di+896] = ((W[896]*c2) + (W[897]*c3) + (W[898]*c6) + (W[899]*c7) + round) >> shift;
 
           final int d0 = c0 + c5;
           final int d1 = c1 + c4;
           final int d2 = c0 - c5;
           final int d3 = c1 - c4;
           
-          output[j]     = ((W[0]  *d0) + (W[1]  *d1) + round) >> shift;
-          output[j+512] = ((W[512]*d0) + (W[513]*d1) + round) >> shift;
-          output[j+256] = ((W[256]*d2) + (W[257]*d3) + round) >> shift;
-          output[j+768] = ((W[768]*d2) + (W[769]*d3) + round) >> shift;
-          
-          offs += 32;
+          output[di]     = ((W[0]  *d0) + (W[1]  *d1) + round) >> shift;
+          output[di+512] = ((W[512]*d0) + (W[513]*d1) + round) >> shift;
+          output[di+256] = ((W[256]*d2) + (W[257]*d3) + round) >> shift;
+          output[di+768] = ((W[768]*d2) + (W[769]*d3) + round) >> shift;
        }       
-       
-       return output;
-    }
-
-
-    public int[] inverse(int[] block)
-    {
-        return this.inverse(block, 0);
     }
 
     
     @Override
-    public int[] inverse(int[] block, int blkptr)
+    public boolean inverse(IndexedIntArray src, IndexedIntArray dst)
     {
-       this.computeInverse(block, blkptr, this.data, 0, 10);
-       this.computeInverse(this.data, 0, block, blkptr, this.iShift-10);
-       return block;
+       this.data.index = 0;
+       computeInverse(src, this.data,  10);
+       computeInverse(this.data, dst, this.iShift-10);
+       src.index += 1024;
+       dst.index += 1024;
+       return true;
     }
     
     
-    private int[] computeInverse(int[] input, int iIdx, int[] output, int oIdx, int shift)
+    private static void computeInverse(IndexedIntArray src, IndexedIntArray dst, int shift)
     {
-       final int round = (shift == 0) ? 0 : 1 << (shift - 1);    
-       int offs = oIdx;
+       final int[] input = src.array;
+       final int[] output = dst.array;
+       final int srcIdx = src.index;
+       final int dstIdx = dst.index;        
+       final int round = (1 << shift) >> 1;
 
        for (int i=0; i<32; i++)
        {
-          final int j = iIdx + i;
-
-          final int x0  = input[j];
-          final int x1  = input[j+32];
-          final int x2  = input[j+64];
-          final int x3  = input[j+96];
-          final int x4  = input[j+128];
-          final int x5  = input[j+160];
-          final int x6  = input[j+192];
-          final int x7  = input[j+224];
-          final int x8  = input[j+256];
-          final int x9  = input[j+288];
-          final int x10 = input[j+320];
-          final int x11 = input[j+352];
-          final int x12 = input[j+384];
-          final int x13 = input[j+416];
-          final int x14 = input[j+448];
-          final int x15 = input[j+480];
-          final int x16 = input[j+512];
-          final int x17 = input[j+544];
-          final int x18 = input[j+576];
-          final int x19 = input[j+608];
-          final int x20 = input[j+640];
-          final int x21 = input[j+672];
-          final int x22 = input[j+704];
-          final int x23 = input[j+736];
-          final int x24 = input[j+768];
-          final int x25 = input[j+800];
-          final int x26 = input[j+832];
-          final int x27 = input[j+864];
-          final int x28 = input[j+896];
-          final int x29 = input[j+928];
-          final int x30 = input[j+960];
-          final int x31 = input[j+992];
+          final int si = srcIdx + i;
+          final int x0  = input[si];
+          final int x1  = input[si+32];
+          final int x2  = input[si+64];
+          final int x3  = input[si+96];
+          final int x4  = input[si+128];
+          final int x5  = input[si+160];
+          final int x6  = input[si+192];
+          final int x7  = input[si+224];
+          final int x8  = input[si+256];
+          final int x9  = input[si+288];
+          final int x10 = input[si+320];
+          final int x11 = input[si+352];
+          final int x12 = input[si+384];
+          final int x13 = input[si+416];
+          final int x14 = input[si+448];
+          final int x15 = input[si+480];
+          final int x16 = input[si+512];
+          final int x17 = input[si+544];
+          final int x18 = input[si+576];
+          final int x19 = input[si+608];
+          final int x20 = input[si+640];
+          final int x21 = input[si+672];
+          final int x22 = input[si+704];
+          final int x23 = input[si+736];
+          final int x24 = input[si+768];
+          final int x25 = input[si+800];
+          final int x26 = input[si+832];
+          final int x27 = input[si+864];
+          final int x28 = input[si+896];
+          final int x29 = input[si+928];
+          final int x30 = input[si+960];
+          final int x31 = input[si+992];
 
           final int a0 =  (W[32] *x1)  + (W[96] *x3)  + (W[160]*x5)  + (W[224]*x7)  +
                           (W[288]*x9)  + (W[352]*x11) + (W[416]*x13) + (W[480]*x15) +
@@ -481,43 +478,40 @@ public final class DCT32 implements IntTransform
           final int r15 = (e15 + a15 + round) >> shift;
           final int r31 = (e0  - a0  + round) >> shift;
        
-          output[offs]    = (r0  > MAX_VAL) ? MAX_VAL : ((r0  <= MIN_VAL) ? MIN_VAL : r0);
-          output[offs+1]  = (r1  > MAX_VAL) ? MAX_VAL : ((r1  <= MIN_VAL) ? MIN_VAL : r1);
-          output[offs+2]  = (r2  > MAX_VAL) ? MAX_VAL : ((r2  <= MIN_VAL) ? MIN_VAL : r2);
-          output[offs+3]  = (r3  > MAX_VAL) ? MAX_VAL : ((r3  <= MIN_VAL) ? MIN_VAL : r3);
-          output[offs+4]  = (r4  > MAX_VAL) ? MAX_VAL : ((r4  <= MIN_VAL) ? MIN_VAL : r4);
-          output[offs+5]  = (r5  > MAX_VAL) ? MAX_VAL : ((r5  <= MIN_VAL) ? MIN_VAL : r5);
-          output[offs+6]  = (r6  > MAX_VAL) ? MAX_VAL : ((r6  <= MIN_VAL) ? MIN_VAL : r6);
-          output[offs+7]  = (r7  > MAX_VAL) ? MAX_VAL : ((r7  <= MIN_VAL) ? MIN_VAL : r7);
-          output[offs+8]  = (r8  > MAX_VAL) ? MAX_VAL : ((r8  <= MIN_VAL) ? MIN_VAL : r8);
-          output[offs+9]  = (r9  > MAX_VAL) ? MAX_VAL : ((r9  <= MIN_VAL) ? MIN_VAL : r9);
-          output[offs+10] = (r10 > MAX_VAL) ? MAX_VAL : ((r10 <= MIN_VAL) ? MIN_VAL : r10);
-          output[offs+11] = (r11 > MAX_VAL) ? MAX_VAL : ((r11 <= MIN_VAL) ? MIN_VAL : r11);
-          output[offs+12] = (r12 > MAX_VAL) ? MAX_VAL : ((r12 <= MIN_VAL) ? MIN_VAL : r12);
-          output[offs+13] = (r13 > MAX_VAL) ? MAX_VAL : ((r13 <= MIN_VAL) ? MIN_VAL : r13);
-          output[offs+14] = (r14 > MAX_VAL) ? MAX_VAL : ((r14 <= MIN_VAL) ? MIN_VAL : r14);
-          output[offs+15] = (r15 > MAX_VAL) ? MAX_VAL : ((r15 <= MIN_VAL) ? MIN_VAL : r15);
-          output[offs+16] = (r16 > MAX_VAL) ? MAX_VAL : ((r16 <= MIN_VAL) ? MIN_VAL : r16);
-          output[offs+17] = (r17 > MAX_VAL) ? MAX_VAL : ((r17 <= MIN_VAL) ? MIN_VAL : r17);
-          output[offs+18] = (r18 > MAX_VAL) ? MAX_VAL : ((r18 <= MIN_VAL) ? MIN_VAL : r18);
-          output[offs+19] = (r19 > MAX_VAL) ? MAX_VAL : ((r19 <= MIN_VAL) ? MIN_VAL : r19);
-          output[offs+20] = (r20 > MAX_VAL) ? MAX_VAL : ((r20 <= MIN_VAL) ? MIN_VAL : r20);
-          output[offs+21] = (r21 > MAX_VAL) ? MAX_VAL : ((r21 <= MIN_VAL) ? MIN_VAL : r21);
-          output[offs+22] = (r22 > MAX_VAL) ? MAX_VAL : ((r22 <= MIN_VAL) ? MIN_VAL : r22);
-          output[offs+23] = (r23 > MAX_VAL) ? MAX_VAL : ((r23 <= MIN_VAL) ? MIN_VAL : r23);
-          output[offs+24] = (r24 > MAX_VAL) ? MAX_VAL : ((r24 <= MIN_VAL) ? MIN_VAL : r24);
-          output[offs+25] = (r25 > MAX_VAL) ? MAX_VAL : ((r25 <= MIN_VAL) ? MIN_VAL : r25);
-          output[offs+26] = (r26 > MAX_VAL) ? MAX_VAL : ((r26 <= MIN_VAL) ? MIN_VAL : r26);
-          output[offs+27] = (r27 > MAX_VAL) ? MAX_VAL : ((r27 <= MIN_VAL) ? MIN_VAL : r27);
-          output[offs+28] = (r28 > MAX_VAL) ? MAX_VAL : ((r28 <= MIN_VAL) ? MIN_VAL : r28);
-          output[offs+29] = (r29 > MAX_VAL) ? MAX_VAL : ((r29 <= MIN_VAL) ? MIN_VAL : r29);
-          output[offs+30] = (r30 > MAX_VAL) ? MAX_VAL : ((r30 <= MIN_VAL) ? MIN_VAL : r30);
-          output[offs+31] = (r31 > MAX_VAL) ? MAX_VAL : ((r31 <= MIN_VAL) ? MIN_VAL : r31);
-          
-          offs += 32;
+          final int di = dstIdx + (i << 5);
+          output[di]    = (r0  > MAX_VAL) ? MAX_VAL : ((r0  <= MIN_VAL) ? MIN_VAL : r0);
+          output[di+1]  = (r1  > MAX_VAL) ? MAX_VAL : ((r1  <= MIN_VAL) ? MIN_VAL : r1);
+          output[di+2]  = (r2  > MAX_VAL) ? MAX_VAL : ((r2  <= MIN_VAL) ? MIN_VAL : r2);
+          output[di+3]  = (r3  > MAX_VAL) ? MAX_VAL : ((r3  <= MIN_VAL) ? MIN_VAL : r3);
+          output[di+4]  = (r4  > MAX_VAL) ? MAX_VAL : ((r4  <= MIN_VAL) ? MIN_VAL : r4);
+          output[di+5]  = (r5  > MAX_VAL) ? MAX_VAL : ((r5  <= MIN_VAL) ? MIN_VAL : r5);
+          output[di+6]  = (r6  > MAX_VAL) ? MAX_VAL : ((r6  <= MIN_VAL) ? MIN_VAL : r6);
+          output[di+7]  = (r7  > MAX_VAL) ? MAX_VAL : ((r7  <= MIN_VAL) ? MIN_VAL : r7);
+          output[di+8]  = (r8  > MAX_VAL) ? MAX_VAL : ((r8  <= MIN_VAL) ? MIN_VAL : r8);
+          output[di+9]  = (r9  > MAX_VAL) ? MAX_VAL : ((r9  <= MIN_VAL) ? MIN_VAL : r9);
+          output[di+10] = (r10 > MAX_VAL) ? MAX_VAL : ((r10 <= MIN_VAL) ? MIN_VAL : r10);
+          output[di+11] = (r11 > MAX_VAL) ? MAX_VAL : ((r11 <= MIN_VAL) ? MIN_VAL : r11);
+          output[di+12] = (r12 > MAX_VAL) ? MAX_VAL : ((r12 <= MIN_VAL) ? MIN_VAL : r12);
+          output[di+13] = (r13 > MAX_VAL) ? MAX_VAL : ((r13 <= MIN_VAL) ? MIN_VAL : r13);
+          output[di+14] = (r14 > MAX_VAL) ? MAX_VAL : ((r14 <= MIN_VAL) ? MIN_VAL : r14);
+          output[di+15] = (r15 > MAX_VAL) ? MAX_VAL : ((r15 <= MIN_VAL) ? MIN_VAL : r15);
+          output[di+16] = (r16 > MAX_VAL) ? MAX_VAL : ((r16 <= MIN_VAL) ? MIN_VAL : r16);
+          output[di+17] = (r17 > MAX_VAL) ? MAX_VAL : ((r17 <= MIN_VAL) ? MIN_VAL : r17);
+          output[di+18] = (r18 > MAX_VAL) ? MAX_VAL : ((r18 <= MIN_VAL) ? MIN_VAL : r18);
+          output[di+19] = (r19 > MAX_VAL) ? MAX_VAL : ((r19 <= MIN_VAL) ? MIN_VAL : r19);
+          output[di+20] = (r20 > MAX_VAL) ? MAX_VAL : ((r20 <= MIN_VAL) ? MIN_VAL : r20);
+          output[di+21] = (r21 > MAX_VAL) ? MAX_VAL : ((r21 <= MIN_VAL) ? MIN_VAL : r21);
+          output[di+22] = (r22 > MAX_VAL) ? MAX_VAL : ((r22 <= MIN_VAL) ? MIN_VAL : r22);
+          output[di+23] = (r23 > MAX_VAL) ? MAX_VAL : ((r23 <= MIN_VAL) ? MIN_VAL : r23);
+          output[di+24] = (r24 > MAX_VAL) ? MAX_VAL : ((r24 <= MIN_VAL) ? MIN_VAL : r24);
+          output[di+25] = (r25 > MAX_VAL) ? MAX_VAL : ((r25 <= MIN_VAL) ? MIN_VAL : r25);
+          output[di+26] = (r26 > MAX_VAL) ? MAX_VAL : ((r26 <= MIN_VAL) ? MIN_VAL : r26);
+          output[di+27] = (r27 > MAX_VAL) ? MAX_VAL : ((r27 <= MIN_VAL) ? MIN_VAL : r27);
+          output[di+28] = (r28 > MAX_VAL) ? MAX_VAL : ((r28 <= MIN_VAL) ? MIN_VAL : r28);
+          output[di+29] = (r29 > MAX_VAL) ? MAX_VAL : ((r29 <= MIN_VAL) ? MIN_VAL : r29);
+          output[di+30] = (r30 > MAX_VAL) ? MAX_VAL : ((r30 <= MIN_VAL) ? MIN_VAL : r30);
+          output[di+31] = (r31 > MAX_VAL) ? MAX_VAL : ((r31 <= MIN_VAL) ? MIN_VAL : r31);
        }
-       
-       return output;
     }
 
 }

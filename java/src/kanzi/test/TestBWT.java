@@ -16,6 +16,7 @@ limitations under the License.
 package kanzi.test;
 
 import java.util.Random;
+import kanzi.IndexedByteArray;
 import kanzi.transform.BWT;
 
 
@@ -60,16 +61,24 @@ public class TestBWT
                buf1[buf1.length-1] = (byte) 0;
             }
 
+            byte[] buf2 = new byte[buf1.length];
+            byte[] buf3 = new byte[buf1.length];
+            IndexedByteArray iba1 = new IndexedByteArray(buf1, 0);
+            IndexedByteArray iba2 = new IndexedByteArray(buf2, 0);
+            IndexedByteArray iba3 = new IndexedByteArray(buf3, 0);
             BWT bwt = new BWT(size);
             String str1 = new String(buf1);
             System.out.println("Input:   "+str1);
-            byte[] buf2 = bwt.forward(buf1, start);
+            iba1.index = start;
+            bwt.forward(iba1, iba2);
             int primaryIndex = bwt.getPrimaryIndex();
             String str2 = new String(buf2);
             System.out.print("Encoded: "+str2);
             System.out.println("  (Primary index="+bwt.getPrimaryIndex()+")");
             bwt.setPrimaryIndex(primaryIndex);
-            byte[] buf3 = bwt.inverse(buf2, start);
+            bwt.inverse(iba2, iba3);
+            iba2.index = 0;
+            iba3.index = start;
             String str3 = new String(buf3);
             System.out.println("Output:  "+str3);
 
@@ -93,6 +102,10 @@ public class TestBWT
          long delta2 = 0;
          byte[] buf1 = new byte[size];
          byte[] buf2 = new byte[size];
+         byte[] buf3 = new byte[size];
+         IndexedByteArray iba1 = new IndexedByteArray(buf1, 0);
+         IndexedByteArray iba2 = new IndexedByteArray(buf2, 0);
+         IndexedByteArray iba3 = new IndexedByteArray(buf3, 0);
          System.out.println("Iterations: "+iter);
          System.out.println("Transform size: "+size);
 
@@ -108,13 +121,16 @@ public class TestBWT
                      buf1[i] = (byte) (random.nextInt(255) + 1);
 
                  buf1[size-1] = 0;
-                 System.arraycopy(buf1, 0, buf2, 0, size);
                  before = System.nanoTime();
-                 bwt.forward(buf2, 0);
+                 iba1.index = 0;
+                 iba2.index = 0;
+                 bwt.forward(iba1, iba2);
                  after = System.nanoTime();
                  delta1 += (after - before);
                  before = System.nanoTime();
-                 bwt.inverse(buf2, 0);
+                 iba2.index = 0;
+                 iba3.index = 0;
+                 bwt.inverse(iba2, iba3);
                  after = System.nanoTime();
                  delta2 += (after - before);
              
@@ -123,7 +139,7 @@ public class TestBWT
                // Sanity check
                for (int i=0; i<size; i++)
                {
-                  if (buf1[i] != buf2[i])
+                  if (buf1[i] != buf3[i])
                   {
                      idx = i;
                      break;
@@ -131,7 +147,7 @@ public class TestBWT
                }
 
                if (idx >= 0)
-                  System.out.println("Failure at index "+idx+" ("+buf1[idx]+"<->"+buf2[idx]+")");             
+                  System.out.println("Failure at index "+idx+" ("+buf1[idx]+"<->"+buf3[idx]+")");             
              }
          }
 

@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.test;
 
+import kanzi.IndexedIntArray;
 import kanzi.transform.DCT8;
 import kanzi.IntTransform;
 import kanzi.transform.DCT16;
@@ -103,6 +104,7 @@ public class TestImageTransform
     int[] data = new int[1024];
     long sum = 0L;
     int iter = 1000;
+    IndexedIntArray iia = new IndexedIntArray(data, 0);
 
     for (int ii=0; ii<iter; ii++)
     {
@@ -121,8 +123,10 @@ public class TestImageTransform
               }
 
               long before = System.nanoTime();
-              data = transform.forward(data, 0);
-              data = transform.inverse(data, 0);
+              iia.index = 0;
+              transform.forward(iia, iia);
+              iia.index = 0;
+              transform.inverse(iia, iia);
               long after = System.nanoTime();
               sum += (after - before);
               

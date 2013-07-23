@@ -36,29 +36,29 @@ func NewWHT4(scale bool) (*WHT4, error) {
 	return this, nil
 }
 
-func (this *WHT4) Forward(block []int) []int {
-	return this.compute(block, this.fScale)
+func (this *WHT4) Forward(src, dst []int) (uint, uint, error) {
+	return this.compute(src, dst, this.fScale)
 }
 
-func (this *WHT4) compute(block []int, shift uint) []int {
+func (this *WHT4) compute(input, output []int, shift uint) (uint, uint, error) {
 	// Pass 1: process rows.
 	// Aliasing for speed
-	x0 := block[0]
-	x1 := block[1]
-	x2 := block[2]
-	x3 := block[3]
-	x4 := block[4]
-	x5 := block[5]
-	x6 := block[6]
-	x7 := block[7]
-	x8 := block[8]
-	x9 := block[9]
-	x10 := block[10]
-	x11 := block[11]
-	x12 := block[12]
-	x13 := block[13]
-	x14 := block[14]
-	x15 := block[15]
+	x0 := input[0]
+	x1 := input[1]
+	x2 := input[2]
+	x3 := input[3]
+	x4 := input[4]
+	x5 := input[5]
+	x6 := input[6]
+	x7 := input[7]
+	x8 := input[8]
+	x9 := input[9]
+	x10 := input[10]
+	x11 := input[11]
+	x12 := input[12]
+	x13 := input[13]
+	x14 := input[14]
+	x15 := input[15]
 
 	a0 := x0 + x1
 	a1 := x2 + x3
@@ -114,27 +114,27 @@ func (this *WHT4) compute(block []int, shift uint) []int {
 
 	adjust := (1 << shift) >> 1
 
-	block[0] = (a0 + a1 + adjust) >> shift
-	block[4] = (a2 + a3 + adjust) >> shift
-	block[8] = (a0 - a1 + adjust) >> shift
-	block[12] = (a2 - a3 + adjust) >> shift
-	block[1] = (a4 + a5 + adjust) >> shift
-	block[5] = (a6 + a7 + adjust) >> shift
-	block[9] = (a4 - a5 + adjust) >> shift
-	block[13] = (a6 - a7 + adjust) >> shift
-	block[2] = (a8 + a9 + adjust) >> shift
-	block[6] = (a10 + a11 + adjust) >> shift
-	block[10] = (a8 - a9 + adjust) >> shift
-	block[14] = (a10 - a11 + adjust) >> shift
-	block[3] = (a12 + a13 + adjust) >> shift
-	block[7] = (a14 + a15 + adjust) >> shift
-	block[11] = (a12 - a13 + adjust) >> shift
-	block[15] = (a14 - a15 + adjust) >> shift
+	output[0] = (a0 + a1 + adjust) >> shift
+	output[4] = (a2 + a3 + adjust) >> shift
+	output[8] = (a0 - a1 + adjust) >> shift
+	output[12] = (a2 - a3 + adjust) >> shift
+	output[1] = (a4 + a5 + adjust) >> shift
+	output[5] = (a6 + a7 + adjust) >> shift
+	output[9] = (a4 - a5 + adjust) >> shift
+	output[13] = (a6 - a7 + adjust) >> shift
+	output[2] = (a8 + a9 + adjust) >> shift
+	output[6] = (a10 + a11 + adjust) >> shift
+	output[10] = (a8 - a9 + adjust) >> shift
+	output[14] = (a10 - a11 + adjust) >> shift
+	output[3] = (a12 + a13 + adjust) >> shift
+	output[7] = (a14 + a15 + adjust) >> shift
+	output[11] = (a12 - a13 + adjust) >> shift
+	output[15] = (a14 - a15 + adjust) >> shift
 
-	return block
+	return 16, 16, nil
 }
 
 // The transform is symmetric (except, potentially, for scaling)
-func (this *WHT4) Inverse(block []int) []int {
-	return this.compute(block, this.iScale)
+func (this *WHT4) Inverse(src, dst []int) (uint, uint, error) {
+	return this.compute(src, dst, this.iScale)
 }

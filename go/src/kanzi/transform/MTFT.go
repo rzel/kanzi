@@ -52,29 +52,29 @@ func (this *MTFT) SetSize(sz uint) bool {
 	return true
 }
 
-func (this *MTFT) Inverse(input []byte) []byte {
+func (this *MTFT) Inverse(src, dst []byte) (uint, uint, error) {
 	indexes := this.buckets
 
 	for i := range indexes {
 		indexes[i] = byte(i)
 	}
 
-	end := int(this.size)
+	count := int(this.size)
 
-	if end == 0 {
-		end = len(input)
+	if count == 0 {
+		count = len(src)
 	}
 
-	for i := 0; i < end; i++ {
-		idx := input[i]
+	for i := 0; i < count; i++ {
+		idx := src[i]
 
 		if idx == 0 {
-			input[i] = indexes[0]
+			dst[i] = indexes[0]
 			continue
 		}
 
 		value := indexes[idx]
-		input[i] = value
+		dst[i] = value
 
 		if idx < 16 {
 			for j := int(idx - 1); j >= 0; j-- {
@@ -87,7 +87,7 @@ func (this *MTFT) Inverse(input []byte) []byte {
 		indexes[0] = value
 	}
 
-	return input
+	return uint(count), uint(count), nil
 }
 
 // Initialize the linked lists: 1 item in bucket 0 and LIST_LENGTH in each other
@@ -150,26 +150,26 @@ func (this *MTFT) balanceLists(resetValues bool) {
 	}
 }
 
-func (this *MTFT) Forward(input []byte) []byte {
+func (this *MTFT) Forward(src, dst []byte) (uint, uint, error) {
 	if this.anchor == nil {
 		this.initLists()
 	} else {
 		this.balanceLists(true)
 	}
 
-	end := int(this.size)
+	count := int(this.size)
 
-	if end == 0 {
-		end = len(input)
+	if count == 0 {
+		count = len(src)
 	}
 
 	previous := this.heads[0].value
 
-	for ii := 0; ii < end; ii++ {
-		current := input[ii]
+	for ii := 0; ii < count; ii++ {
+		current := src[ii]
 
 		if current == previous {
-			input[ii] = byte(0)
+			dst[ii] = byte(0)
 			continue
 		}
 
@@ -188,7 +188,7 @@ func (this *MTFT) Forward(input []byte) []byte {
 			idx++
 		}
 
-		input[ii] = byte(idx)
+		dst[ii] = byte(idx)
 
 		// Unlink (the end anchor ensures p.next != nil)
 		p.previous.next = p.next
@@ -218,5 +218,5 @@ func (this *MTFT) Forward(input []byte) []byte {
 		previous = current
 	}
 
-	return input
+	return uint(count), uint(count), nil
 }

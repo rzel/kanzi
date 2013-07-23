@@ -16,9 +16,9 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"kanzi"
 	"kanzi/transform"
-	"fmt"
 	"math/rand"
 	"time"
 )
@@ -102,8 +102,10 @@ func main() {
 		dim := 4 << uint(dimIdx)
 		fmt.Printf("\n\nDimension %v", dim)
 		blockSize := dim * dim
-		data1 := make([]int, blockSize)
-		data2 := make([]int, blockSize)
+		data1 := make([]int, blockSize+20)
+		data2 := make([]int, blockSize+20)
+		data3 := make([]int, blockSize+20)
+		var data []int
 
 		for nn := 0; nn < 20; nn++ {
 			fmt.Printf("\nInput %v: ", nn)
@@ -116,23 +118,33 @@ func main() {
 				}
 
 				data2[i] = data1[i]
-				fmt.Printf("%v  ", data1[i])
-			}
-
-			dcts[dimIdx].Forward(data1)
-			fmt.Printf("\nOutput: ")
-
-			for i := 0; i < blockSize; i++ {
 				fmt.Printf("%v ", data1[i])
+
 			}
 
-			dcts[dimIdx].Inverse(data1)
+			copy(data3, data1)
+			fmt.Printf("\nOutput: ")
+			start := (nn & 1) * nn
+
+			if nn <= 10 {
+				data = data1
+			} else {
+				data = data2
+			}
+
+			dcts[dimIdx].Forward(data1, data[start:])
+
+			for i := start; i < start+blockSize; i++ {
+				fmt.Printf("%v ", data[i])
+			}
+
+			dcts[dimIdx].Inverse(data[start:], data2)
 			fmt.Printf("\nResult: ")
 
 			for i := 0; i < blockSize; i++ {
-				fmt.Printf("%v", data1[i])
+				fmt.Printf("%v ", data2[i])
 
-				if data1[i] != data2[i] {
+				if data3[i] != data2[i] {
 					fmt.Printf("! ")
 				} else {
 					fmt.Printf("= ")
@@ -162,11 +174,11 @@ func main() {
 
 		for i := 0; i < iter; i++ {
 			before := time.Now()
-			dct8.Forward(data[i%100])
+			dct8.Forward(data[i%100], data[i%100])
 			after := time.Now()
 			delta1 += after.Sub(before).Nanoseconds()
 			before = time.Now()
-			dct8.Inverse(data[i%100])
+			dct8.Inverse(data[i%100], data[i%100])
 			after = time.Now()
 			delta2 += after.Sub(before).Nanoseconds()
 		}

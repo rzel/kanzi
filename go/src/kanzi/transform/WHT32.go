@@ -42,55 +42,54 @@ func NewWHT32(scale bool) (*WHT32, error) {
 // For perfect reconstruction, forward results are scaled by 16*sqrt(2) unless
 // the parameter is set to false (scaled by sqrt(2), in which case rounding
 // may introduce errors)
-func (this *WHT32) Forward(block []int) []int {
-	return this.compute(block, this.fScale)
+func (this *WHT32) Forward(src, dst []int) (uint, uint, error) {
+	return this.compute(src, dst, this.fScale)
 }
 
-func (this *WHT32) compute(block []int, shift uint) []int {
-	this.processRows(block)
-	this.processColumns(block, shift)
-	return block
+func (this *WHT32) compute(input, output []int, shift uint) (uint, uint, error) {
+	processRows(input, this.data)
+	processColumns(this.data, output, shift)
+	return 1024, 1024, nil
 }
 
-func (this *WHT32) processRows(block []int) {
+func processRows(input, buffer []int) {
 	dataptr := 0
-	buffer := this.data // alias
 
 	// Pass 1: process rows.
 	for i := 0; i < 1024; i += 32 {
 		// Aliasing for speed
-		x0 := block[i]
-		x1 := block[i+1]
-		x2 := block[i+2]
-		x3 := block[i+3]
-		x4 := block[i+4]
-		x5 := block[i+5]
-		x6 := block[i+6]
-		x7 := block[i+7]
-		x8 := block[i+8]
-		x9 := block[i+9]
-		x10 := block[i+10]
-		x11 := block[i+11]
-		x12 := block[i+12]
-		x13 := block[i+13]
-		x14 := block[i+14]
-		x15 := block[i+15]
-		x16 := block[i+16]
-		x17 := block[i+17]
-		x18 := block[i+18]
-		x19 := block[i+19]
-		x20 := block[i+20]
-		x21 := block[i+21]
-		x22 := block[i+22]
-		x23 := block[i+23]
-		x24 := block[i+24]
-		x25 := block[i+25]
-		x26 := block[i+26]
-		x27 := block[i+27]
-		x28 := block[i+28]
-		x29 := block[i+29]
-		x30 := block[i+30]
-		x31 := block[i+31]
+		x0 := input[i]
+		x1 := input[i+1]
+		x2 := input[i+2]
+		x3 := input[i+3]
+		x4 := input[i+4]
+		x5 := input[i+5]
+		x6 := input[i+6]
+		x7 := input[i+7]
+		x8 := input[i+8]
+		x9 := input[i+9]
+		x10 := input[i+10]
+		x11 := input[i+11]
+		x12 := input[i+12]
+		x13 := input[i+13]
+		x14 := input[i+14]
+		x15 := input[i+15]
+		x16 := input[i+16]
+		x17 := input[i+17]
+		x18 := input[i+18]
+		x19 := input[i+19]
+		x20 := input[i+20]
+		x21 := input[i+21]
+		x22 := input[i+22]
+		x23 := input[i+23]
+		x24 := input[i+24]
+		x25 := input[i+25]
+		x26 := input[i+26]
+		x27 := input[i+27]
+		x28 := input[i+28]
+		x29 := input[i+29]
+		x30 := input[i+30]
+		x31 := input[i+31]
 
 		a0 := x0 + x1
 		a1 := x2 + x3
@@ -261,9 +260,8 @@ func (this *WHT32) processRows(block []int) {
 	}
 }
 
-func (this *WHT32) processColumns(block []int, shift uint) {
+func processColumns(buffer, output []int, shift uint) {
 	dataptr := 0
-	buffer := this.data // alias
 	adjust := (1 << shift) >> 1
 
 	// Pass 2: process columns.
@@ -434,44 +432,44 @@ func (this *WHT32) processColumns(block []int, shift uint) {
 		b30 = a28 - a29
 		b31 = a30 - a31
 
-		block[i] = (b0 + b1 + adjust) >> shift
-		block[i+32] = (b2 + b3 + adjust) >> shift
-		block[i+64] = (b4 + b5 + adjust) >> shift
-		block[i+96] = (b6 + b7 + adjust) >> shift
-		block[i+128] = (b8 + b9 + adjust) >> shift
-		block[i+160] = (b10 + b11 + adjust) >> shift
-		block[i+192] = (b12 + b13 + adjust) >> shift
-		block[i+224] = (b14 + b15 + adjust) >> shift
-		block[i+256] = (b16 + b17 + adjust) >> shift
-		block[i+288] = (b18 + b19 + adjust) >> shift
-		block[i+320] = (b20 + b21 + adjust) >> shift
-		block[i+352] = (b22 + b23 + adjust) >> shift
-		block[i+384] = (b24 + b25 + adjust) >> shift
-		block[i+416] = (b26 + b27 + adjust) >> shift
-		block[i+448] = (b28 + b29 + adjust) >> shift
-		block[i+480] = (b30 + b31 + adjust) >> shift
-		block[i+512] = (b0 - b1 + adjust) >> shift
-		block[i+544] = (b2 - b3 + adjust) >> shift
-		block[i+576] = (b4 - b5 + adjust) >> shift
-		block[i+608] = (b6 - b7 + adjust) >> shift
-		block[i+640] = (b8 - b9 + adjust) >> shift
-		block[i+672] = (b10 - b11 + adjust) >> shift
-		block[i+704] = (b12 - b13 + adjust) >> shift
-		block[i+736] = (b14 - b15 + adjust) >> shift
-		block[i+768] = (b16 - b17 + adjust) >> shift
-		block[i+800] = (b18 - b19 + adjust) >> shift
-		block[i+832] = (b20 - b21 + adjust) >> shift
-		block[i+864] = (b22 - b23 + adjust) >> shift
-		block[i+896] = (b24 - b25 + adjust) >> shift
-		block[i+928] = (b26 - b27 + adjust) >> shift
-		block[i+960] = (b28 - b29 + adjust) >> shift
-		block[i+992] = (b30 - b31 + adjust) >> shift
+		output[i] = (b0 + b1 + adjust) >> shift
+		output[i+32] = (b2 + b3 + adjust) >> shift
+		output[i+64] = (b4 + b5 + adjust) >> shift
+		output[i+96] = (b6 + b7 + adjust) >> shift
+		output[i+128] = (b8 + b9 + adjust) >> shift
+		output[i+160] = (b10 + b11 + adjust) >> shift
+		output[i+192] = (b12 + b13 + adjust) >> shift
+		output[i+224] = (b14 + b15 + adjust) >> shift
+		output[i+256] = (b16 + b17 + adjust) >> shift
+		output[i+288] = (b18 + b19 + adjust) >> shift
+		output[i+320] = (b20 + b21 + adjust) >> shift
+		output[i+352] = (b22 + b23 + adjust) >> shift
+		output[i+384] = (b24 + b25 + adjust) >> shift
+		output[i+416] = (b26 + b27 + adjust) >> shift
+		output[i+448] = (b28 + b29 + adjust) >> shift
+		output[i+480] = (b30 + b31 + adjust) >> shift
+		output[i+512] = (b0 - b1 + adjust) >> shift
+		output[i+544] = (b2 - b3 + adjust) >> shift
+		output[i+576] = (b4 - b5 + adjust) >> shift
+		output[i+608] = (b6 - b7 + adjust) >> shift
+		output[i+640] = (b8 - b9 + adjust) >> shift
+		output[i+672] = (b10 - b11 + adjust) >> shift
+		output[i+704] = (b12 - b13 + adjust) >> shift
+		output[i+736] = (b14 - b15 + adjust) >> shift
+		output[i+768] = (b16 - b17 + adjust) >> shift
+		output[i+800] = (b18 - b19 + adjust) >> shift
+		output[i+832] = (b20 - b21 + adjust) >> shift
+		output[i+864] = (b22 - b23 + adjust) >> shift
+		output[i+896] = (b24 - b25 + adjust) >> shift
+		output[i+928] = (b26 - b27 + adjust) >> shift
+		output[i+960] = (b28 - b29 + adjust) >> shift
+		output[i+992] = (b30 - b31 + adjust) >> shift
 
 		dataptr++
 	}
 }
 
 // The transform is symmetric (except, potentially, for scaling)
-func (this *WHT32) Inverse(block []int) []int {
-	return this.compute(block, this.iScale)
+func (this *WHT32) Inverse(src, dst []int) (uint, uint, error) {
+	return this.compute(src, dst, this.iScale)
 }

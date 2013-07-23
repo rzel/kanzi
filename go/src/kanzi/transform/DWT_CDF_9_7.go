@@ -17,19 +17,22 @@ package transform
 
 import (
 	"errors"
+	"kanzi"
 )
 
 // Discrete Wavelet Transform Cohen-Daubechies-Fauveau 9/7 for 2D signals
 const (
-	SHIFT  = 12
-	ADJUST = 1 << (SHIFT - 1)
+	SHIFT_12  = 12
+	ADJUST_12 = 1 << (SHIFT_12 - 1)
+	SHIFT_11  = 11
+	ADJUST_11 = 1 << (SHIFT_11 - 1)
 
-	PREDICT_1 = 6497 // with SHIFT = 12
-	UPDATE_1  = 217  // with SHIFT = 12
-	PREDICT_2 = 3616 // with SHIFT = 12
-	UPDATE_2  = 1817 // with SHIFT = 12
-	SCALING_1 = 4709 // with SHIFT = 12
-	SCALING_2 = 3562 // with SHIFT = 12
+	PREDICT1 = 6497 // with SHIFT = 12
+	UPDATE1  = 217  // with SHIFT = 12
+	PREDICT2 = 3616 // with SHIFT = 12
+	UPDATE2  = 1817 // with SHIFT = 12
+	SCALING1 = 4709 // with SHIFT = 12
+	SCALING2 = 3562 // with SHIFT = 12
 )
 
 type DWT_CDF_9_7 struct {
@@ -64,84 +67,92 @@ func NewDWT(width, height, steps uint) (*DWT_CDF_9_7, error) {
 
 	this := new(DWT_CDF_9_7)
 	this.data = make([]int, width*height)
+	this.width = width
+	this.height = height
+	this.steps = steps
 	return this, nil
 }
 
-func (this *DWT_CDF_9_7) Forward(block []int) []int {
-	for i := uint(0); i < this.steps; i++ {
-		// First, vertical transform
-		block = this.ComputeForward(block, this.width, 1, this.width>>i, this.height>>i)
-
-		// Then horizontal transform on the updated signal
-		block = this.ComputeForward(block, 1, this.width, this.height>>i, this.width>>i)
+func (this *DWT_CDF_9_7) Forward(src, dst []int) (uint, uint, error) {
+	if len(src) < int(this.width*this.height) {
+		return 0, 0, errors.New("The input buffer is too small")
+	}
+	
+	if len(dst) < int(this.width*this.height) {
+		return 0, 0, errors.New("The output buffer is too small")
+	}
+	
+	if kanzi.SameIntSlices(src, dst, false) == false {
+		copy(dst, src)
 	}
 
-	return block
+	for i := uint(0); i < this.steps; i++ {
+		// First, vertical transform
+		this.computeForward(dst, this.width, 1, this.width>>i, this.height>>i)
+
+		// Then horizontal transform on the updated signal
+		this.computeForward(dst, 1, this.width, this.height>>i, this.width>>i)
+	}
+
+	return this.width * this.height, this.width * this.height, nil
 }
 
-func (this *DWT_CDF_9_7) ComputeForward(block []int, stride, inc, dim1, dim2 uint) []int {
+func (this *DWT_CDF_9_7) computeForward(block []int, stride, inc, dim1, dim2 uint) {
 	stride2 := stride << 1
 	endOffs := dim1 * inc
 	half := stride * (dim2 >> 1)
 
 	for offset := uint(0); offset < endOffs; offset += inc {
 		end := offset + (dim2-2)*stride
-		tmp := int64(0)
 		prev := block[offset]
 
 		// First lifting stage : Predict 1
 		for i := offset + stride; i < end; i += stride2 {
 			next := block[i+stride]
-			tmp = int64(PREDICT_1 * (prev + next))
-			block[i] -= int((tmp + ADJUST) >> SHIFT)
+			val := ((PREDICT1 * (prev + next)) + ADJUST_12) >> SHIFT_12
+			block[i] -= val
 			prev = next
 		}
 
-		tmp = int64(PREDICT_1 * block[end])
-		block[end+stride] -= int(((tmp + tmp) + ADJUST) >> SHIFT)
+		block[end+stride] -= (((PREDICT1 * block[end]) + ADJUST_11) >> SHIFT_11)
 		prev = block[offset+stride]
 
 		// Second lifting stage : Update 1
 		for i := offset + stride2; i <= end; i += stride2 {
 			next := block[i+stride]
-			tmp = int64(UPDATE_1 * (prev + next))
-			block[i] -= int((tmp + ADJUST) >> SHIFT)
+			val := ((UPDATE1 * (prev + next)) + ADJUST_12) >> SHIFT_12
+			block[i] -= val
 			prev = next
 		}
 
-		tmp = int64(UPDATE_1 * block[offset+stride])
-		block[offset] -= int(((tmp + tmp) + ADJUST) >> SHIFT)
+		block[offset] -= (((UPDATE1 * block[offset+stride]) + ADJUST_11) >> SHIFT_11)
 		prev = block[offset]
 
 		// Third lifting stage : Predict 2
 		for i := offset + stride; i < end; i += stride2 {
 			next := block[i+stride]
-			tmp = int64(PREDICT_2 * (prev + next))
-			block[i] += int((tmp + ADJUST) >> SHIFT)
+			val := ((PREDICT2 * (prev + next)) + ADJUST_12) >> SHIFT_12
+			block[i] += val
 			prev = next
 		}
 
-		tmp = int64(PREDICT_2 * block[end])
-		block[end+stride] += int(((tmp + tmp) + ADJUST) >> SHIFT)
+		block[end+stride] += (((PREDICT2 * block[end]) + ADJUST_11) >> SHIFT_11)
 		prev = block[offset+stride]
 
 		// Fourth lifting stage : Update 2
 		for i := offset + stride2; i <= end; i += stride2 {
 			next := block[i+stride]
-			tmp = int64(UPDATE_2 * (prev + next))
-			block[i] += int((tmp + ADJUST) >> SHIFT)
+			val := ((UPDATE2 * (prev + next)) + ADJUST_12) >> SHIFT_12
+			block[i] += val
 			prev = next
 		}
 
-		tmp = int64(UPDATE_2 * block[offset+stride])
-		block[offset] += int(((tmp + tmp) + ADJUST) >> SHIFT)
+		block[offset] += (((UPDATE2 * block[offset+stride]) + ADJUST_11) >> SHIFT_11)
 
 		// Scale
 		for i := offset; i <= end; i += stride2 {
-			tmp = int64(block[i] * SCALING_1)
-			block[i] = int((tmp + ADJUST) >> SHIFT)
-			tmp = int64(block[i+stride] * SCALING_2)
-			block[i+stride] = int((tmp + ADJUST) >> SHIFT)
+			block[i] = ((block[i] * SCALING1) + ADJUST_12) >> SHIFT_12
+			block[i+stride] = ((block[i+stride] * SCALING2) + ADJUST_12) >> SHIFT_12
 		}
 
 		// De-interleave sub-bands
@@ -161,22 +172,41 @@ func (this *DWT_CDF_9_7) ComputeForward(block []int, stride, inc, dim1, dim2 uin
 		}
 	}
 
-	return block
 }
 
-func (this *DWT_CDF_9_7) Inverse(block []int) []int {
-	for i := this.steps - 1; i >= 0; i-- {
-		// First horizontal transform
-		block = this.ComputeInverse(block, 1, this.width, this.height>>i, this.width>>i)
-
-		// Then vertical transform on the updated signal
-		block = this.ComputeInverse(block, this.width, 1, this.width>>i, this.height>>i)
+func (this *DWT_CDF_9_7) Inverse(src, dst []int) (uint, uint, error) {
+	if len(src) < int(this.width*this.height) {
+		return 0, 0, errors.New("The input buffer is too small")
+	}
+	
+	if len(dst) < int(this.width*this.height) {
+		return 0, 0, errors.New("The output buffer is too small")
+	}
+	
+	if kanzi.SameIntSlices(src, dst, false) == false {
+		copy(dst, src)
 	}
 
-	return block
+	i := this.steps - 1
+
+	for {
+		// First horizontal transform
+		this.computeInverse(dst, 1, this.width, this.height>>i, this.width>>i)
+
+		// Then vertical transform on the updated signal
+		this.computeInverse(dst, this.width, 1, this.width>>i, this.height>>i)
+
+		if i == 0 {
+			break
+		}
+
+		i--
+	}
+
+	return this.width * this.height, this.width * this.height, nil
 }
 
-func (this *DWT_CDF_9_7) ComputeInverse(block []int, stride, inc, dim1, dim2 uint) []int {
+func (this *DWT_CDF_9_7) computeInverse(block []int, stride, inc, dim1, dim2 uint) {
 	stride2 := stride << 1
 	endOffs := dim1 * inc
 	half := stride * (dim2 >> 1)
@@ -184,7 +214,6 @@ func (this *DWT_CDF_9_7) ComputeInverse(block []int, stride, inc, dim1, dim2 uin
 	for offset := uint(0); offset < endOffs; offset += inc {
 		end := offset + (dim2-2)*stride
 		endj := offset + half
-		tmp := int64(0)
 
 		// Interleave sub-bands
 		for i := offset; i <= end; i += stride {
@@ -202,10 +231,8 @@ func (this *DWT_CDF_9_7) ComputeInverse(block []int, stride, inc, dim1, dim2 uin
 
 		// Reverse scale
 		for i := offset; i <= end; i += stride2 {
-			tmp = int64(block[i] * SCALING_2)
-			block[i] = int((tmp + ADJUST) >> SHIFT)
-			tmp = int64(block[i+stride] * SCALING_1)
-			block[i+stride] = int((tmp + ADJUST) >> SHIFT)
+			block[i] = ((block[i] * SCALING2) + ADJUST_12) >> SHIFT_12
+			block[i+stride] = ((block[i+stride] * SCALING1) + ADJUST_12) >> SHIFT_12
 		}
 
 		// Reverse Update 2
@@ -213,50 +240,44 @@ func (this *DWT_CDF_9_7) ComputeInverse(block []int, stride, inc, dim1, dim2 uin
 
 		for i := offset + stride2; i <= end; i += stride2 {
 			next := block[i+stride]
-			tmp = int64(UPDATE_2 * (prev + next))
-			block[i] -= int((tmp + ADJUST) >> SHIFT)
+			val := ((UPDATE2 * (prev + next)) + ADJUST_12) >> SHIFT_12
+			block[i] -= val
 			prev = next
 		}
 
-		tmp = int64(UPDATE_2 * block[offset+stride])
-		block[offset] -= int(((tmp + tmp) + ADJUST) >> SHIFT)
+		block[offset] -= (((UPDATE2 * block[offset+stride]) + ADJUST_11) >> SHIFT_11)
 		prev = block[offset]
 
 		// Reverse Predict 2
 		for i := offset + stride; i < end; i += stride2 {
 			next := block[i+stride]
-			tmp = int64(PREDICT_2 * (prev + next))
-			block[i] -= int((tmp + ADJUST) >> SHIFT)
+			val := ((PREDICT2 * (prev + next)) + ADJUST_12) >> SHIFT_12
+			block[i] -= val
 			prev = next
 		}
 
-		tmp = int64(PREDICT_2 * block[end])
-		block[end+stride] -= int(((tmp + tmp) + ADJUST) >> SHIFT)
+		block[end+stride] -= (((PREDICT2 * block[end]) + ADJUST_11) >> SHIFT_11)
 		prev = block[offset+stride]
 
 		// Reverse Update 1
 		for i := offset + stride2; i <= end; i += stride2 {
 			next := block[i+stride]
-			tmp = int64(UPDATE_1 * (prev + next))
-			block[i] += int((tmp + ADJUST) >> SHIFT)
+			val := ((UPDATE1 * (prev + next)) + ADJUST_12) >> SHIFT_12
+			block[i] += val
 			prev = next
 		}
 
-		tmp = int64(UPDATE_1 * block[offset+stride])
-		block[offset] += int(((tmp + tmp) + ADJUST) >> SHIFT)
+		block[offset] += (((UPDATE1 * block[offset+stride]) + ADJUST_11) >> SHIFT_11)
 		prev = block[offset]
 
 		// Reverse Predict 1
 		for i := offset + stride; i < end; i += stride2 {
 			next := block[i+stride]
-			tmp = int64(PREDICT_1 * (prev + next))
-			block[i] += int((tmp + ADJUST) >> SHIFT)
+			val := ((PREDICT1 * (prev + next)) + ADJUST_12) >> SHIFT_12
+			block[i] += val
 			prev = next
 		}
 
-		tmp = int64(PREDICT_1 * block[end])
-		block[end+stride] += int(((tmp + tmp) + ADJUST) >> SHIFT)
+		block[end+stride] += (((PREDICT1 * block[end]) + ADJUST_11) >> SHIFT_11)
 	}
-
-	return block
 }

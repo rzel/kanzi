@@ -63,21 +63,17 @@ func NewDCT8() (*DCT8, error) {
 	return this, nil
 }
 
-func (this *DCT8) Forward(block []int) []int {
-	this.computeForward(block, this.data, 5)
-	this.computeForward(this.data, block, this.fShift-5)
-	return block
+func (this *DCT8) Forward(src, dst []int) (uint, uint, error) {
+	computeForward8(src, this.data, 5)
+	computeForward8(this.data, dst, this.fShift-5)
+	return 64, 64, nil
 }
 
-func (this *DCT8) computeForward(input []int, output []int, shift uint) []int {
+func computeForward8(input, output []int, shift uint) {
 	iIdx := 0
-	round := 0
+	round := (1 << shift) >> 1
 
-	if shift != 0 {
-		round = 1 << (shift - 1)
-	}
-
-	for i := uint(0); i < 8; i++ {
+	for i := 0; i < 8; i++ {
 		x0 := input[iIdx]
 		x1 := input[iIdx+1]
 		x2 := input[iIdx+2]
@@ -112,25 +108,19 @@ func (this *DCT8) computeForward(input []int, output []int, shift uint) []int {
 
 		iIdx += 8
 	}
-
-	return output
 }
 
-func (this *DCT8) Inverse(block []int) []int {
-	this.computeInverse(block, this.data, 10)
-	this.computeInverse(this.data, block, this.iShift-10)
-	return block
+func (this *DCT8) Inverse(src, dst []int) (uint, uint, error) {
+	computeInverse8(src, this.data, 10)
+	computeInverse8(this.data, dst, this.iShift-10)
+	return 64, 64, nil
 }
 
-func (this *DCT8) computeInverse(input []int, output []int, shift uint) []int {
+func computeInverse8(input []int, output []int, shift uint) {
 	oIdx := 0
-	round := 0
+	round := (1 << shift) >> 1
 
-	if shift != 0 {
-		round = 1 << (shift - 1)
-	}
-
-	for i := uint(0); i < 8; i++ {
+	for i := 0; i < 8; i++ {
 		x0 := input[i]
 		x1 := input[i+8]
 		x2 := input[i+16]
@@ -174,6 +164,4 @@ func (this *DCT8) computeInverse(input []int, output []int, shift uint) []int {
 
 		oIdx += 8
 	}
-
-	return output
 }

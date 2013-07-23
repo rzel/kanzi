@@ -17,6 +17,7 @@ package kanzi.transform;
 
 
 import kanzi.ByteTransform;
+import kanzi.IndexedByteArray;
 
 // The Move-To-Front Transform is a simple reversible transform based on
 // permutation of the data in the original message to reduce the entropy.
@@ -54,28 +55,32 @@ public final class MTFT implements ByteTransform
 
 
     @Override
-    public byte[] inverse(byte[] input, int blkptr)
+    public boolean inverse(IndexedByteArray src, IndexedByteArray dst)
     {
         final byte[] indexes = this.buckets;
 
         for (int i=0; i<indexes.length; i++)
             indexes[i] = (byte) i;
 
-        final int end = (this.size == 0) ? input.length : blkptr + this.size;
+        final byte[] input = src.array;
+        final byte[] output = dst.array;
+        int srcIdx = src.index;
+        int dstIdx = dst.index;
+        final int count = (this.size == 0) ? input.length - srcIdx : this.size;
 
-        for (int i=blkptr; i<end; i++)
+        for (int i=0; i<count; i++)
         {
-           final int idx = input[i] & 0xFF;
+           final int idx = input[srcIdx+i] & 0xFF;
            
            if (idx == 0)
            {
               // Shortcut
-              input[i] = indexes[0];
+              output[dstIdx+i] = indexes[0];
               continue;
            }
            
            final byte value = indexes[idx];
-           input[i] = value;
+           output[dstIdx+i] = value;
 
            if (idx < 16)
            {
@@ -90,7 +95,9 @@ public final class MTFT implements ByteTransform
            indexes[0] = value;
         }
 
-        return input;
+        src.index += count;
+        dst.index += count;
+        return true;
     }
 
 
@@ -179,23 +186,27 @@ public final class MTFT implements ByteTransform
 
 
     @Override
-    public byte[] forward(byte[] input, int blkptr)
+    public boolean forward(IndexedByteArray src, IndexedByteArray dst)
     {
         if (this.anchor == null)
            this.initLists();
         else
            this.balanceLists(true);
         
-       final int end = (this.size == 0) ? input.length : blkptr + this.size;
+       final byte[] input = src.array;
+       final byte[] output = dst.array;
+       final int srcIdx = src.index;
+       final int dstIdx = dst.index;
+       final int count = (this.size == 0) ? input.length - srcIdx :  this.size;
        byte previous = this.heads[0].value;
 
-       for (int ii=blkptr; ii<end; ii++)
+       for (int i=0; i<count; i++)
        {
-          final byte current = input[ii];
+          final byte current = input[srcIdx+i];
 
           if (current == previous)
           {
-             input[ii] = 0;
+             output[dstIdx+i] = 0;
              continue;
           }
 
@@ -204,8 +215,8 @@ public final class MTFT implements ByteTransform
           Payload p = this.heads[listIdx];
           int idx = 0;
 
-          for (int i=0; i<listIdx; i++)
-             idx += this.lengths[i];
+          for (int ii=0; ii<listIdx; ii++)
+             idx += this.lengths[ii];
           
           // Find index in list (less than RESET_THRESHOLD iterations)
           while (p.value != current)
@@ -214,7 +225,7 @@ public final class MTFT implements ByteTransform
              idx++;
           }
 
-          input[ii] = (byte) idx;
+          output[dstIdx+i] = (byte) idx;
 
           // Unlink (the end anchor ensures p.next != null)
           p.previous.next = p.next;
@@ -242,8 +253,10 @@ public final class MTFT implements ByteTransform
 
           previous = current;
        }
-
-       return input;
+       
+       src.index += count;
+       dst.index += count;
+       return true;
     }
 
 

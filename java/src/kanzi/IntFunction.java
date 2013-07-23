@@ -16,23 +16,10 @@ limitations under the License.
 package kanzi;
 
 
-// An integer function is an operation that takes an array of integers as input and
-// and turns it into another array of integers. The size of the returned array 
-// is not known in advance (by the caller).
-public interface IntFunction
+// An integer function is an operation that transforms the input int array and writes
+// the result in the output int array. The result may have a different size.
+// The function may fail if input and output array are the same array.
+// The index of input and output arrays are updated appropriately.
+public interface IntFunction extends IntTransform
 {
-   // Indexed arrays are required rather than just arrays and indexes
-   // Since the number of integers in input and output of the transform may differ
-   // the arrays may not be big enough and the number of processed integers may
-   // vary. The indexes in the indexed array instance can be updated to reflect
-   // this fact.
-   public boolean forward(IndexedIntArray src, IndexedIntArray dst);
-
-
-   // Indexed arrays are required rather than just arrays and indexes
-   // Since the number of integers in input and output of the transform may differ
-   // the arrays may not be big enough and the number of processed integers may
-   // vary. The indexes in the indexed array instance can be updated to reflect
-   // this fact.
-   public boolean inverse(IndexedIntArray src, IndexedIntArray dst);
 }

@@ -16,6 +16,7 @@ limitations under the License.
 package kanzi.transform;
 
 import kanzi.ByteTransform;
+import kanzi.IndexedByteArray;
 import kanzi.IndexedIntArray;
 
 
@@ -68,7 +69,7 @@ import kanzi.IndexedIntArray;
 public class BWT implements ByteTransform
 {
     private int size;
-    private int[] data;
+    private int[] buffer2;
     private int[] buffer1;
     private int[] buckets;
     private int primaryIndex;
@@ -87,7 +88,7 @@ public class BWT implements ByteTransform
           throw new IllegalArgumentException("Invalid size parameter (must be at least 0)");
 
        this.size = size;
-       this.data = new int[size];
+       this.buffer2 = new int[size];
        this.buffer1 = new int[size];
        this.buckets = new int[256];
     }
@@ -128,56 +129,76 @@ public class BWT implements ByteTransform
 
     // Not thread safe
     @Override
-    public byte[] forward(byte[] input, int blkptr)
+    public boolean forward(IndexedByteArray src, IndexedByteArray dst)
     {
-        final int len = (this.size == 0) ? input.length - blkptr : this.size;
+        final byte[] input = src.array;
+        final byte[] output = dst.array;
+        final int srcIdx = src.index;
+        final int dstIdx = dst.index;
+        final int count = (this.size == 0) ? input.length - srcIdx :  this.size;
 
-        if (len < 2)
-           return input;
+        if (count < 2)
+        {
+           if (count == 1)
+              output[dst.index++] = input[src.index++];
 
-        if (this.data.length < len)
-           this.data = new int[len];
+           return true;
+        }
 
-        if (this.buffer1.length < len)
-           this.buffer1 = new int[len];
+       // Lazy dynamic memory allocation
+        if (this.buffer2.length < count)
+           this.buffer2 = new int[count];
+
+       // Lazy dynamic memory allocation
+        if (this.buffer1.length < count)
+           this.buffer1 = new int[count];
         
-        final int[] data_ = this.data;
+        final int[] data_ = this.buffer2;
         
-        for (int i=0; i<len; i++)
-           data_[i] = input[blkptr+i] & 0xFF;
+        for (int i=0; i<count; i++)
+           data_[i] = input[srcIdx+i] & 0xFF;
 
         // Suffix array
         final int[] sa = this.buffer1;
-        final int pIdx = computeSuffixArray(new IndexedIntArray(this.data, 0), sa, 0, len, 256, true);
-        input[blkptr] = (byte) this.data[len-1];
+        final int pIdx = computeSuffixArray(new IndexedIntArray(this.buffer2, 0), sa, 0, count, 256, true);
+        output[dstIdx] = (byte) this.buffer2[count-1];
 
         for (int i=0; i<pIdx; i++)
-           input[blkptr+i+1] = (byte) sa[i];
+           output[dstIdx+i+1] = (byte) sa[i];
 
-        for (int i=pIdx+1; i<len; i++)
-           input[blkptr+i] = (byte) sa[i];
+        for (int i=pIdx+1; i<count; i++)
+           output[dstIdx+i] = (byte) sa[i];
 
         this.setPrimaryIndex(pIdx);
-        return input;
+        return true;
     }
 
 
     // Not thread safe
     @Override
-    public byte[] inverse(byte[] input, int blkptr)
+    public boolean inverse(IndexedByteArray src, IndexedByteArray dst)
     {
-       final int len = (this.size != 0) ? this.size : input.length - blkptr;
+       final byte[] input = src.array;
+       final byte[] output = dst.array;
+       final int srcIdx = src.index;
+       final int dstIdx = dst.index;
+       final int count = (this.size == 0) ? input.length - srcIdx :  this.size;
 
-       if (len < 2)
-          return input;
+       if (count < 2)
+       {
+          if (count == 1)
+             output[dst.index++] = input[src.index++];
 
-       // Dynamic memory allocation
-       if (this.data.length < len)
-          this.data = new int[len];
+          return true;
+       }
+       
+       // Lazy dynamic memory allocation
+       if (this.buffer2.length < count)
+          this.buffer2 = new int[count];
 
        // Aliasing
        final int[] buckets_ = this.buckets;
-       final int[] data_ = this.data;
+       final int[] data_ = this.buffer2;
        
        // Create histogram
        for (int i=0; i<256; i++)
@@ -186,20 +207,20 @@ public class BWT implements ByteTransform
        // Build array of packed index + value (assumes block size < 2^24)
        // Start with the primary index position
        final int pIdx = this.getPrimaryIndex();
-       int val = input[blkptr] & 0xFF;
+       int val = input[srcIdx] & 0xFF;
        data_[pIdx] = (buckets_[val] << 8) | val;
        buckets_[val]++;
        
        for (int i=0; i<pIdx; i++)
        {
-          val = input[blkptr+i+1] & 0xFF;
+          val = input[srcIdx+i+1] & 0xFF;
           data_[i] = (buckets_[val] << 8) | val;
           buckets_[val]++;
        }
        
-       for (int i=pIdx+1; i<len; i++)
+       for (int i=pIdx+1; i<count; i++)
        {
-          val = input[blkptr+i] & 0xFF;
+          val = input[srcIdx+i] & 0xFF;
           data_[i] = (buckets_[val] << 8) | val;
           buckets_[val]++;
        }
@@ -213,14 +234,16 @@ public class BWT implements ByteTransform
        }
 
        // Build inverse
-       for (int i=blkptr+len-1, idx=pIdx; i>=blkptr; i--)
+       for (int i=dstIdx+count-1, idx=pIdx; i>=dstIdx; i--)
        {
           final int ptr = data_[idx];
-          input[i] = (byte) ptr;
+          output[i] = (byte) ptr;
           idx = (ptr >> 8) + buckets_[ptr & 0xFF];
        }
 
-       return input;
+       src.index += count;
+       dst.index += count;
+       return true;
     }
 
 
@@ -270,7 +293,7 @@ public class BWT implements ByteTransform
 
 
       // sort all type LMS suffixes
-      private void sortLMSSuffixes(IndexedIntArray src, int[] sa, IndexedIntArray C,
+      private static void sortLMSSuffixes(IndexedIntArray src, int[] sa, IndexedIntArray C,
               IndexedIntArray B, int n, int k)
       {
         // compute sal
@@ -346,7 +369,7 @@ public class BWT implements ByteTransform
       }
 
 
-      private int postProcessLMS(IndexedIntArray src, int[] sa, int n, int m)
+      private static int postProcessLMS(IndexedIntArray src, int[] sa, int n, int m)
       {
         int i = 0;
         int j;
@@ -450,7 +473,7 @@ public class BWT implements ByteTransform
       }
 
 
-      private void induceSuffixArray(IndexedIntArray src, int[] sa, IndexedIntArray buf1,
+      private static void induceSuffixArray(IndexedIntArray src, int[] sa, IndexedIntArray buf1,
               IndexedIntArray buf2, int n, int k)
       {
         // compute sal
@@ -525,7 +548,7 @@ public class BWT implements ByteTransform
       }
 
 
-      private int computeBWT(IndexedIntArray data, int[] sa, IndexedIntArray iia1,
+      private static int computeBWT(IndexedIntArray data, int[] sa, IndexedIntArray iia1,
               IndexedIntArray iia2, int n, int k)
       {
         // compute sal
@@ -608,7 +631,8 @@ public class BWT implements ByteTransform
 
       // Find the suffix array sa of data[0..n-1] in {0..k-1}^n
       // Return the primary index if isbwt is true (0 otherwise)
-      private int computeSuffixArray(IndexedIntArray data, int[] sa, int fs, int n, int k, boolean isBWT)
+      private static int computeSuffixArray(IndexedIntArray data, int[] sa, int fs, 
+              int n, int k, boolean isBWT)
       {
         IndexedIntArray C, B;
         int flags;

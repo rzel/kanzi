@@ -16,6 +16,7 @@ limitations under the License.
 package kanzi.test;
 
 import java.util.Random;
+import kanzi.IndexedIntArray;
 import kanzi.IntTransform;
 import kanzi.transform.DCT16;
 import kanzi.transform.DCT32;
@@ -111,9 +112,13 @@ public class TestDCT
                   final int dim = 4 << dimIdx;
                   System.out.println("\nDCT"+dim+" correctness");
                   final int blockSize = dim * dim;
-                  int[] data1 = new int[blockSize];
-                  int[] data2 = new int[blockSize];
-                  IntTransform dct = dcts[dimIdx];
+                  int[] data1 = new int[blockSize+20]; // source
+                  int[] data2 = new int[blockSize+20]; // destination
+                  int[] data3 = new int[blockSize+20]; // source copy
+                  int[] data;
+                  IndexedIntArray iia1 = new IndexedIntArray(data1, 0);
+                  IndexedIntArray iia2 = new IndexedIntArray(data2, 0);
+
                   Random rnd = new Random();
 
                   for (int nn=0; nn<20; nn++)
@@ -127,29 +132,43 @@ public class TestDCT
                         else
                           data1[i] = rnd.nextInt(nn*10);
 
-                        data2[i] = data1[i];
+                        data3[i] = data1[i];
                         System.out.print(data1[i]);
                         System.out.print("  ");
                      }
 
-                     dct.forward(data1, 0);
+                     int start = (nn & 1) * nn;
+
+                     if (nn <= 10) 
+                        data = data1;
+                     else 
+                        data = data2;
+                     
+                     iia1.array = data1;
+                     iia1.index = 0;
+                     iia2.array = data;
+                     iia2.index = start;
+                     dcts[dimIdx].forward(iia1, iia2);
                      System.out.println();
                      System.out.println("Output");
 
                      for (int i=0; i<blockSize; i++)
                      {
-                        System.out.print(data1[i]);
+                        System.out.print(data[i]);
                         System.out.print(" ");
                      }
 
-                     dct.inverse(data1, 0);
+                     iia1.array = data2;
+                     iia1.index = 0;
+                     iia2.index = start;
+                     dcts[dimIdx].inverse(iia2, iia1);
                      System.out.println();
                      System.out.println("Result");
 
                      for (int i=0; i<blockSize; i++)
                      {
-                        System.out.print(data1[i]);
-                        System.out.print((data1[i] != data2[i]) ? "! " : "= ");
+                        System.out.print(data2[i]);
+                        System.out.print((data3[i] != data2[i]) ? "! " : "= ");
                      }
 
                      System.out.println("\n");
@@ -184,16 +203,20 @@ public class TestDCT
                             data[i][j] = rnd.nextInt(10+i+j*10);
                     }
 
+                    IndexedIntArray iia = new IndexedIntArray(data[0], 0);
                     long before, after;
 
                     for (int i=0; i<iter; i++)
                     {
+                       iia.array = data[i%100];
                        before = System.nanoTime();
-                       dct.forward(data[i%100], 0);
+                       iia.index = 0;                       
+                       dct.forward(iia, iia);
                        after = System.nanoTime();
                        delta1 += (after-before);
                        before = System.nanoTime();
-                       dct.inverse(data[i%100], 0);
+                       iia.index = 0;
+                       dct.inverse(iia, iia);
                        after = System.nanoTime();
                        delta2 += (after-before);
                     }
