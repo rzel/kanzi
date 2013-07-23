@@ -142,6 +142,9 @@ public final class LZ4Codec implements ByteFunction
    @Override
    public boolean forward(IndexedByteArray source, IndexedByteArray destination)
    {
+      if ((source == null) || (destination == null) || (source.array == destination.array))
+         return false;
+
       final int srcIdx0 = source.index;
       final int dstIdx0 = destination.index;
       final byte[] src = source.array;
@@ -281,6 +284,9 @@ public final class LZ4Codec implements ByteFunction
    @Override
    public boolean inverse(IndexedByteArray source, IndexedByteArray destination)
    {
+      if ((source == null) || (destination == null) || (source.array == destination.array))
+         return false;
+
       final int srcIdx0 = source.index;
       final int dstIdx0 = destination.index;
       final byte[] src = source.array;

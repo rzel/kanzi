@@ -181,6 +181,9 @@ public final class SnappyCodec implements ByteFunction
   @Override
   public boolean forward(IndexedByteArray source, IndexedByteArray destination)
   {
+     if ((source == null) || (destination == null) || (source.array == destination.array))
+        return false;
+
      final int srcIdx = source.index;
      final byte[] src = source.array;
      final byte[] dst = destination.array;
@@ -390,6 +393,9 @@ public final class SnappyCodec implements ByteFunction
   @Override
   public boolean inverse(IndexedByteArray source, IndexedByteArray destination)
   {
+     if ((source == null) || (destination == null) || (source.array == destination.array))
+        return false;
+
      final int srcIdx = source.index;
      final int dstIdx = destination.index;
      final byte[] src = source.array;

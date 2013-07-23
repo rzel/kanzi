@@ -17,6 +17,7 @@ package function
 
 import (
 	"errors"
+	"kanzi"
 )
 
 // Distance coder / decoder
@@ -236,6 +237,18 @@ func (this *DistanceCodec) encodeHeader(src, dst, significanceFlags []byte) (uin
 }
 
 func (this *DistanceCodec) Forward(src, dst []byte) (uint, uint, error) {
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
+	}
+
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	inLength := this.size
 
 	if inLength == 0 {
@@ -392,6 +405,18 @@ func (this *DistanceCodec) decodeHeader(src, dst, unprocessedFlags []byte) (uint
 }
 
 func (this *DistanceCodec) Inverse(src, dst []byte) (uint, uint, error) {
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
+	}
+
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	end := this.size
 
 	if end == 0 {

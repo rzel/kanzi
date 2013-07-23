@@ -248,11 +248,14 @@ public class DistanceCodec implements ByteFunction
 
 
     @Override
-    public boolean forward(IndexedByteArray src, IndexedByteArray dst)
+    public boolean forward(IndexedByteArray source, IndexedByteArray destination)
     {
-       final byte[] srcArray = src.array;
-       final byte[] dstArray = dst.array;
-       final int inLength = (this.size == 0) ? srcArray.length - src.index : this.size;
+      if ((source == null) || (destination == null) || (source.array == destination.array))
+         return false;
+
+       final byte[] src = source.array;
+       final byte[] dst = destination.array;
+       final int inLength = (this.size == 0) ? src.length - source.index : this.size;
 
        if (this.data.length < inLength)
            this.data = new byte[inLength];
@@ -263,12 +266,12 @@ public class DistanceCodec implements ByteFunction
           unprocessedFlags[i] = 1;
 
        // Encode header, update src.index and dst.index
-       if (this.encodeHeader(src, dst, unprocessedFlags) == false)
+       if (this.encodeHeader(source, destination, unprocessedFlags) == false)
           return false;
 
        // Encode body (corresponding to input data only)
-       int srcIdx = src.index;
-       int dstIdx = dst.index;
+       int srcIdx = source.index;
+       int dstIdx = destination.index;
        boolean res;
 
        try
@@ -278,12 +281,12 @@ public class DistanceCodec implements ByteFunction
 
            while (srcIdx < inLength)
            {
-              final byte first = srcArray[srcIdx];
+              final byte first = src[srcIdx];
               byte current = first;
               int distance = 1;
 
               // Skip initial run
-              while ((srcIdx < inLength) && (srcArray[srcIdx] == current))
+              while ((srcIdx < inLength) && (src[srcIdx] == current))
                  srcIdx++;
 
               // Save index of next (different) symbol
@@ -291,14 +294,14 @@ public class DistanceCodec implements ByteFunction
 
               while (srcIdx < inLength)
               {
-                 current = srcArray[srcIdx];
+                 current = src[srcIdx];
 
                  // Next occurence of first symbol found => exit
                  if (current == first)
                     break;
 
                  // Already processed symbols are ignored (flag = 0)
-                 distance += unprocessedFlags[srcIdx-src.index];
+                 distance += unprocessedFlags[srcIdx-source.index];
                  srcIdx++;
               }
 
@@ -306,7 +309,7 @@ public class DistanceCodec implements ByteFunction
               {
                  // The symbol has not been found, encode 0
                  if (current != first)
-                    dstArray[dstIdx++] = 0;
+                    dst[dstIdx++] = 0;
               }
               else
               {
@@ -317,26 +320,26 @@ public class DistanceCodec implements ByteFunction
                  // to indicate a continuation
                  while (distance >= distThreshold)
                  {
-                    dstArray[dstIdx++] = (byte) (distThreshold | (distance & distMask));
+                    dst[dstIdx++] = (byte) (distThreshold | (distance & distMask));
                     distance >>= this.logDistThreshold;
                  }
 
-                 dstArray[dstIdx++] = (byte) distance;
+                 dst[dstIdx++] = (byte) distance;
               }
 
               // Move to next symbol
               srcIdx = nextIdx;
            }
 
-           res = ((srcIdx - src.index) == inLength) ? true : false;
+           res = ((srcIdx - source.index) == inLength) ? true : false;
        }
        catch (ArrayIndexOutOfBoundsException e)
        {
           res = false;
        }
 
-       src.index = srcIdx;
-       dst.index = dstIdx;
+       source.index = srcIdx;
+       destination.index = dstIdx;
        return res;
     }
 
@@ -425,14 +428,17 @@ public class DistanceCodec implements ByteFunction
 
 
     @Override
-    public boolean inverse(IndexedByteArray src, IndexedByteArray dst)
+    public boolean inverse(IndexedByteArray source, IndexedByteArray destination)
     {
-       final byte[] srcArray = src.array;
-       final byte[] dstArray = dst.array;
-       final int end = (this.size == 0) ? srcArray.length : src.index + this.size;
+      if ((source == null) || (destination == null) || (source.array == destination.array))
+         return false;
 
-       if (this.data.length < dstArray.length - dst.index)
-           this.data = new byte[dstArray.length-dst.index];
+       final byte[] src = source.array;
+       final byte[] dst = destination.array;
+       final int end = (this.size == 0) ? src.length : source.index + this.size;
+
+       if (this.data.length < dst.length - destination.index)
+           this.data = new byte[dst.length-destination.index];
 
        final byte[] unprocessedFlags = this.data; // aliasing
 
@@ -440,16 +446,16 @@ public class DistanceCodec implements ByteFunction
           unprocessedFlags[i] = 1;
 
        // Decode header, update src.index and dst.index
-       if (this.decodeHeader(src, dst, unprocessedFlags) == false)
+       if (this.decodeHeader(source, destination, unprocessedFlags) == false)
           return false;
 
-       int srcIdx = src.index;
-       int dstIdx = dst.index;
+       int srcIdx = source.index;
+       int dstIdx = destination.index;
        boolean res;
 
        try
        {
-           byte current = dstArray[dstIdx];
+           byte current = dst[dstIdx];
            final int distThreshold = 1 << this.logDistThreshold;
            final int distMask = distThreshold - 1;
 
@@ -459,18 +465,18 @@ public class DistanceCodec implements ByteFunction
               // If the current symbol is unknown, duplicate previous
               if (unprocessedFlags[dstIdx] != 0)
               {
-                 dstArray[dstIdx++] = current;
+                 dst[dstIdx++] = current;
                  continue;
               }
 
               // Get current symbol
-              current = dstArray[dstIdx++];
+              current = dst[dstIdx++];
 
               if (srcIdx >= end)
                  break;
 
               // For the current symbol, get distance to the next occurence
-              int distance = srcArray[srcIdx++] & 0xFF;
+              int distance = src[srcIdx++] & 0xFF;
 
               // Last occurence of current symbol
               if (distance == 0)
@@ -487,7 +493,7 @@ public class DistanceCodec implements ByteFunction
                  {
                     distance |= ((val & distMask) << shift);
                     shift += this.logDistThreshold;
-                    val = srcArray[srcIdx++] & 0xFF;
+                    val = src[srcIdx++] & 0xFF;
                  }
 
                  distance |= (val << shift);
@@ -495,7 +501,7 @@ public class DistanceCodec implements ByteFunction
 
               // Skip run
               while (unprocessedFlags[dstIdx] != 0)
-                 dstArray[dstIdx++] = current;
+                 dst[dstIdx++] = current;
 
               int idx = dstIdx;
 
@@ -504,13 +510,13 @@ public class DistanceCodec implements ByteFunction
                  distance -= unprocessedFlags[++idx];
 
               // Output next occurence
-              dstArray[idx] = current;
+              dst[idx] = current;
               unprocessedFlags[idx] = 0;
            }
 
            // Repeat last symbol if needed
-           while (dstIdx < dstArray.length)
-               dstArray[dstIdx++] = current;
+           while (dstIdx < dst.length)
+               dst[dstIdx++] = current;
 
            res = (srcIdx == end) ? true : false;
        }
@@ -519,8 +525,8 @@ public class DistanceCodec implements ByteFunction
           res = false;
        }
 
-       src.index = srcIdx;
-       dst.index = dstIdx;
+       source.index = srcIdx;
+       destination.index = dstIdx;
        return res;
     }
 

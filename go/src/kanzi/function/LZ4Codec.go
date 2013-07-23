@@ -16,7 +16,9 @@ limitations under the License.
 package function
 
 import (
+	"errors"
 	"fmt"
+	"kanzi"
 	"unsafe"
 )
 
@@ -145,6 +147,18 @@ func emitLiterals(src []byte, dst []byte, runLen int, last bool) (int, int, int)
 }
 
 func (this *LZ4Codec) Forward(src, dst []byte) (uint, uint, error) {
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
+	}
+
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	count := int(this.size)
 
 	if this.size == 0 {
@@ -159,7 +173,7 @@ func (this *LZ4Codec) Forward(src, dst []byte) (uint, uint, error) {
 		srcIdx, dstIdx, _ := emitLiterals(src, dst, count, true)
 		return uint(srcIdx), uint(dstIdx), error(nil)
 	}
-	
+
 	var hashLog uint
 
 	if count < LZ4_64K_LIMIT {
@@ -292,6 +306,18 @@ func readInt(array []byte, srcIdx int) uint32 {
 }
 
 func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
+	}
+
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	count := int(this.size)
 
 	if this.size == 0 {

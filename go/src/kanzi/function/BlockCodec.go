@@ -97,6 +97,10 @@ func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 		return 0, 0, errors.New("Output buffer cannot be null")
 	}
 
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	blockSize := this.size
 
 	if this.size == 0 {

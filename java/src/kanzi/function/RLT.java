@@ -74,6 +74,9 @@ public class RLT implements ByteFunction
    @Override
    public boolean forward(IndexedByteArray source, IndexedByteArray destination)
    {
+      if ((source == null) || (destination == null) || (source.array == destination.array))
+         return false;
+
       int srcIdx = source.index;
       int dstIdx = destination.index;
       final byte[] src = source.array;
@@ -151,6 +154,9 @@ public class RLT implements ByteFunction
    @Override
    public boolean inverse(IndexedByteArray source, IndexedByteArray destination)
    {
+      if ((source == null) || (destination == null) || (source.array == destination.array))
+         return false;
+
       int srcIdx = source.index;
       int dstIdx = destination.index;
       final byte[] src = source.array;

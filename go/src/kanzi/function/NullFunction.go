@@ -17,6 +17,7 @@ package function
 
 import (
 	"errors"
+	"kanzi"
 )
 
 type NullFunction struct {
@@ -34,21 +35,32 @@ func (this *NullFunction) Size() uint {
 }
 
 func doCopy(src, dst []byte, sz uint) (uint, uint, error) {
-	length := int(sz)
-
-	if length == 0 {
-		length = len(src)
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
 	}
 
-	if length > len(src) {
-		return uint(0), uint(0), errors.New("Source buffer too small")
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	length := len(src)
+
+	if sz > 0 {
+		length = int(sz)
+
+		if length > len(src) {
+			return uint(0), uint(0), errors.New("Source buffer too small")
+		}
 	}
 
 	if length > len(dst) {
 		return uint(0), uint(0), errors.New("Destination buffer too small")
 	}
-	
-	copy(dst, src[0:length])
+
+	if kanzi.SameByteSlices(src, dst, false) == false {
+		copy(dst, src[0:length])
+	}
+
 	return uint(length), uint(length), nil
 }
 

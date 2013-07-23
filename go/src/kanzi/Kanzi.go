@@ -126,6 +126,14 @@ type EntropyDecoder interface {
 }
 
 func SameIntSlices(slice1, slice2 []int, checkLengths bool) bool {
+	if slice2 == nil {
+		return slice1 == nil
+	}
+	
+	if slice1 == nil {
+		return false
+	}
+	
 	if &slice1 == &slice2 {
 		return true
 	}
@@ -147,6 +155,14 @@ func SameIntSlices(slice1, slice2 []int, checkLengths bool) bool {
 }
 
 func SameByteSlices(slice1, slice2 []byte, checkLengths bool) bool {
+	if slice2 == nil {
+		return slice1 == nil
+	}
+	
+	if slice1 == nil {
+		return false
+	}
+	
 	if &slice1 == &slice2 {
 		return true
 	}

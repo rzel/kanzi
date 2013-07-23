@@ -21,7 +21,9 @@ package function
 
 import (
 	"code.google.com/p/snappy-go/snappy"
+	"errors"
 	"fmt"
+	"kanzi"
 )
 
 type SnappyCodec struct {
@@ -44,6 +46,18 @@ func (this *SnappyCodec) SetSize(sz uint) bool {
 }
 
 func (this *SnappyCodec) Forward(src, dst []byte) (uint, uint, error) {
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
+	}
+
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	count := this.size
 
 	if this.size == 0 {
@@ -64,6 +78,18 @@ func (this *SnappyCodec) Forward(src, dst []byte) (uint, uint, error) {
 }
 
 func (this *SnappyCodec) Inverse(src, dst []byte) (uint, uint, error) {
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
+	}
+
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	count := this.size
 
 	if this.size == 0 {

@@ -17,6 +17,7 @@ package function
 
 import (
 	"errors"
+	"kanzi"
 )
 
 // Zero Length Encoding is a simple encoding algorithm by Wheeler
@@ -44,6 +45,18 @@ func (this *ZLT) Size() uint {
 }
 
 func (this *ZLT) Forward(src, dst []byte) (uint, uint, error) {
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
+	}
+
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	srcEnd := this.size
 
 	if this.size == 0 {
@@ -116,6 +129,18 @@ func (this *ZLT) Forward(src, dst []byte) (uint, uint, error) {
 }
 
 func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
+	if src == nil {
+		return uint(0), uint(0), errors.New("Invalid null source buffer")
+	}
+
+	if dst == nil {
+		return uint(0), uint(0), errors.New("Invalid null destination buffer")
+	}
+
+	if kanzi.SameByteSlices(src, dst, false) {
+		return 0, 0, errors.New("Input and output buffers cannot be equal")
+	}
+
 	srcEnd := this.size
 
 	if this.size == 0 {
