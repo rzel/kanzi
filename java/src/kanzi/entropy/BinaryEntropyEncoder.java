@@ -22,10 +22,10 @@ import kanzi.OutputBitStream;
 // This class is a generic implementation of a boolean entropy encoder
 public class BinaryEntropyEncoder extends AbstractEncoder
 {
-   private final long TOP        = 0x00FFFFFFFFFFFFFFL;
-   private final long MASK_24_56 = 0x00FFFFFFFF000000L;
-   private final long MASK_0_24  = 0x0000000000FFFFFFL;
-   private final long MASK_0_32  = 0x00000000FFFFFFFFL;
+   private static final long TOP        = 0x00FFFFFFFFFFFFFFL;
+   private static final long MASK_24_56 = 0x00FFFFFFFF000000L;
+   private static final long MASK_0_24  = 0x0000000000FFFFFFL;
+   private static final long MASK_0_32  = 0x00000000FFFFFFFFL;
    
    private final Predictor predictor;
    private long low;
