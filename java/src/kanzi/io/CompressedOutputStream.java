@@ -448,7 +448,7 @@ public class CompressedOutputStream extends OutputStream
             this.ds.print("Block "+this.blockId+": "+
                    blockLength + " => " + encoded + " => " +
                   ((this.obs.written()-written)/8L)+" ("+
-                  ((this.obs.written()-written)*100L/(long)(blockLength*8))+"%)");
+                  ((this.obs.written()-written)*100L/(blockLength*8L))+"%)");
 
             if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
                this.ds.print("  [" + Integer.toHexString(checksum) + "]");

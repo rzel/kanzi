@@ -80,85 +80,74 @@ public class CompressedInputStream extends InputStream
       if (this.initialized == true)
          return;
 
-      try
+      // Read stream type
+      final int type = (int) this.ibs.readBits(32);
+
+      // Sanity check
+      if (type != BITSTREAM_TYPE)
+         throw new kanzi.io.IOException("Invalid stream type: expected "
+                 + Integer.toHexString(BITSTREAM_TYPE) + ", got "
+                 + Integer.toHexString(type), Error.ERR_INVALID_FILE);
+
+      // Read stream version
+      final int version = (int) this.ibs.readBits(7);
+
+      // Sanity check
+      if (version != BITSTREAM_FORMAT_VERSION)
+         throw new kanzi.io.IOException("Invalid bitstream, cannot read this version of the stream: " + version,
+                 Error.ERR_STREAM_VERSION);
+
+      // Read block checksum
+      if (this.ibs.readBit() == 1)
+         this.hasher = new XXHash(BITSTREAM_TYPE);
+
+      // Read entropy codec
+      this.entropyType = (char) this.ibs.readBits(7);
+
+      // Read transform
+      this.transformType = (char) this.ibs.readBits(7);
+
+      // Read block size
+      this.blockSize = (int) this.ibs.readBits(26);
+
+      if ((this.blockSize < 0) || (this.blockSize > MAX_BLOCK_SIZE))
+         throw new kanzi.io.IOException("Invalid bitstream, incorrect block size: " + this.blockSize,
+                 Error.ERR_BLOCK_SIZE);
+
+      if (this.ds != null)
       {
-         // Read stream type
-         final int type = (int) this.ibs.readBits(32);
+         this.ds.println("Checksum set to "+(this.hasher != null));
+         this.ds.println("Block size set to "+this.blockSize+" bytes");
 
-         // Sanity check
-         if (type != BITSTREAM_TYPE)
-            throw new kanzi.io.IOException("Invalid stream type: expected "
-                    + Integer.toHexString(BITSTREAM_TYPE) + ", got "
-                    + Integer.toHexString(type), Error.ERR_INVALID_FILE);
-
-         // Read stream version
-         final int version = (int) this.ibs.readBits(7);
-
-         // Sanity check
-         if (version != BITSTREAM_FORMAT_VERSION)
-            throw new kanzi.io.IOException("Invalid bitstream, cannot read this version of the stream: " + version,
-                    Error.ERR_STREAM_VERSION);
-
-         // Read block checksum
-         if (this.ibs.readBit() == 1)
-            this.hasher = new XXHash(BITSTREAM_TYPE);
-
-         // Read entropy codec
-         this.entropyType = (char) this.ibs.readBits(7);
-
-         // Read transform
-         this.transformType = (char) this.ibs.readBits(7);
-
-         // Read block size
-         this.blockSize = (int) this.ibs.readBits(26);
-
-         if ((this.blockSize < 0) || (this.blockSize > MAX_BLOCK_SIZE))
-            throw new kanzi.io.IOException("Invalid bitstream, incorrect block size: " + this.blockSize,
-                    Error.ERR_BLOCK_SIZE);
-
-         if (this.ds != null)
+         try
          {
-            this.ds.println("Checksum set to "+(this.hasher != null));
-            this.ds.println("Block size set to "+this.blockSize+" bytes");
+            String w1 = new FunctionFactory().getName((byte) this.transformType);
 
-            try
-            {
-               String w1 = new FunctionFactory().getName((byte) this.transformType);
+            if ("NONE".equals(w1))
+               w1 = "no";
 
-               if ("NONE".equals(w1))
-                  w1 = "no";
-
-               this.ds.println("Using " + w1 + " transform (stage 1)");
-            }
-            catch (IllegalArgumentException e)
-            {
-               throw new kanzi.io.IOException("Invalid bitstream, unknown transform type: "+
-                       this.transformType, Error.ERR_INVALID_CODEC);
-            }
-            
-           try
-            {
-               String w2 = new EntropyCodecFactory().getName((byte) this.entropyType);
-
-               if ("NONE".equals(w2))
-                  w2 = "no";
-
-               this.ds.println("Using " + w2 + " entropy codec (stage 2)");
-            }
-            catch (IllegalArgumentException e)
-            {
-               throw new kanzi.io.IOException("Invalid bitstream, unknown entropy codec type: "+
-                       this.entropyType , Error.ERR_INVALID_CODEC);
-            }
+            this.ds.println("Using " + w1 + " transform (stage 1)");
          }
-      }
-      catch (IOException e)
-      {
-         throw e;
-      }
-      catch (Exception e)
-      {
-         throw new kanzi.io.IOException("Invalid bitstream, cannot read header", Error.ERR_READ_FILE);
+         catch (IllegalArgumentException e)
+         {
+            throw new kanzi.io.IOException("Invalid bitstream, unknown transform type: "+
+                    this.transformType, Error.ERR_INVALID_CODEC);
+         }
+
+        try
+         {
+            String w2 = new EntropyCodecFactory().getName((byte) this.entropyType);
+
+            if ("NONE".equals(w2))
+               w2 = "no";
+
+            this.ds.println("Using " + w2 + " entropy codec (stage 2)");
+         }
+         catch (IllegalArgumentException e)
+         {
+            throw new kanzi.io.IOException("Invalid bitstream, unknown entropy codec type: "+
+                    this.entropyType , Error.ERR_INVALID_CODEC);
+         }
       }
    }
 
