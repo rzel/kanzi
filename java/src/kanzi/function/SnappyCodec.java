@@ -211,20 +211,16 @@ public final class SnappyCodec implements ByteFunction
 
      // Initialize the hash table. Its size ranges from 1<<8 to 1<<14 inclusive.
      int shift = 24;
-     int tableSize = MAX_TABLE_SIZE;
+     int tableSize = 256;
      final int[] table = this.buffer; // aliasing
-     
-     if (count < MAX_TABLE_SIZE)
+     final int max = (count < MAX_TABLE_SIZE) ? count : MAX_TABLE_SIZE;
+
+     while (tableSize < max)
      {
-        tableSize = 256;
-        
-        while (tableSize < count)
-        {
-           shift--;
-           tableSize <<= 1;
-        }
+        shift--;
+        tableSize <<= 1;
      }
-     
+
      for (int i=0; i<tableSize; i++)
         table[i] = -1;
 
@@ -322,7 +318,7 @@ public final class SnappyCodec implements ByteFunction
         
         if (((s == 63) && (b > 1)) || (s > 63))
            throw new NumberFormatException("Overflow: value is larger than 64 bits");
-
+        
         if ((b & 0x80) == 0)
         {        
            iba.index = i + 1;
