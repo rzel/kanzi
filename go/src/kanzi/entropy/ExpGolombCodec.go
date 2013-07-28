@@ -131,8 +131,18 @@ func (this *ExpGolombDecoder) Dispose() {
 
 // If the decoder is signed, the returned value is a byte encoded int8
 func (this *ExpGolombDecoder) DecodeByte() (byte, error) {
+	r, err := this.bitstream.ReadBit()
+
+	if err != nil {
+		return 0, err
+	}
+
+	if r == 1 {
+		return 0, nil
+	}
+
 	// Decode unsigned
-	log2 := uint(0)
+	log2 := uint(1)
 
 	for {
 		r, err := this.bitstream.ReadBit()
@@ -148,33 +158,21 @@ func (this *ExpGolombDecoder) DecodeByte() (byte, error) {
 		log2++
 	}
 
-	if log2 == 0 {
-		return byte(0), nil
-	}
-
-	val, err := this.bitstream.ReadBits(log2)
-
-	if err != nil {
-		return 0, err
-	}
-
-	res := (1 << log2) - 1 + val
-
-	// Read sign if necessary
 	if this.signed == true {
-		// If res != 0, Get the 'sign', encoded as 1 for negative values
-		sgn, err := this.bitstream.ReadBit()
+		// Decode signed: read value + sign
+		val, err := this.bitstream.ReadBits(log2 + 1)
+		res := val>>1 + 1<<log2 - 1
 
-		if err != nil {
-			return 0, err
+		if val&1 == 1 {
+			return byte(^res + 1), err
 		}
 
-		if sgn == 1 {
-			return byte(^res + 1), nil
-		}
+		return byte(res), err
 	}
 
-	return byte(res), nil
+	// Decode unsigned
+	val, err := this.bitstream.ReadBits(log2)
+	return byte((1 << log2) - 1 + val), err
 }
 
 func (this *ExpGolombDecoder) BitStream() kanzi.InputBitStream {
