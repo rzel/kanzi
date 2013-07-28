@@ -84,7 +84,7 @@ public class TestExpGolombCoder
                 }
                 
                 gc.dispose();
-                bs.close();
+                dbgbs.close();
                 byte[] array = os.toByteArray();
                 BufferedInputStream is = new BufferedInputStream(new ByteArrayInputStream(array));
                 InputBitStream bs2 = new DefaultInputBitStream(is, 16384);
@@ -106,9 +106,10 @@ public class TestExpGolombCoder
                         break;
                     }
                 }
-                
+   
                 System.out.println();
                 gc.dispose();
+                dbgbs2.close();
                 boolean ok = true;
                 
                 for (int i=0; i<values.length; i++)
@@ -168,9 +169,9 @@ public class TestExpGolombCoder
                 }
 
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(size*2);
-                OutputBitStream bs = new DefaultOutputBitStream(os, size);
-                ExpGolombEncoder gc = new ExpGolombEncoder(bs, true);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(size*2);
+                OutputBitStream os = new DefaultOutputBitStream(baos, size);
+                ExpGolombEncoder gc = new ExpGolombEncoder(os, true);
                 long before1 = System.nanoTime();
                 
                 if (gc.encode(values1, 0, values1.length) < 0)
@@ -182,12 +183,12 @@ public class TestExpGolombCoder
                 long after1 = System.nanoTime();
                 delta1 += (after1 - before1);
                 gc.dispose();
-                bs.close();
+                os.close();
 
                 // Decode
-                byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
-                ExpGolombDecoder gd = new ExpGolombDecoder(bs2, true);
+                byte[] buf = baos.toByteArray();
+                InputBitStream is = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
+                ExpGolombDecoder gd = new ExpGolombDecoder(is, true);
                 long before2 = System.nanoTime();
                 
                 if (gd.decode(values2, 0, values2.length) < 0)
@@ -199,6 +200,7 @@ public class TestExpGolombCoder
                 long after2 = System.nanoTime();
                 delta2 += (after2 - before2);
                 gd.dispose();
+                is.close();
 
                 // Sanity check
                 for (int i=0; i<values1.length; i++)

@@ -79,6 +79,7 @@ public class TestPAQEntropyCoder
                 BinaryEntropyEncoder bec = new BinaryEntropyEncoder(dbgbs, new PAQPredictor());  
                 bec.encode(values, 0, values.length);
                 bec.dispose();
+                bs.close();
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1024);
                 BinaryEntropyDecoder bed = new BinaryEntropyDecoder(bs2, new PAQPredictor());
@@ -105,10 +106,11 @@ public class TestPAQEntropyCoder
 
                 System.out.println("\n"+((ok == true) ? "Identical" : "Different"));
                 bed.dispose();
+                bs2.close();
             }
             catch (Exception e)
             {
-                e.printStackTrace();
+               e.printStackTrace();
             }
         }
     }
@@ -181,6 +183,7 @@ public class TestPAQEntropyCoder
                 long after2 = System.nanoTime();
                 delta2 += (after2 - before2);
                 bed.dispose();
+                bs2.close();
 
                 // Sanity check
                 for (int i=0; i<values1.length; i++)

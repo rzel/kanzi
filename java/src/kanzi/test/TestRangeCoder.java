@@ -85,6 +85,7 @@ public class TestRangeCoder
 
                 //dbgbs.flush();
                 rc.dispose();
+                dbgbs.close();
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1024);
                 RangeDecoder rd = new RangeDecoder(bs2);
@@ -112,6 +113,7 @@ public class TestRangeCoder
 
                 System.out.println("\n"+((ok == true) ? "Identical" : "Different"));
                 rc.dispose();
+                bs2.close();
             }
             catch (Exception e)
             {
@@ -188,6 +190,7 @@ public class TestRangeCoder
                 long after2 = System.nanoTime();
                 delta2 += (after2 - before2);
                 rd.dispose();
+                bs2.close();
 
                 // Sanity check
                 for (int i=0; i<values1.length; i++)

@@ -100,7 +100,8 @@ public class TestRiceGolombCoder
                 }
 
                 System.out.println();
-                gc.dispose();
+                gd.dispose();
+                dbgbs2.close();
                 boolean ok = true;
 
                 for (int i=0; i<values.length; i++)
@@ -157,9 +158,9 @@ public class TestRiceGolombCoder
                 }
 
                 // Encode
-                ByteArrayOutputStream os = new ByteArrayOutputStream(size*2);
-                OutputBitStream bs = new DefaultOutputBitStream(os, size);
-                RiceGolombEncoder gc = new RiceGolombEncoder(bs, true, 3);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(size*2);
+                OutputBitStream os = new DefaultOutputBitStream(baos, size);
+                RiceGolombEncoder gc = new RiceGolombEncoder(os, true, 3);
                 long before1 = System.nanoTime();
                 
                 if (gc.encode(values1, 0, values1.length) < 0)
@@ -171,12 +172,12 @@ public class TestRiceGolombCoder
                 long after1 = System.nanoTime();
                 delta1 += (after1 - before1);
                 gc.dispose();
-                bs.close();
+                os.close();
 
                 // Decode
-                byte[] buf = os.toByteArray();
-                InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
-                RiceGolombDecoder gd = new RiceGolombDecoder(bs2, true, 3);
+                byte[] buf = baos.toByteArray();
+                InputBitStream is = new DefaultInputBitStream(new ByteArrayInputStream(buf), size);
+                RiceGolombDecoder gd = new RiceGolombDecoder(is, true, 3);
                 long before2 = System.nanoTime();
                 
                 if (gd.decode(values2, 0, values2.length) < 0)
@@ -188,6 +189,7 @@ public class TestRiceGolombCoder
                 long after2 = System.nanoTime();
                 delta2 += (after2 - before2);
                 gd.dispose();
+                is.close();
 
                 // Sanity check
                 for (int i=0; i<values1.length; i++)

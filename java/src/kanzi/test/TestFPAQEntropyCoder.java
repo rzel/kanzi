@@ -79,8 +79,8 @@ public class TestFPAQEntropyCoder
                 BinaryEntropyEncoder fpec = new BinaryEntropyEncoder(dbgbs, new FPAQPredictor());
                 fpec.encode(values, 0, values.length);
                 
-                //dbgbs.flush();
                 fpec.dispose();
+                dbgbs.close();
                 byte[] buf = os.toByteArray();
                 InputBitStream bs2 = new DefaultInputBitStream(new ByteArrayInputStream(buf), 1024);
                 BinaryEntropyDecoder fped = new BinaryEntropyDecoder(bs2, new FPAQPredictor());
@@ -107,6 +107,7 @@ public class TestFPAQEntropyCoder
 
                 System.out.println("\n"+((ok == true) ? "Identical" : "Different"));
                 fped.dispose();
+                bs2.close();
             }
             catch (Exception e)
             {
@@ -183,6 +184,7 @@ public class TestFPAQEntropyCoder
                 long after2 = System.nanoTime();
                 delta2 += (after2 - before2);
                 bed.dispose();
+                bs2.close();
 
                 // Sanity check
                 for (int i=0; i<values1.length; i++)

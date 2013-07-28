@@ -114,6 +114,7 @@ func TestCorrectness() {
 		}
 
 		fpd.Dispose()
+		dbgbs2.Close()
 		fmt.Printf("\n")
 	}
 }
@@ -166,6 +167,7 @@ func TestSpeed() {
 			}
 
 			rc.Dispose()
+			obs.Close()
 
 			if _, err := obs.Close(); err != nil {
 				fmt.Printf("Error during close: %v\n", err)
@@ -192,6 +194,7 @@ func TestSpeed() {
 			}
 
 			rd.Dispose()
+			ibs.Close()
 
 			if _, err := ibs.Close(); err != nil {
 				fmt.Printf("Error during close: %v\n", err)
