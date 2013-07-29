@@ -65,7 +65,7 @@ func (this *RiceGolombEncoder) EncodeByte(val byte) error {
 	if this.signed == false || val&0x80 == 0 {
 		emit = uint64(val)
 	} else {
-		emit = uint64(^val + 1)
+		emit = uint64(^val) + 1
 	}
 
 	// quotient is unary encoded, remainder is binary encoded

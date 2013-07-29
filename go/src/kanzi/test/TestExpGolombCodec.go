@@ -40,17 +40,13 @@ func TestCorrectness() {
 		var values []byte
 		rand.Seed(time.Now().UTC().UnixNano())
 
-		if ii == 3 {
-			values = []byte{0, 0, 32, 15, -4 & 0xFF, 16, 0, 16, 0, 7, -1 & 0xFF, -4 & 0xFF, -32 & 0xFF, 0, 31, -1 & 0xFF}
-		} else if ii == 2 {
-			values = []byte{0x3d, 0x4d, 0x54, 0x47, 0x5a, 0x36, 0x39, 0x26, 0x72, 0x6f, 0x6c, 0x65, 0x3d, 0x70, 0x72, 0x65}
-		} else if ii == 1 {
-			values = []byte{65, 71, 74, 66, 76, 65, 69, 77, 74, 79, 68, 75, 73, 72, 77, 68, 78, 65, 79, 79, 78, 66, 77, 71, 64, 70, 74, 77, 64, 67, 71, 64}
+		if ii == 1 {
+			values = []byte{13, 3, 15, 11, 12, 14, 11, 15, 7, 9, 5, 7, 4, 3, 15, 12}
 		} else {
 			values = make([]byte, 32)
 
 			for i := range values {
-				values[i] = byte(64 + 3*ii + rand.Intn(ii+1))
+				values[i] = byte(rand.Intn(32) - 16*(ii&1))
 			}
 		}
 
@@ -60,15 +56,21 @@ func TestCorrectness() {
 			fmt.Printf("%d ", values[i])
 		}
 
+		signed := true
+
+		if ii&1 == 0 {
+			signed = false
+		}
+
 		fmt.Printf("\nEncoded: ")
 		buffer := make([]byte, 16384)
 		oFile, _ := util.NewByteArrayOutputStream(buffer, true)
 		defer oFile.Close()
 		obs, _ := bitstream.NewDefaultOutputBitStream(oFile, 16384)
 		dbgbs, _ := bitstream.NewDebugOutputBitStream(obs, os.Stdout)
-		dbgbs.ShowByte(true)
-		dbgbs.Mark(true)
-		fpc, _ := entropy.NewExpGolombEncoder(dbgbs, true)
+
+		// Alternate signed / unsigned coding
+		fpc, _ := entropy.NewExpGolombEncoder(dbgbs, signed)
 
 		if _, err := fpc.Encode(values); err != nil {
 			fmt.Printf("Error during encoding: %s", err)
@@ -89,10 +91,9 @@ func TestCorrectness() {
 		defer iFile.Close()
 		ibs, _ := bitstream.NewDefaultInputBitStream(iFile, 16384)
 		dbgbs2, _ := bitstream.NewDebugInputBitStream(ibs, os.Stdout)
-		dbgbs2.ShowByte(true)
-		//dbgbs2.Mark(true)
+		dbgbs2.Mark(true)
 
-		fpd, _ := entropy.NewExpGolombDecoder(dbgbs2, true)
+		fpd, _ := entropy.NewExpGolombDecoder(dbgbs2, signed)
 
 		ok := true
 		values2 := make([]byte, len(values))

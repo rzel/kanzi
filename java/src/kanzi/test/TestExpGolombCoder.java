@@ -45,30 +45,30 @@ public class TestExpGolombCoder
         // Test behavior
         System.out.println("Correctness test");
         
-        for (int nn=0; nn<20; nn++)
+        for (int ii=1; ii<20; ii++)
         {
             try
             {
                 byte[] values;
                 Random rnd = new Random();
-                System.out.println("\nIteration "+nn);
+                System.out.println("\nTest "+ii);
                 
-                if (nn == 0)
-                   values = new byte[] { -13, -3, -15, -11, 12, -14, -11, 15, 7, 9, 5, -7, 4, 3, 15, -12  }; // -3, 4, 2, 1, 0, -1, 7, -9, 123, 0, 12, -63, -64, 75, -55, 100, 123 };
+                if (ii == 1)
+                   values = new byte[] { -13, -3, -15, -11, 12, -14, -11, 15, 7, 9, 5, -7, 4, 3, 15, -12 }; 
                 else
                 {
                    values = new byte[32];
 
                    for (int i=0; i<values.length; i++)
-                      values[i] = (byte) (rnd.nextInt(32) - 16);
+                      values[i] = (byte) (rnd.nextInt(32) - 16*(ii&1));
                 }
-
+                
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                //OutputStream bos = new BufferedOutputStream(os);
                 OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out, -1);
-                //dbgbs.setMark(true);
-                ExpGolombEncoder gc = new ExpGolombEncoder(dbgbs, true);
+
+                // Alternate signed / unsigned coding
+                ExpGolombEncoder gc = new ExpGolombEncoder(dbgbs, (ii&1)==1);
                 
                 for (int i=0; i<values.length; i++)
                 {
@@ -90,7 +90,7 @@ public class TestExpGolombCoder
                 InputBitStream bs2 = new DefaultInputBitStream(is, 16384);
                 DebugInputBitStream dbgbs2 = new DebugInputBitStream(bs2, System.out, -1);
                 dbgbs2.setMark(true);
-                ExpGolombDecoder gd = new ExpGolombDecoder(dbgbs2, true);
+                ExpGolombDecoder gd = new ExpGolombDecoder(dbgbs2, (ii&1)==1);
                 byte[] values2 = new byte[values.length];
                 System.out.println("\nDecoded:");
                 
@@ -125,6 +125,9 @@ public class TestExpGolombCoder
 
                 System.out.println();
                 System.out.println((ok) ? "Identical" : "Different");
+                
+                if (ok == false)
+                   System.exit(1);
             }
             catch (Exception e)
             {

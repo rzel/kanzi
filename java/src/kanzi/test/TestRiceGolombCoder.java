@@ -37,30 +37,30 @@ public class TestRiceGolombCoder
         System.out.println("TestRiceGolombCoder");
 
         // Test behavior
-        for (int nn=0; nn<20; nn++)
+        for (int ii=1; ii<20; ii++)
         {
             try
             {
                 byte[] values;
                 Random rnd = new Random();
-                System.out.println("\nIteration "+nn);
+                System.out.println("\nTest "+ii);
 
-                if (nn == 0)
-                   values = new byte[] { -13, -3, -15, -11, 12, -14, -11, 15, 7, 9, 5, -7, 4, 3, 15, -12  }; // -3, 4, 2, 1, 0, -1, 7, -9, 123, 0, 12, -63, -64, 75, -55, 100, 123 };
+                if (ii == 1)
+                   values = new byte[] { -13, -3, -15, -11, 12, -14, -11, 15, 7, 9, 5, -7, 4, 3, 15, -12  };
                 else
                 {
                    values = new byte[32];
 
                    for (int i=0; i<values.length; i++)
-                      values[i] = (byte) (rnd.nextInt(32) - 16);
+                      values[i] = (byte) (rnd.nextInt(32) - 16*(ii&1));
                 }
 
                 ByteArrayOutputStream os = new ByteArrayOutputStream(16384);
-                //OutputStream bos = new BufferedOutputStream(os);
                 OutputBitStream bs = new DefaultOutputBitStream(os, 16384);
                 DebugOutputBitStream dbgbs = new DebugOutputBitStream(bs, System.out, -1);
-                //dbgbs.setMark(true);
-                RiceGolombEncoder gc = new RiceGolombEncoder(dbgbs, true, 1+nn%6);
+
+                // Alternate signed / unsigned coding
+                RiceGolombEncoder gc = new RiceGolombEncoder(dbgbs, (ii&1)==1, 1+ii%6);
 
                 for (int i=0; i<values.length; i++)
                 {
@@ -82,7 +82,7 @@ public class TestRiceGolombCoder
                 InputBitStream bs2 = new DefaultInputBitStream(is, 16384);
                 DebugInputBitStream dbgbs2 = new DebugInputBitStream(bs2, System.out, -1);
                 dbgbs2.setMark(true);
-                RiceGolombDecoder gd = new RiceGolombDecoder(dbgbs2, true, 1+nn%6);
+                RiceGolombDecoder gd = new RiceGolombDecoder(dbgbs2, (ii&1)==1, 1+ii%6);
                 byte[] values2 = new byte[values.length];
                 System.out.println("\nDecoded:");
 
@@ -117,6 +117,9 @@ public class TestRiceGolombCoder
 
                 System.out.println();
                 System.out.println((ok) ? "Identical" : "Different");
+                
+                if (ok == false)
+                   System.exit(1);
             }
             catch (Exception e)
             {

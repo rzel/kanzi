@@ -54,9 +54,9 @@ func (this *ExpGolombEncoder) EncodeByte(val byte) error {
 	var emit uint64
 
 	if this.signed == false || val&0x80 == 0 {
-		emit = uint64(val + 1)
+		emit = uint64(val) + 1
 	} else {
-		emit = uint64(^val + 2)
+		emit = uint64(^val) + 2
 	}
 
 	var n uint
