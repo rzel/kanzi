@@ -361,7 +361,6 @@ func (this *HuffmanEncoder) EncodeByte(val byte) error {
 }
 
 func (this *HuffmanEncoder) Dispose() {
-	this.bitstream.Flush()
 }
 
 func (this *HuffmanEncoder) BitStream() kanzi.OutputBitStream {

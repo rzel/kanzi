@@ -90,7 +90,7 @@ func (this *BinaryEntropyEncoder) EncodeBit(bit byte) error {
 
 	// Write unchanged first 32 bits to bitstream
 	for (this.low^this.high)&MASK_24_56 == 0 {
-		this.Flush()
+		this.flush()
 	}
 
 	return nil
@@ -100,7 +100,7 @@ func (this *BinaryEntropyEncoder) Encode(block []byte) (int, error) {
 	return EntropyEncodeArray(this, block)
 }
 
-func (this *BinaryEntropyEncoder) Flush() {
+func (this *BinaryEntropyEncoder) flush() {
 	this.bitstream.WriteBits(this.high>>24, 32)
 	this.low <<= 32
 	this.high = (this.high << 32) | MASK_0_32
@@ -117,7 +117,6 @@ func (this *BinaryEntropyEncoder) Dispose() {
 
 	this.disposed = true
 	this.bitstream.WriteBits(this.low|MASK_0_24, 56)
-	this.bitstream.Flush()
 }
 
 type BinaryEntropyDecoder struct {

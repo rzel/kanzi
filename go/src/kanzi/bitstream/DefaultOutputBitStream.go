@@ -121,12 +121,12 @@ func (this *DefaultOutputBitStream) pushCurrent() {
 	this.position += 8
 
 	if this.position >= len(this.buffer) {
-		this.Flush()
+		this.flush()
 	}
 }
 
 // Write buffer into underlying stream
-func (this *DefaultOutputBitStream) Flush() error {
+func (this *DefaultOutputBitStream) flush() error {
 	if this.Closed() {
 		return errors.New("Stream closed")
 	}
@@ -157,7 +157,7 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 	this.pushCurrent()
 	this.position -= (8 - size)
 
-	if err := this.Flush(); err != nil {
+	if err := this.flush(); err != nil {
 		// Revert fields to allow subsequent attempts in case of transient failure
 		this.bitIndex = savedBitIndex
 		this.position = savedPosition

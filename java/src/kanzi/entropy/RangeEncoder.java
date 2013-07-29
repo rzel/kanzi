@@ -183,8 +183,6 @@ public final class RangeEncoder extends AbstractEncoder
           this.bitstream.writeBits(this.low >> 48, 8);
           this.low <<= 8;
        }
-
-       this.bitstream.flush();
     }
 
 

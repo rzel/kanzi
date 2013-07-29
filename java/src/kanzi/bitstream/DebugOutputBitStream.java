@@ -188,13 +188,7 @@ public final class DebugOutputBitStream implements OutputBitStream
 
         return res;
     }
-
-    @Override
-    public void flush() throws BitStreamException
-    {
-        this.delegate.flush();
-    }
-
+    
 
     @Override
     public void close() throws BitStreamException

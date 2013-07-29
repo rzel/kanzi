@@ -236,13 +236,6 @@ public class HuffmanEncoder extends AbstractEncoder
     
 
     @Override
-    public void dispose()
-    {
-       this.bitstream.flush();
-    }
-
-
-    @Override
     public OutputBitStream getBitStream()
     {
        return this.bitstream;

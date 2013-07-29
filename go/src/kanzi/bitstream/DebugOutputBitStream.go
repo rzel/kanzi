@@ -130,10 +130,6 @@ func (this *DebugOutputBitStream) WriteBits(bits uint64, length uint) (uint, err
 	return res, err
 }
 
-func (this *DebugOutputBitStream) Flush() error {
-	return this.delegate.Flush()
-}
-
 func (this *DebugOutputBitStream) Close() (bool, error) {
 	return this.delegate.Close()
 }

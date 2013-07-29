@@ -18,13 +18,11 @@ package kanzi;
 
 public interface OutputBitStream
 {
-    // Processes the least significant bit of the input integer
+    // Write the least significant bit of the input integer
     public boolean writeBit(int bit) throws BitStreamException;
 
     public int writeBits(long bits, int length) throws BitStreamException;
-
-    public void flush() throws BitStreamException;
-
+    
     public void close() throws BitStreamException;
 
     // Number of bits written

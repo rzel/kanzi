@@ -87,8 +87,6 @@ type OutputBitStream interface {
 
 	WriteBits(bits uint64, length uint) (uint, error)
 
-	Flush() error
-
 	Close() (bool, error)
 
 	Written() uint64

@@ -109,6 +109,5 @@ public class BinaryEntropyEncoder extends AbstractEncoder
 
       this.disposed = true;
       this.bitstream.writeBits(this.low | MASK_0_24, 56);
-      this.bitstream.flush();
    }
 }

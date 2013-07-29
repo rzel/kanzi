@@ -127,7 +127,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
 
    // Write buffer to underlying stream
-   public synchronized void flush() throws BitStreamException
+   private synchronized void flush() throws BitStreamException
    {
       if (this.isClosed() == true)
          throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);

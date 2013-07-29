@@ -198,8 +198,6 @@ func (this *RangeEncoder) Dispose() {
 		this.bitstream.WriteBits(this.low>>48, 8)
 		this.low <<= 8
 	}
-
-	this.bitstream.Flush()
 }
 
 type RangeDecoder struct {
