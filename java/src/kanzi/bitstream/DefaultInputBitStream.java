@@ -25,63 +25,51 @@ public final class DefaultInputBitStream implements InputBitStream
 {
    private final InputStream is;
    private final byte[] buffer;
-   private int position;  // index of current byte (consumed if bitIndex == 7)
+   private int position;  // index of current byte (consumed if bitIndex == 63)
    private int bitIndex;  // index of current bit to read
    private long read;
    private boolean closed;
    private int maxPosition;
+   private long current;
 
 
    public DefaultInputBitStream(InputStream is, int bufferSize)
    {
-      this(is, new byte[bufferSize]);
-   }
-
-
-   public DefaultInputBitStream(InputStream is, byte[] buffer)
-   {
       if (is == null)
          throw new NullPointerException("Invalid null input stream parameter");
 
-      if (buffer == null)
-         throw new NullPointerException("Invalid null buffer parameter");
+      if (bufferSize < 1024)
+         throw new IllegalArgumentException("Invalid buffer size (must be at least 1024)");
 
-      if (buffer.length < 64)
-         throw new IllegalArgumentException("Invalid buffer size (must be at least 64)");
+      if ((bufferSize & 7) != 0)
+         throw new IllegalArgumentException("Invalid buffer size (must be a multiple of 8)");
 
       this.is = is;
-      this.buffer = buffer;
-      this.bitIndex = 7;
-      this.position = -1;
+      this.buffer = new byte[bufferSize];
+      this.bitIndex = 63;
       this.maxPosition = -1;
    }
 
 
-   // Return 1 or 0
+   // Return 1 or 0. Trigger exception if stream is closed   
    @Override
    public synchronized int readBit() throws BitStreamException
    {
-      if (this.bitIndex == 7)
-      {
-         if (++this.position > this.maxPosition)
-            this.readFromInputStream(this.buffer.length);
-      }
+      if (this.bitIndex == 63)
+         this.pullCurrent();
 
-      final int bit = (this.buffer[this.position] >> this.bitIndex) & 1;
-      this.bitIndex = (this.bitIndex + 7) & 7;
+      final int bit = (int) ((this.current >> this.bitIndex) & 1);
+      this.bitIndex = (this.bitIndex + 63) & 63;
       return bit;
    }
 
 
-   private synchronized int readFromInputStream(int length) throws BitStreamException
+   private synchronized int readFromInputStream(int count) throws BitStreamException
    {
-      if (this.isClosed() == true)
-         throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
-
       try
       {
          this.read += ((this.maxPosition+1) << 3);
-         final int size = this.is.read(this.buffer, 0, length);
+         final int size = this.is.read(this.buffer, 0, count);
 
          if (size <= 0)
          {
@@ -100,70 +88,97 @@ public final class DefaultInputBitStream implements InputBitStream
    }
 
 
+   // Return value of 'count' next bits as a long. Trigger exception if stream is closed   
    @Override
-   public synchronized long readBits(int length) throws BitStreamException
+   public synchronized long readBits(int count) throws BitStreamException
    {
-      if ((length == 0) || (length > 64))
-          throw new IllegalArgumentException("Invalid length: "+length+" (must be in [1..64])");
+      if ((count <= 0) || (count > 64))
+         throw new IllegalArgumentException("Invalid length: "+count+" (must be in [1..64])");
 
-      int remaining = length;
-      long res = 0;
+      long res;
+      final int remaining = count - this.bitIndex - 1;
 
-      try
-      {
-         // Extract bits from the current location in buffer
-         if (this.bitIndex != 7)
+      if (remaining <= 0)
+      {         
+         // Enough spots available in 'current'
+         int shift = -remaining;
+         
+         if (this.bitIndex == 63)
          {
-            int idx = this.bitIndex + 1;
-            final int sz = (remaining <= idx) ? remaining : idx;
-            remaining -= sz;
-            idx -= sz;
-            final long bits = (this.buffer[this.position] >>> idx) & ((1 << sz) - 1);
-            res |= (bits << remaining);
-            this.bitIndex = (idx + 7) & 7;
+            this.pullCurrent();
+            shift += (this.bitIndex - 63); // adjust if bitIndex != 63 (end of stream)
          }
-
-         while (remaining >= 8)
-         {
-            // Fast track, progress byte by byte
-            if (++this.position > this.maxPosition)
-               this.readFromInputStream(this.buffer.length);
-            
-            remaining -= 8;
-            final long bits = this.buffer[this.position] & 0xFF;
-            res |= (bits << remaining);
-         }
-
-         // Extract last bits from the current location in buffer
-         if (remaining > 0)
-         {
-            if (++this.position > this.maxPosition)
-               this.readFromInputStream(this.buffer.length);
-
-            this.bitIndex -= remaining;
-            final long bits = this.buffer[this.position] & 0xFF;
-            res |= (bits >>> (8 - remaining));       
-         }
+         
+         res = this.current >>> shift;   
+         res &= (-1L >>> (64 - count));
+         this.bitIndex = (this.bitIndex + 64 - count) & 63;
       }
-      catch (ArrayIndexOutOfBoundsException e)
+      else
       {
-         throw new BitStreamException("No more data to read", BitStreamException.END_OF_STREAM);
+         // Not enough spots available in 'current'
+         res = this.current & (-1L >>> (63 - this.bitIndex));
+         this.pullCurrent();
+         res <<= remaining;
+         this.bitIndex -= remaining;
+         res |= (this.current >>> (this.bitIndex + 1));
       }
 
       return res;
    }
 
+   
+   // Pull 64 bits of current value from buffer.
+   private void pullCurrent()
+   {
+       if (this.position > this.maxPosition)
+          this.readFromInputStream(this.buffer.length);   
+       
+       long val;
 
+       if (this.position + 7 > this.maxPosition) 
+       {
+          // End of stream: overshoot max position => adjust bit index
+          int shift = (this.maxPosition - this.position) << 3;
+          this.bitIndex = shift + 7;
+          val = 0;
+          
+          while (this.position <= this.maxPosition)
+          {
+             val |= (((long) (this.buffer[this.position++] & 0xFF)) << shift);
+             shift -= 8;
+          }
+       }
+       else
+       {
+          // Regular processing, buffer length is multiple of 8
+          val =  (((long) (this.buffer[this.position]   & 0xFF)) << 56);
+          val |= (((long) (this.buffer[this.position+1] & 0xFF)) << 48);
+          val |= (((long) (this.buffer[this.position+2] & 0xFF)) << 40);
+          val |= (((long) (this.buffer[this.position+3] & 0xFF)) << 32);
+          val |= (((long) (this.buffer[this.position+4] & 0xFF)) << 24);
+          val |= (((long) (this.buffer[this.position+5] & 0xFF)) << 16);
+          val |= (((long) (this.buffer[this.position+6] & 0xFF)) << 8);
+          val |=  ((long) (this.buffer[this.position+7] & 0xFF));
+          this.bitIndex = 63;
+          this.position += 8;
+       }
+
+       this.current = val;
+   }
+
+   
    @Override
    public synchronized void close()
    {
       if (this.isClosed() == true)
          return;
 
+      this.closed = true;
+      this.read += 63;
+
       // Reset fields to force a readFromInputStream() and trigger an exception
       // on readBit() or readBits()
-      this.closed = true;
-      this.bitIndex = 7;
+      this.bitIndex = 63;
       this.maxPosition = -1;
 
       try
@@ -181,11 +196,7 @@ public final class DefaultInputBitStream implements InputBitStream
    @Override
    public synchronized long read()
    {
-      // Number of bits read from OS + bytes read in memory + bits read in memory
-      // If this.bitIndex == 7, the byte at this.position has been completely consumed
-      final int indexByte = (this.bitIndex == 7) ? this.position + 1 : this.position;
-      final int indexBit = 7 - this.bitIndex;
-      return this.read + (indexByte << 3) + indexBit;
+      return this.read + (this.position << 3) - this.bitIndex;
    }
 
 
@@ -195,7 +206,7 @@ public final class DefaultInputBitStream implements InputBitStream
       if (this.isClosed() == true)
          return false;
 
-      if ((this.position < this.maxPosition) || (this.bitIndex != 7))
+      if ((this.position < this.maxPosition) || (this.bitIndex != 63))
          return true;
 
       try
