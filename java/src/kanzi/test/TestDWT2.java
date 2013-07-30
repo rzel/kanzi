@@ -27,7 +27,6 @@ import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.ColorModelType;
-import kanzi.function.wavelet.WaveletRingFilter;
 import kanzi.util.color.ColorModelConverter;
 import kanzi.util.ImageQualityMonitor;
 import kanzi.util.color.YSbSrColorModelConverter;
@@ -147,18 +146,6 @@ public class TestDWT2
       iia1.array = v;
       iia1.index = 0;
       uvDWT.forward(iia1, iia1);
-
-      boolean doRingFilter = false;
-      
-      if (doRingFilter)
-      {
-        WaveletRingFilter ringFilter = new WaveletRingFilter(w, h, 2, 8);
-        IndexedIntArray iia3 = new IndexedIntArray(new int[w*h], 0);
-        System.arraycopy(y, 0, iia3.array, 0, y.length);
-        ringFilter.forward(iia3, iia3);
-        System.arraycopy(iia3.array, 0, y, 0, y.length);
-      }
-
 
       // Inverse
       iia1.array = y;
