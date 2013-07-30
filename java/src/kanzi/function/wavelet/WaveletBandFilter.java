@@ -660,4 +660,12 @@ public class WaveletBandFilter implements IntFunction
           this.height = height;
        }
     }
+    
+      
+
+   @Override
+   public int getMaxEncodedLength(int srcLen)
+   {
+      return srcLen;
+   }
 }

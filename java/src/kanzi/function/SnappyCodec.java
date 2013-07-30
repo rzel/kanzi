@@ -355,7 +355,8 @@ public final class SnappyCodec implements ByteFunction
   // That is, 6 bytes of input turn into 7 bytes of "compressed" data.
   //
   // This last factor dominates the blowup, so the final estimate is:
-  public static int getMaxEncodedLength(int srcLen)
+  @Override
+  public int getMaxEncodedLength(int srcLen)
   {
      return 32 + srcLen + srcLen/6;
   }

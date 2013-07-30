@@ -88,8 +88,9 @@ public class TestSnappyCodec
               }
 
                int size = arr.length;
+               SnappyCodec snappy = new SnappyCodec(size);
                input = new byte[size];
-               output = new byte[SnappyCodec.getMaxEncodedLength(size)];
+               output = new byte[snappy.getMaxEncodedLength(size)];
                reverse = new byte[size];
                IndexedByteArray iba1 = new IndexedByteArray(input, 0);
                IndexedByteArray iba2 = new IndexedByteArray(output, 0);
@@ -104,7 +105,6 @@ public class TestSnappyCodec
                       input[j] = (byte) (0);
                }
 
-               SnappyCodec snappy = new SnappyCodec(size);
                System.out.println("\nOriginal: ");
 
                for (int i = 0; i < input.length; i++)
@@ -183,7 +183,7 @@ public class TestSnappyCodec
          for (int jj=0; jj<3; jj++)
          {
             input = new byte[size];
-            output = new byte[SnappyCodec.getMaxEncodedLength(size)];
+            output = new byte[new SnappyCodec().getMaxEncodedLength(size)];
             reverse = new byte[size];
             IndexedByteArray iba1 = new IndexedByteArray(input, 0);
             IndexedByteArray iba2 = new IndexedByteArray(output, 0);

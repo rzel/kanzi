@@ -86,7 +86,7 @@ func (this *BlockCodec) SetSize(sz uint) bool {
 	return true
 }
 
-// Return no error is the compression chain succeeded. In this case, the input data 
+// Return no error is the compression chain succeeded. In this case, the input data
 // may be modified. If the compression failed, the input data is returned unmodified.
 func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 	if src == nil {
@@ -226,4 +226,11 @@ func (this *BlockCodec) Inverse(src, dst []byte) (uint, uint, error) {
 	this.bwt.Inverse(src, dst)
 
 	return iIdx, oIdx, nil
+}
+
+func (this BlockCodec) MaxEncodedLen(srcLen int) int {
+	// Return input buffer size + max header size
+	// If forward() fails due to output buffer size, the block is returned
+	// unmodified with an error
+	return srcLen + 32
 }

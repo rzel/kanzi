@@ -165,7 +165,7 @@ func (this *LZ4Codec) Forward(src, dst []byte) (uint, uint, error) {
 		count = len(src)
 	}
 
-	if n := MaxEncodedLen(count); len(dst) < n {
+	if n := this.MaxEncodedLen(count); len(dst) < n {
 		return 0, 0, fmt.Errorf("Output buffer is too small - size: %d, required %d", len(dst), n)
 	}
 
@@ -388,6 +388,6 @@ func (this *LZ4Codec) Inverse(src, dst []byte) (uint, uint, error) {
 	return uint(count), uint(dstIdx), nil
 }
 
-func MaxEncodedLen(srcLen int) int {
+func (this LZ4Codec) MaxEncodedLen(srcLen int) int {
 	return srcLen + (srcLen / 255) + 16
 }

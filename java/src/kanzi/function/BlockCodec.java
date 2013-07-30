@@ -220,4 +220,14 @@ public class BlockCodec implements ByteFunction
       this.bwt.inverse(input, output);
       return true;
    }
+   
+     
+   @Override
+   public int getMaxEncodedLength(int srcLen)
+   {
+      // Return input buffer size + max header size
+      // If forward() fails due to output buffer size, the block is returned 
+      // unmodified with an error
+      return srcLen + 32; 
+   }
 }

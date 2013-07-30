@@ -203,4 +203,12 @@ public final class ZLT implements ByteFunction
       destination.index = dstIdx;
       return (srcIdx == srcEnd) ? true : false;
    }
+   
+   
+   // Required encoding output buffer size unknown
+   @Override
+   public int getMaxEncodedLength(int srcLen)
+   {
+      return -1;
+   }
 }

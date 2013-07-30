@@ -546,6 +546,13 @@ public class DistanceCodec implements ByteFunction
     {
        return this.size;
     }
-
+    
+  
+    // Required encoding output buffer size unknown
+    @Override
+    public int getMaxEncodedLength(int srcLen)
+    {
+       return -1;
+    }
 }
 

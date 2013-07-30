@@ -39,8 +39,8 @@ func NewByteFunction(size uint, functionType byte) (kanzi.ByteFunction, error) {
 		return NewSnappyCodec(size)
 
 	case LZ4_TYPE:
-	    return NewLZ4Codec(size)
-	    
+		return NewLZ4Codec(size)
+
 	case RLT_TYPE:
 		return NewRLT(size, 3)
 
@@ -63,9 +63,9 @@ func GetByteFunctionName(functionType byte) (string, error) {
 	case SNAPPY_TYPE:
 		return "SNAPPY", nil
 
-    case LZ4_TYPE:
-        return "LZ4", nil
-        
+	case LZ4_TYPE:
+		return "LZ4", nil
+
 	case RLT_TYPE:
 		return "RLT", nil
 

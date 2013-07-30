@@ -89,8 +89,9 @@ public class TestLZ4Codec
               }
 
                int size = arr.length;
+               LZ4Codec lz4 = new LZ4Codec(size);
                input = new byte[size];
-               output = new byte[LZ4Codec.getMaxEncodedLength(size)];
+               output = new byte[lz4.getMaxEncodedLength(size)];
                reverse = new byte[size];
                IndexedByteArray iba1 = new IndexedByteArray(input, 0);
                IndexedByteArray iba2 = new IndexedByteArray(output, 0);
@@ -105,7 +106,6 @@ public class TestLZ4Codec
                       input[j] = (byte) (0);
                }
 
-               LZ4Codec lz4 = new LZ4Codec(size);
                System.out.println("\nOriginal: ");
 
                for (int i = 0; i < input.length; i++)
@@ -184,7 +184,7 @@ public class TestLZ4Codec
       for (int jj=0; jj<3; jj++)
       {
          input = new byte[size];
-         output = new byte[LZ4Codec.getMaxEncodedLength(size)];
+         output = new byte[new LZ4Codec().getMaxEncodedLength(size)];
          reverse = new byte[size];
          IndexedByteArray iba1 = new IndexedByteArray(input, 0);
          IndexedByteArray iba2 = new IndexedByteArray(output, 0);

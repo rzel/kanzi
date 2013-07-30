@@ -22,4 +22,7 @@ package kanzi;
 // The index of input and output arrays are updated appropriately.
 public interface IntFunction extends IntTransform
 {
+   // Return the max size required for the output buffer
+   // If the max size of the output buffer is not known, return -1
+   public int getMaxEncodedLength(int srcLength);
 }

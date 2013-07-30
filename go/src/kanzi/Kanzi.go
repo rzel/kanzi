@@ -44,6 +44,10 @@ type IntFunction interface {
 	Forward(src, dst []int) (uint, uint, error)
 
 	Inverse(src, dst []int) (uint, uint, error)
+
+	// Return the max size required for the encoding output buffer
+	// If the max size of the output buffer is not known, return -1
+	MaxEncodedLen(srcLen int) int
 }
 
 // A byte function is an operation that transforms the input byte array and writes
@@ -54,6 +58,10 @@ type ByteFunction interface {
 	Forward(src, dst []byte) (uint, uint, error)
 
 	Inverse(src, dst []byte) (uint, uint, error)
+
+	// Return the max size required for the encoding output buffer
+	// If the max size of the output buffer is not known, return -1
+	MaxEncodedLen(srcLen int) int
 }
 
 type InputStream interface {
@@ -127,11 +135,11 @@ func SameIntSlices(slice1, slice2 []int, checkLengths bool) bool {
 	if slice2 == nil {
 		return slice1 == nil
 	}
-	
+
 	if slice1 == nil {
 		return false
 	}
-	
+
 	if &slice1 == &slice2 {
 		return true
 	}
@@ -156,11 +164,11 @@ func SameByteSlices(slice1, slice2 []byte, checkLengths bool) bool {
 	if slice2 == nil {
 		return slice1 == nil
 	}
-	
+
 	if slice1 == nil {
 		return false
 	}
-	
+
 	if &slice1 == &slice2 {
 		return true
 	}

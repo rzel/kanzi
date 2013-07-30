@@ -16,14 +16,14 @@ limitations under the License.
 package kanzi.function.wavelet;
 
 import kanzi.IndexedIntArray;
-import kanzi.IntFunction;
+import kanzi.IntTransform;
 
 
 // Contrast Sensitivity Function (CSF) used to model the Human Visual System (HVS)
 // applied in the wavelet domain
 // Other model available (for Y channel) in [Wavelet-based Image Compression
 // Using Human Visual System Models] by Andrew Beegan
-public class WaveletCSFFilter implements IntFunction
+public class WaveletCSFFilter implements IntTransform
 {
    public static final int  Y_CHANNEL = 0;
    public static final int Cb_CHANNEL = 1;

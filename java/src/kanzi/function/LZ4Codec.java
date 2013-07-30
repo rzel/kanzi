@@ -395,7 +395,8 @@ public final class LZ4Codec implements ByteFunction
    }
 
 
-   public static int getMaxEncodedLength(int srcLen)
+   @Override
+   public int getMaxEncodedLength(int srcLen)
    {
       return srcLen + (srcLen / 255) + 16;
    }

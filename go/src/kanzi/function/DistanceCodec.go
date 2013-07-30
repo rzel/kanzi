@@ -267,7 +267,7 @@ func (this *DistanceCodec) Forward(src, dst []byte) (uint, uint, error) {
 
 	// Encode header
 	srcIdx, dstIdx, res := this.encodeHeader(src, dst, unprocessedFlags)
-	
+
 	if res == false {
 		return 0, 0, errors.New("Failed to encode header")
 	}
@@ -522,4 +522,9 @@ func (this *DistanceCodec) SetSize(sz uint) bool {
 // Not thread safe
 func (this *DistanceCodec) Size() uint {
 	return this.size
+}
+
+// Required encoding output buffer size unknown
+func  (this DistanceCodec) MaxEncodedLen(srcLen int) int {
+	return -1
 }

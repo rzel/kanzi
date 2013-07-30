@@ -110,3 +110,7 @@ func (this *SnappyCodec) Inverse(src, dst []byte) (uint, uint, error) {
 
 	return count, uint(len(res)), nil
 }
+
+func (this SnappyCodec) MaxEncodedLen(srcLen int) int {
+	return snappy.MaxEncodedLen(srcLen)
+}

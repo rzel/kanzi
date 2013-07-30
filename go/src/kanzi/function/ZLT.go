@@ -175,10 +175,10 @@ func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
 				}
 
 				val = src[srcIdx]
-				
+
 				if val > 1 {
 					break
-				}	
+				}
 			}
 
 			continue
@@ -187,16 +187,16 @@ func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
 		// Regular data processing
 		if val == 0xFF {
 			srcIdx++
-			
+
 			if srcIdx >= srcEnd {
 				break
-			}	
-						
+			}
+
 			dst[dstIdx] = 0xFE + src[srcIdx]
 		} else {
 			dst[dstIdx] = val - 1
 		}
-		
+
 		dstIdx++
 		srcIdx++
 	}
@@ -218,4 +218,9 @@ func (this *ZLT) Inverse(src, dst []byte) (uint, uint, error) {
 	}
 
 	return srcIdx, dstIdx, nil
+}
+
+// Required encoding output buffer size unknown
+func (this ZLT) MaxEncodedLen(srcLen int) int {
+	return -1
 }

@@ -71,3 +71,7 @@ func (this *NullFunction) Forward(src, dst []byte) (uint, uint, error) {
 func (this *NullFunction) Inverse(src, dst []byte) (uint, uint, error) {
 	return doCopy(src, dst, this.size)
 }
+
+func (this NullFunction) MaxEncodedLen(srcLen int) int {
+	return srcLen
+}

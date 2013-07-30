@@ -110,4 +110,11 @@ public class NullFunction implements ByteFunction
       destination.index += len;
       return true;
    }
+   
+   
+   @Override
+   public int getMaxEncodedLength(int srcLen)
+   {
+      return srcLen;
+   }   
 }
