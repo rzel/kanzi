@@ -31,7 +31,7 @@ public class HuffmanDecoder extends AbstractDecoder
 
     private final InputBitStream bitstream;
     private final int[] codes;
-    private final short[] sizes; 
+    private final short[] sizes;
     private Node root;
     private CacheData[] decodingCache;
     private CacheData current;
@@ -42,9 +42,9 @@ public class HuffmanDecoder extends AbstractDecoder
     {
        this(bitstream, DEFAULT_CHUNK_SIZE);
     }
-    
-    
-    // The chunk size indicates how many bytes are encoded (per block) before 
+
+
+    // The chunk size indicates how many bytes are encoded (per block) before
     // resetting the frequency stats. 0 means that frequencies calculated at the
     // beginning of the block apply to the whole block.
     // The default chunk size is 65536 bytes.
@@ -52,24 +52,24 @@ public class HuffmanDecoder extends AbstractDecoder
     {
         if (bitstream == null)
             throw new NullPointerException("Invalid null bitstream parameter");
-      
+
         if ((chunkSize != 0) && (chunkSize < 1024))
-           throw new IllegalArgumentException("The chunk size must be a least 1024");
+           throw new IllegalArgumentException("The chunk size must be at least 1024");
 
         if (chunkSize > 1<<30)
-           throw new IllegalArgumentException("The chunk size must be a least most 2^30");
+           throw new IllegalArgumentException("The chunk size must be at most 2^30");
 
         this.bitstream = bitstream;
         this.sizes = new short[256];
         this.codes = new int[256];
         this.chunkSize = chunkSize;
-        
+
         // Default lengths & canonical codes
         for (int i=0; i<256; i++)
         {
            this.sizes[i] = 8;
            this.codes[i] = i;
-        }       
+        }
 
        // Create tree from code sizes
        this.root = this.createTreeFromSizes(8);
@@ -77,12 +77,12 @@ public class HuffmanDecoder extends AbstractDecoder
        this.current = this.decodingCache[0]; // point to root
     }
 
-    
+
     private static CacheData[] buildDecodingCache(Node rootNode, CacheData[] cache)
     {
        final int end = 1 << DECODING_BATCH_SIZE;
        CacheData previousData = (cache[0] == null) ? new CacheData(rootNode) : cache[0];
-     
+
        // Create an array storing a list of tree nodes (shortcuts) for each input value
        for (int val=0; val<end; val++)
        {
@@ -98,17 +98,17 @@ public class HuffmanDecoder extends AbstractDecoder
              while ((currentNode.left != null) || (currentNode.right != null))
              {
                 currentNode = (((val >> shift) & 1) == 0) ? currentNode.left : currentNode.right;
-                
+
                 if (--shift < 0)
                    break;
              }
 
              // Reuse cache data objects when recreating the cache
-             if (previousData.next == null) 
+             if (previousData.next == null)
                 previousData.next = new CacheData(currentNode);
              else
                 previousData.next.value = currentNode;
-             
+
              // The cache is made of linked nodes
              previousData = previousData.next;
 
@@ -121,11 +121,11 @@ public class HuffmanDecoder extends AbstractDecoder
           }
 
           // Reuse cache data objects when recreating the cache
-          if (previousData.next == null) 
+          if (previousData.next == null)
              previousData.next = new CacheData(rootNode);
           else
              previousData.next.value = rootNode;
-          
+
           previousData = previousData.next;
        }
 
@@ -181,7 +181,7 @@ public class HuffmanDecoder extends AbstractDecoder
        return codeMap.firstEntry().getValue();
     }
 
-    
+
     public boolean readLengths() throws BitStreamException
     {
         final short[] buf = this.sizes;
@@ -198,25 +198,25 @@ public class HuffmanDecoder extends AbstractDecoder
         int prevSize = currSize;
         buf[0] = (short) currSize;
         int zeros = 0;
-        
+
         // Read lengths
         for (int i=1; i<256; i++)
         {
            currSize = prevSize + egdec.decodeByte();
-           
+
            if (currSize < 0)
            {
               throw new BitStreamException("Invalid bitstream: incorrect size "+currSize+
                       " for Huffman symbol "+i, BitStreamException.INVALID_STREAM);
            }
-     
+
            buf[i] = (short) currSize;
            zeros = (currSize == 0) ? zeros+1 : 0;
-  
+
            if (maxSize < currSize)
               maxSize = currSize;
-                      
-           // If there is one zero size symbol, save a few bits by avoiding the 
+
+           // If there is one zero size symbol, save a few bits by avoiding the
            // encoding of a big size difference twice
            // EG: 13 13 0 13 14 ... encoded as 0 -13 0 +1 instead of 0 -13 +13 0 +1
            // If there are several zero size symbols in a row, use regular decoding
@@ -236,7 +236,7 @@ public class HuffmanDecoder extends AbstractDecoder
 
 
     // Rebuild the Huffman tree for each chunk of data in the block
-    // Use fastDecodeByte until the near end of chunk or block. 
+    // Use fastDecodeByte until the near end of chunk or block.
     @Override
     public int decode(byte[] array, int blkptr, int len)
     {
@@ -257,7 +257,7 @@ public class HuffmanDecoder extends AbstractDecoder
           int i = startChunk;
 
           try
-          {       
+          {
              // Fast decoding by reading several bits at a time from the bitstream
              for ( ; i<endChunk1; i++)
                 array[i] = this.fastDecodeByte();
@@ -270,7 +270,7 @@ public class HuffmanDecoder extends AbstractDecoder
           {
              return i - blkptr;
           }
-          
+
           startChunk = endChunk;
           sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
           endChunk = startChunk + sizeChunk;
@@ -278,8 +278,8 @@ public class HuffmanDecoder extends AbstractDecoder
 
        return len;
     }
-       
-    
+
+
     // The data block header must have been read before
     @Override
     public byte decodeByte()
@@ -289,7 +289,7 @@ public class HuffmanDecoder extends AbstractDecoder
 
        if (currNode != this.root)
           this.current = this.current.next;
-       
+
        while ((currNode.left != null) || (currNode.right != null))
        {
           currNode = (this.bitstream.readBit() == 0) ? currNode.left : currNode.right;
@@ -328,19 +328,19 @@ public class HuffmanDecoder extends AbstractDecoder
        return currNode.symbol;
     }
 
-    
+
     @Override
     public InputBitStream getBitStream()
     {
        return this.bitstream;
     }
-        
-    
+
+
     private static class Key implements Comparable<Key>
     {
        int code;
        short length;
-       
+
        Key(short length, int code)
        {
           this.code = code;
@@ -348,21 +348,21 @@ public class HuffmanDecoder extends AbstractDecoder
        }
 
        @Override
-       public int compareTo(Key o) 
+       public int compareTo(Key o)
        {
           if (o == this)
              return 0;
-         
+
           if (o == null)
              return 1;
-         
+
           final Key k = (Key) o;
           final int len = this.length - k.length;
-          
+
           if (len != 0)
               return len;
 
-          return this.code - k.code;        
+          return this.code - k.code;
        }
     }
 
@@ -376,5 +376,5 @@ public class HuffmanDecoder extends AbstractDecoder
        {
           this.value = value;
        }
-    }    
+    }
 }

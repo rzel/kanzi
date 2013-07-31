@@ -31,7 +31,7 @@ public final class RangeDecoder extends AbstractDecoder
     private static final long BOTTOM_RANGE = 0x000000FFFFFFFFFFL;
     private static final long MASK         = 0x00FF000000000000L;
     private static final long MAX_RANGE = BOTTOM_RANGE + 1;
-    
+
     private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
     private static final int NB_SYMBOLS = 257; //256 + EOF
     private static final int BASE_LEN = NB_SYMBOLS >> 4;
@@ -63,10 +63,10 @@ public final class RangeDecoder extends AbstractDecoder
             throw new NullPointerException("Invalid null bitstream parameter");
 
         if ((chunkSize != 0) && (chunkSize < 1024))
-           throw new IllegalArgumentException("The chunk size must be a least 1024");
+           throw new IllegalArgumentException("The chunk size must be at least 1024");
 
         if (chunkSize > 1<<30)
-           throw new IllegalArgumentException("The chunk size must be a least most 2^30");
+           throw new IllegalArgumentException("The chunk size must be at most 2^30");
 
         this.range = TOP_RANGE;
         this.bitstream = bitstream;

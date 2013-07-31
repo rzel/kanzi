@@ -60,10 +60,10 @@ public final class RangeEncoder extends AbstractEncoder
             throw new NullPointerException("Invalid null bitstream parameter");
 
         if ((chunkSize != 0) && (chunkSize < 1024))
-           throw new IllegalArgumentException("The chunk size must be a least 1024");
+           throw new IllegalArgumentException("The chunk size must be at least 1024");
 
         if (chunkSize > 1<<30)
-           throw new IllegalArgumentException("The chunk size must be a least most 2^30");
+           throw new IllegalArgumentException("The chunk size must be at most 2^30");
 
         this.range = TOP_RANGE;
         this.bitstream = bitstream;

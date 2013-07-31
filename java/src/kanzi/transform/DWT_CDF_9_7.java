@@ -45,8 +45,8 @@ public class DWT_CDF_9_7 implements IntTransform
     {
        this(dim, dim, 5);
     }
-    
-    
+
+
     // dim (dimension of the whole image) must be a power of 2
     public DWT_CDF_9_7(int width, int height)
     {
@@ -66,7 +66,7 @@ public class DWT_CDF_9_7 implements IntTransform
 
         if (steps < 1)
             throw new IllegalArgumentException("Invalid number of iterations "
-                    + "(must be a least 1)");
+                    + "(must be at least 1)");
 
         if ((width >> steps) < 8)
             throw new IllegalArgumentException("Invalid width for band L0 (must"
@@ -77,11 +77,11 @@ public class DWT_CDF_9_7 implements IntTransform
                     + " be at least 8)");
 
         if (((width >> steps) << steps) != width)
-            throw new IllegalArgumentException("Invalid parameters: change width or number of steps (" 
+            throw new IllegalArgumentException("Invalid parameters: change width or number of steps ("
                     + width + " divided by 2^" + steps + " is not an integer value)");
 
         if (((height >> steps) << steps) != height)
-            throw new IllegalArgumentException("Invalid parameters: change height or number of steps (" 
+            throw new IllegalArgumentException("Invalid parameters: change height or number of steps ("
                     + height + " divided by 2^" + steps + " is not an integer value)");
 
         this.width = width;
@@ -102,7 +102,7 @@ public class DWT_CDF_9_7 implements IntTransform
         return this.height;
     }
 
-    
+
     public int getLevels()
     {
         return this.steps;
@@ -119,12 +119,12 @@ public class DWT_CDF_9_7 implements IntTransform
 
         if (dst.array.length < this.width*this.height)
            return false;
-        
+
         if ((src.array != dst.array) || (src.index != dst.index))
         {
            System.arraycopy(src.array, src.index, dst.array, dst.index, this.width*this.height);
         }
-        
+
         for (int i=0; i<this.steps; i++)
         {
            // First, vertical transform
@@ -143,12 +143,12 @@ public class DWT_CDF_9_7 implements IntTransform
         final int stride2 = stride << 1;
         final int endOffs = blkptr + (dim1 * inc);
         final int half = stride * (dim2  >> 1);
-        
+
         for (int offset=blkptr; offset<endOffs; offset+=inc)
         {
             final int end = offset + (dim2 - 2) * stride;
             int prev = block[offset];
-            
+
             // First lifting stage : Predict 1
             for (int i=offset+stride; i<end; i+=stride2)
             {
@@ -230,11 +230,11 @@ public class DWT_CDF_9_7 implements IntTransform
 
         if (dst.array.length < this.width*this.height)
            return false;
-        
+
         if ((src.array != dst.array) || (src.index != dst.index))
         {
            System.arraycopy(src.array, src.index, dst.array, dst.index, this.width*this.height);
-        }       
+        }
 
         for (int i=this.steps-1; i>=0; i--)
         {
@@ -248,7 +248,7 @@ public class DWT_CDF_9_7 implements IntTransform
         return true;
     }
 
-    
+
     private void inverse(int[] block, int blkptr, int stride, int inc, int dim1, int dim2)
     {
         final int stride2 = stride << 1;

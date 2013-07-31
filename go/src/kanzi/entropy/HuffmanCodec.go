@@ -151,11 +151,11 @@ func NewHuffmanEncoder(bs kanzi.OutputBitStream, chunkSizes ...uint) (*HuffmanEn
 	}
 
 	if chkSize != 0 && chkSize < 1024 {
-		return nil, errors.New("The chunk size must be a least 1024")
+		return nil, errors.New("The chunk size must be at least 1024")
 	}
 
 	if chkSize > 1<<30 {
-		return nil, errors.New("The chunk size must be a least most 2^30")
+		return nil, errors.New("The chunk size must be at most 2^30")
 	}
 
 	this := new(HuffmanEncoder)
@@ -401,11 +401,11 @@ func NewHuffmanDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*HuffmanDec
 	}
 
 	if chkSize != 0 && chkSize < 1024 {
-		return nil, errors.New("The chunk size must be a least 1024")
+		return nil, errors.New("The chunk size must be at least 1024")
 	}
 
 	if chkSize > 1<<30 {
-		return nil, errors.New("The chunk size must be a least most 2^30")
+		return nil, errors.New("The chunk size must be at most 2^30")
 	}
 
 	this := new(HuffmanDecoder)
