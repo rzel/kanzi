@@ -173,20 +173,20 @@ func (this *BlockCompressor) call() (int, uint64) {
 
 	if err == nil {
 		// File exists
+		output.Close()
+		
 		if this.overwrite == false {
 			fmt.Print("The output file exists and the 'overwrite' command ")
-			fmt.Println("line option has not been provided")
-			output.Close()
+			fmt.Println("line option has not been provided")			
 			return io.ERR_OVERWRITE_FILE, written
 		}
-	} else {
-		// File does not exist, create
-		output, err = os.Create(this.outputName)
+	}
 
-		if err != nil {
-			fmt.Printf("Cannot open output file '%v' for writing: %v\n", this.outputName, err)
-			return io.ERR_CREATE_FILE, written
-		}
+	output, err = os.Create(this.outputName)
+
+	if err != nil {
+		fmt.Printf("Cannot open output file '%v' for writing: %v\n", this.outputName, err)
+		return io.ERR_CREATE_FILE, written
 	}
 
 	defer output.Close()
