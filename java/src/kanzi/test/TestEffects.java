@@ -39,7 +39,7 @@ import kanzi.filter.seam.ContextResizer;
 
 
 
-public class TestFilters
+public class TestEffects
 {
     public static void main(String[] args)
     {
@@ -51,7 +51,7 @@ public class TestFilters
             for (String arg : args)
             {
                arg = arg.trim();
-               
+              
                if (arg.equals("-help"))
                {
                    System.out.println("-help                : display this message");
@@ -65,10 +65,10 @@ public class TestFilters
                {
                   fileName = arg.substring(6);
                }
-               else if (arg.equals("-filter="))
+               else if (arg.startsWith("-filter="))
                {
                    filterName = arg.substring(8).toUpperCase();
-                   System.out.println("Filter set to "+filterName);                   
+                   System.out.println("Filter set to "+filterName);                     
                }            
                else
                {
@@ -92,7 +92,6 @@ public class TestFilters
             JFrame frame = new JFrame("Original");
             frame.setBounds(100, 50, w, h);
             frame.add(new JLabel(icon));
-            frame.setVisible(true);            
             IntFilter effect;
         
             switch (filterName)
@@ -100,6 +99,7 @@ public class TestFilters
                case "CONTEXTRESIZER" :
                {
                   // Context Resizer
+                  frame.setVisible(true);            
                   int vertical = ContextResizer.VERTICAL;
                   int horizontal = ContextResizer.HORIZONTAL;
                   int action = ContextResizer.SHRINK;
@@ -125,6 +125,7 @@ public class TestFilters
                case "COLORCLUSTER" :
                {
                   // Color Cluster
+                  frame.setVisible(true);            
                   int clusters = 15;
                   int iterations = 5;
                   effect = new ColorClusterFilter(w/2, h, w, clusters, iterations);
@@ -147,6 +148,7 @@ public class TestFilters
                case "LIGHTING" :
                {
                   // Lighting
+                  frame.setVisible(true);            
                   int radius = 120;
                   int power = 120; //per cent
                   boolean bumpMapping = false;
@@ -169,6 +171,7 @@ public class TestFilters
                case "BLUR" :
                {
                   // Blur
+                  frame.setVisible(true);            
                   int radius = 8;
                   effect = new BlurFilter(w/2, h, w, radius);
                   test(effect, icon, "Filter - left half", 0, 200, 150, 0, 0);
@@ -188,6 +191,7 @@ public class TestFilters
                case "FASTBILATERAL" :
                {
                   // Fast Bilateral
+                  frame.setVisible(true);            
                   float sigmaR = 30.0f;
                   float sigmaD = 0.03f;
                   effect = new FastBilateralFilter(w/2, h, w, sigmaR, sigmaD);
@@ -208,6 +212,7 @@ public class TestFilters
                case "BILATERAL" :
                {
                   // Bilateral
+                  frame.setVisible(true);            
                   int sigmaR = 4;
                   int sigmaD = 10;
                   effect = new BilateralFilter(w/2, h, w, sigmaR, sigmaD);
@@ -228,8 +233,9 @@ public class TestFilters
                case "GAUSSIAN" :
                {
                   // Gaussian
+                  frame.setVisible(true);            
                   int channels = 3;
-                  int sigma16 = 128;
+                  int sigma16 = 192;
                   effect = new GaussianFilter(w/2, h, w, sigma16, channels);
                   test(effect, icon, "Filter - left half", 0, 200, 150, 0, 0);
                   effect = new GaussianFilter(w/2, h, w, sigma16, channels);
@@ -241,13 +247,14 @@ public class TestFilters
                   effect = new GaussianFilter(w/2, h/2, w, sigma16, channels);
                   test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
                   effect = new GaussianFilter(w, h, w, sigma16, channels);
-                  test(effect, icon, "Filter - full", 0, 700, 650, 4000, 30000);
+                  test(effect, icon, "Filter - full", 0, 700, 650, 2000, 30000);
                   break;
                }
                   
                case "CONTRAST" :
                {
                   // Contrast
+                  frame.setVisible(true);            
                   int contrast = 75; // per cent
                   effect = new ContrastFilter(w/2, h, w, contrast);
                   test(effect, icon, "Filter - left half", 0, 200, 150, 0, 0);
@@ -267,6 +274,7 @@ public class TestFilters
                case "SOBEL" :
                {
                   // Sobel
+                  frame.setVisible(true);            
                   effect = new SobelFilter(w/2, h, w);
                   test(effect, icon, "Filter - left half", 0, 200, 150, 0, 0);
                   effect = new SobelFilter(w/2, h, w);
@@ -283,11 +291,12 @@ public class TestFilters
                }
                
                default:   
+               {
                   System.out.println("Unknown filter: '"+filterName+"'");
                   System.out.println("Supported filters: [Bilateral|Blur|Contrast|ColorCluster|FastBilateral|" +
                                      "Gaussian|Lighting|Sobel|ContextResizer]");
                   System.exit(1);
-
+               }
             }
         }
         catch (Exception e)
