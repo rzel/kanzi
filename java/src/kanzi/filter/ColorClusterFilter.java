@@ -17,7 +17,8 @@ package kanzi.filter;
 
 import java.util.LinkedList;
 import java.util.Random;
-import kanzi.VideoEffect;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 import kanzi.util.QuadTreeGenerator;
 
 
@@ -36,7 +37,7 @@ import kanzi.util.QuadTreeGenerator;
 //    that adjacent pixels belong to the same cluster), meaning that the early exit
 //    in the loop (no computation of 'color' distance) is used frequently.
 
-public class ColorClusterFilter implements VideoEffect
+public class ColorClusterFilter implements IntFilter
 {
     private final int width;
     private final int height;
@@ -45,22 +46,24 @@ public class ColorClusterFilter implements VideoEffect
     private final Cluster[] clusters;
     private final int[] buffer;
     private boolean chooseCentroids;
+    private int subSample;
 
     
     public ColorClusterFilter(int width, int height, int nbClusters)
     {
-       this(width, height, nbClusters, 16, null);
+       this(width, height, width, nbClusters, 16, null, 0);
     }
 
 
-    public ColorClusterFilter(int width, int height, int nbClusters, int iterations)
+    public ColorClusterFilter(int width, int height, int stride, int nbClusters, int iterations)
     {
-       this(width, height, nbClusters, iterations, null);
+       this(width, height, stride, nbClusters, iterations, null, 0);
     }
 
 
     // centroidXY is an optional array of packed (16 bits + 16 bits) centroid coordinates
-    public ColorClusterFilter(int width, int height, int nbClusters, int iterations, int[] centroidsXY)
+    public ColorClusterFilter(int width, int height, int stride, int nbClusters, 
+            int iterations, int[] centroidsXY, int downSampling)
     {
       if (height < 8)
          throw new IllegalArgumentException("The height must be at least 8");
@@ -74,8 +77,14 @@ public class ColorClusterFilter implements VideoEffect
       if ((width & 3) != 0)
          throw new IllegalArgumentException("The width must be a multiple of 4");
 
+      if (stride < 8)
+         throw new IllegalArgumentException("The stride must be at least 8");
+
       if ((nbClusters < 2) || (nbClusters > 256))
          throw new IllegalArgumentException("The number of clusters must be in [2..256]");
+
+      if ((downSampling < 0) || (downSampling > 2))
+         throw new IllegalArgumentException("The down sampling factor must be in [0..2]");
 
       if ((iterations < 2) || (iterations > 256))
          throw new IllegalArgumentException("The maximum number of iterations must be in [2..256]");
@@ -86,11 +95,12 @@ public class ColorClusterFilter implements VideoEffect
 
       this.width = width;
       this.height = height;
-      this.stride = width;
+      this.stride = stride;
       this.maxIterations = iterations;
       this.chooseCentroids = (centroidsXY == null) ? true : false;
       this.clusters = new Cluster[nbClusters];
-      this.buffer = new int[(width*height)>>2];
+      this.subSample = downSampling + 1; // down scale by 2 at least
+      this.buffer = new int[(width>>1)*(height>>1)]; // always 1 because of the automatic upsampling in apply()
 
       for (int i=0; i<nbClusters; i++)
       {
@@ -98,10 +108,10 @@ public class ColorClusterFilter implements VideoEffect
          
          if (centroidsXY != null)
          {
-            // The work image is downscaled by 4 at the beginning of the process
+            // The work image is downscaled by 2 at the beginning of the process
             // Rescale the coordinates
-            this.clusters[i].centroidX = ((centroidsXY[i] >> 16) & 0x0000FFFF) >> 2;
-            this.clusters[i].centroidY =  (centroidsXY[i] & 0x0000FFFF) >> 2;
+            this.clusters[i].centroidX = ((centroidsXY[i] >> 16) & 0x0000FFFF) >> this.subSample;
+            this.clusters[i].centroidY =  (centroidsXY[i] & 0x0000FFFF) >> this.subSample;
          }
       }
     }
@@ -109,20 +119,19 @@ public class ColorClusterFilter implements VideoEffect
 
     // Use K-Means algorithm to create clusters of pixels with similar colors
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray src, IndexedIntArray dst)
     {
        final int[] buf = this.buffer;
-       int scale = ((this.width >= 400) && (this.height >= 400)) ? 2 : 1;
+       int scale = this.subSample;
        int scaledW = this.width >> scale;
        int scaledH = this.height >> scale;
        final Cluster[] cl = this.clusters;
        final int nbClusters = cl.length;
        final int rescaleThreshold = (this.maxIterations * 2 / 3);
-       boolean rescaled = (scale == 2) ? false : true;
        int iterations = 0;
 
-       // Create a down sampled copy of the source (1/4 or 1/2 in each dimension)
-       this.createWorkImage(src, buf, scale);
+       // Create a down sampled copy of the source 
+       this.createWorkImage(src.array, src.index, scale);
 
        // Choose centers
        if (this.chooseCentroids == true)
@@ -219,14 +228,13 @@ public class ColorClusterFilter implements VideoEffect
 
          iterations++;
 
-         if ((rescaled == false) && ((iterations == rescaleThreshold) || (moves == 0)))
+         if ((scale > 1) && ((iterations == rescaleThreshold) || (moves == 0)))
          {
-            // Upscale to 1/2 in each dimension, now that centroids are somewhat stable
+            // Upscale by 2 in each dimension, now that centroids are somewhat stable
             scale >>= 1;
             scaledW <<= 1;
             scaledH <<= 1;
-            this.createWorkImage(src, buf, scale);
-            rescaled = true;
+            this.createWorkImage(src.array, src.index, scale);
 
             for (int j=0; j<nbClusters; j++)
             {
@@ -247,28 +255,30 @@ public class ColorClusterFilter implements VideoEffect
          c.centroidY <<= 1;
       }
 
-      return this.createFinalImage(src, this.buffer, dst);
+      this.subSample = scale;
+      return this.createFinalImage(src, dst);
    }
 
 
    // Create a down sampled copy of the source
-   private int[] createWorkImage(int[] src, int[] dst, int scale)
+   private int[] createWorkImage(int[] src, int srcStart, int scale)
    {
+       final int[] buf = this.buffer;
        final int scaledW = this.width >> scale;
        final int scaledH = this.height >> scale;
        final int st = this.stride;
-       final int st2 = st >> 1;
+       final int scaledStride = st << scale;
        final int inc = 1 << scale;
        final int scale2 = scale + scale;
        final int adjust = 1 << (scale2 - 1);
-       int srcIdx = 0;
-       int dstIdx = 0;
+       int srcIdx = srcStart;
+       int dstIdx = 0;      
 
-       for (int j=0; j<scaledH; j++, dstIdx+= st2)
+       for (int j=0; j<scaledH; j++)
        {
           for (int i=0; i<scaledW; i++)
           {
-             int idx = (srcIdx + i) << scale;
+             int idx = srcIdx + (i << scale);
              int r = 0, g = 0, b = 0;
 
              // Take mean value of each pixel
@@ -288,51 +298,59 @@ public class ColorClusterFilter implements VideoEffect
              r = (r + adjust) >> scale2;
              g = (g + adjust) >> scale2;
              b = (b + adjust) >> scale2;
-             dst[dstIdx+i] = ((r << 16) | (g << 8) | b) & 0x00FFFFFF;
+             buf[dstIdx++] = ((r << 16) | (g << 8) | b) & 0x00FFFFFF;
           }
 
-          srcIdx += st;
+          srcIdx += scaledStride;
        }
 
-       return dst;
+       return buf;
    }
 
 
-   // Up-sample and set all points in the cluster to color of the centroid pixel
-   private int[] createFinalImage(int[] src, int[] buffer, int[] dst)
+   // Up-sample and set all points in the cluster to the color of the centroid pixel
+   private boolean createFinalImage(IndexedIntArray source, IndexedIntArray destination)
    {
+      final int[] buf = this.buffer;
+      final int[] src = source.array;
+      final int[] dst = destination.array;
+      final int srcStart = source.index;
+      final int dstStart = destination.index;
       final Cluster[] cl = this.clusters;
-      final int scaledW = this.width >> 1;
-      final int scaledY = this.height >> 1;
+      final int scale = this.subSample; 
+      final int scaledW = this.width >> scale;
+      final int scaledY = this.height >> scale;
       final int st = this.stride;
       int offs = (scaledY - 1) * scaledW;
       int nlOffs = offs;
-
-      for (int j=scaledY-1; j>=0; j--, offs-=scaledW)
+           
+      for (int j=this.height-2; j>=0; j-=2)
       {
-         Cluster c1 = cl[(buffer[offs]>>>24)-1]; // pixel p1 to the right of current p0
-         Cluster c3 = cl[(buffer[nlOffs]>>>24)-1]; // pixel p3 to the right of p2
-         final int dstIdx = offs << 2;
+         Cluster c1 = cl[(buf[offs+scaledW-1]>>>24)-1]; // pixel p1 to the right of current p0
+         Cluster c3 = cl[(buf[nlOffs+scaledW-1]>>>24)-1]; // pixel p3 to the right of p2
+         final int srcIdx = srcStart + j * st;
+         final int dstIdx = dstStart + j * st;
 
-         for (int i=scaledW-1; i>=0; i--)
+         for (int i=this.width-2; i>=0; i-=2)
          {
-            int idx = dstIdx + (i << 1) ;
-            final int cluster0Idx = (buffer[offs+i] >>> 24) - 1;
+            int iOffs = srcIdx + i;
+            int oOffs = dstIdx + i;
+            final int cluster0Idx = (buf[offs+(i>>scale)] >>> 24) - 1;
             final Cluster c0 = cl[cluster0Idx];
-            final int cluster2Idx = (buffer[nlOffs+i] >>> 24) - 1;
+            final int cluster2Idx = (buf[nlOffs+(i>>scale)] >>> 24) - 1;
             final Cluster c2 = cl[cluster2Idx]; // pixel p2 below current p0
             final int pixel0 = c0.centroidValue;
-            dst[idx] = pixel0;
+            dst[oOffs] = pixel0;
 
             if (c0 == c3)
             {
-              // Inside cluster
-              dst[idx+st+1] = pixel0;
+               // Inside cluster
+               dst[oOffs+st+1] = pixel0;
             }
             else
             {
                // Diagonal cluster border
-               final int pixel = src[idx+st+1];
+               final int pixel = src[iOffs+st+1];
                final int r = (pixel >> 16) & 0xFF;
                final int g = (pixel >>  8) & 0xFF;
                final int b =  pixel & 0xFF;
@@ -342,18 +360,18 @@ public class ColorClusterFilter implements VideoEffect
                final int d3 = ((r-c3.centroidR)*(r-c3.centroidR)
                              + (g-c3.centroidG)*(g-c3.centroidG)
                              + (b-c3.centroidB)*(b-c3.centroidB));
-               dst[idx+st+1] = (d0 < d3) ? pixel0 : c3.centroidValue;
+               dst[oOffs+st+1] = (d0 < d3) ? pixel0 : c3.centroidValue;
             }
 
             if (c0 == c2)
             {
-              // Inside cluster
-              dst[idx+st] = pixel0;
+               // Inside cluster
+               dst[oOffs+st] = pixel0;
             }
             else
             {
                // Vertical cluster border
-               final int pixel = src[idx+st];
+               final int pixel = src[iOffs+st];
                final int r = (pixel >> 16) & 0xFF;
                final int g = (pixel >>  8) & 0xFF;
                final int b =  pixel & 0xFF;
@@ -363,18 +381,18 @@ public class ColorClusterFilter implements VideoEffect
                final int d2 = ((r-c2.centroidR)*(r-c2.centroidR)
                              + (g-c2.centroidG)*(g-c2.centroidG)
                              + (b-c2.centroidB)*(b-c2.centroidB));
-               dst[idx+st] = (d0 < d2) ? pixel0 : c2.centroidValue;
+               dst[oOffs+st] = (d0 < d2) ? pixel0 : c2.centroidValue;
             }
 
             if (c0 == c1)
             {
-              // Inside cluster
-              dst[idx+1] = pixel0;
+               // Inside cluster
+               dst[oOffs+1] = pixel0;
             }
             else
             {
                // Horizontal cluster border
-               final int pixel = src[idx+1];
+               final int pixel = src[iOffs+1];
                final int r = (pixel >> 16) & 0xFF;
                final int g = (pixel >>  8) & 0xFF;
                final int b =  pixel & 0xFF;
@@ -384,16 +402,18 @@ public class ColorClusterFilter implements VideoEffect
                final int d1 = ((r-c1.centroidR)*(r-c1.centroidR)
                              + (g-c1.centroidG)*(g-c1.centroidG)
                              + (b-c1.centroidB)*(b-c1.centroidB));
-               dst[idx+1] = (d0 < d1) ? pixel0 : c1.centroidValue;
+               dst[oOffs+1] = (d0 < d1) ? pixel0 : c1.centroidValue;
             }
 
-            nlOffs = offs;
             c1 = c0;
             c3 = c2;
          }
+           
+         nlOffs = offs;
+         offs -= scaledW;
       }
 
-      return dst;
+      return true;
    }
 
 

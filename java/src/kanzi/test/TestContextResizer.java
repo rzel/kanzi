@@ -25,6 +25,7 @@ import java.util.Arrays;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import kanzi.IndexedIntArray;
 import kanzi.filter.seam.ContextResizer;
 
 
@@ -146,15 +147,15 @@ public class TestContextResizer
             frame.setBounds(50, 50, w, h);
             frame.add(new JLabel(icon));
             frame.setVisible(true);
-            int[] src = new int[w*h];
-            int[] dst = new int[w*h];
+            IndexedIntArray src = new IndexedIntArray(new int[w*h], 0);
+            IndexedIntArray dst = new IndexedIntArray(new int[w*h], 0);
 
             // Do NOT use img.getRGB(): it is more than 10 times slower than
             // img.getRaster().getDataElements()
-            img.getRaster().getDataElements(0, 0, w, h, src);
+            img.getRaster().getDataElements(0, 0, w, h, src.array);
             ContextResizer effect;
 
-            Arrays.fill(dst, 0);
+            Arrays.fill(dst.array, 0);
             int dir = 0;
             int min = Integer.MAX_VALUE;
             
@@ -170,13 +171,12 @@ public class TestContextResizer
                 min = Math.min(min, h);
             }
 
-            effect = new ContextResizer(w, h, 0, w, dir,
-                    ContextResizer.SHRINK, min, min * effectPct / 100, false);            
-            effect.setDebug(debug);
+            effect = new ContextResizer(w, h,  w, dir,
+                    ContextResizer.SHRINK, min * effectPct / 100, false, debug);            
             effect.apply(src, dst);
 
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            img2.getRaster().setDataElements(0, 0, w, h, dst);
+            img2.getRaster().setDataElements(0, 0, w, h, dst.array);
             JFrame frame2 = new JFrame("Filter");
             frame2.setBounds(500, 80, w, h);
             ImageIcon icon2 = new ImageIcon(img2);
@@ -188,10 +188,10 @@ public class TestContextResizer
             {
                 System.out.println("Speed test");
                 long sum = 0;
-                int iter = 500;
+                int iter = 1000;
                 System.out.println("Accurate mode");
-                effect = new ContextResizer(w, h, 0, w, dir,
-                       ContextResizer.SHRINK, min, min * effectPct/100, false);
+                effect = new ContextResizer(w, h, w, dir,
+                       ContextResizer.SHRINK, min * effectPct/100, false, false);
 
                 for (int ii=0; ii<iter; ii++)
                 {
@@ -205,8 +205,8 @@ public class TestContextResizer
                 System.out.println("Elapsed [ms]: "+ sum/1000000+" ("+iter+" iterations)");              
                 System.out.println("Fast mode");
                 sum = 0;
-                effect = new ContextResizer(w, h, 0, w, dir,
-                       ContextResizer.SHRINK, min, min * effectPct/100, true);
+                effect = new ContextResizer(w, h, w, dir,
+                       ContextResizer.SHRINK, min * effectPct/100, true, false);
 
                 for (int ii=0; ii<iter; ii++)
                 {

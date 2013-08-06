@@ -15,7 +15,8 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 import kanzi.util.sampling.DecimateDownSampler;
 
 //  See http://en.wikipedia.org/wiki/Bilateral_filter.
@@ -31,7 +32,7 @@ import kanzi.util.sampling.DecimateDownSampler;
 //  sub-sampling to increase the overall speed.
 //  This implementation is initially based on the C code available at http://www.cs.cityu.edu.hk/~qiyang/
 //
-public final class FastBilateralFilter implements VideoEffectWithOffset
+public final class FastBilateralFilter implements IntFilter
 {
     private final int width;
     private final int height;
@@ -46,30 +47,29 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
     private final int[] buffer1;
     private final int[] buffer2;
     private final int channels;
-    private int offset;
 
 
     // sigmaR = sigma Range (for pixel intensities)
     // sigmaD = sigma Distance (for pixel locations)
     public FastBilateralFilter(int width, int height, float sigmaR, float sigmaD)
     {
-       this(width, height, 0, width, sigmaR, sigmaD, 4, 3, 3);
+       this(width, height, width, sigmaR, sigmaD, 4, 3, 3);
     }
 
 
     // sigmaR = sigma Range (for pixel intensities)
     // sigmaD = sigma Distance (for pixel locations)
-    public FastBilateralFilter(int width, int height, int offset, int stride,
+    public FastBilateralFilter(int width, int height, int stride,
             float sigmaR, float sigmaD)
     {
-       this(width, height, offset, stride, sigmaR, sigmaD, 4, 3, 3);
+       this(width, height, stride, sigmaR, sigmaD, 4, 3, 3);
     }
 
 
     // sigmaR = sigma Range (for pixel intensities)
     // sigmaD = sigma Distance (for pixel locations)
     // range sampling: 4 is enough to guarantee an accurate approximation
-    public FastBilateralFilter(int width, int height, int offset, int stride,
+    public FastBilateralFilter(int width, int height, int stride,
             float sigmaR, float sigmaD, int rangeSampling, int downSampling, int channels)
     {
         if (height < 8)
@@ -77,10 +77,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
-
+        
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
 
@@ -101,7 +98,6 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 
         this.height = height;
         this.width = width;
-        this.offset = offset;
         this.stride = stride;
         int scaledH = this.height >> downSampling;
         int scaledW = this.width >> downSampling;
@@ -122,9 +118,13 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 
 
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray source, IndexedIntArray destination)
     {
-        // Some aliasing ...
+        // Aliasing
+        final int[] src = source.array;
+        final int[] dst = destination.array;
+        final int srcIdx = source.index;
+        final int dstIdx = destination.index;
         final int[] buf1 = this.buffer1;
         final float[] wk_ = this.wk;
         final int ds = this.downSampling;
@@ -136,19 +136,19 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
         if (ds > 0)
         {
            buf2 = this.buffer2;
-           final int xx = this.offset % this.stride;
-           final int yy = this.offset / this.stride;
+           final int xx = srcIdx % this.stride;
+           final int yy = srcIdx / this.stride;
            final int ww = (this.width + xx < this.stride) ? this.width : this.stride - xx;
-           final int hh = ((this.height + yy) * this.stride < len) ? this.height : this.height - yy;
+           final int hh = ((this.height + yy) * this.stride <= len) ? this.height : this.height - yy;
            DecimateDownSampler sampler = new DecimateDownSampler(ww, hh,
-                   this.stride, this.offset, 1<<ds);
+                   this.stride, srcIdx, 1<<ds);
            sampler.subSample(src, buf2);
         }
-        else if ((this.offset != 0) || (this.stride != this.width))
+        else if ((srcIdx != 0) || (this.stride != this.width))
         {
            buf2 = this.buffer2;
-           int iOffs = this.offset;
-           int oOffs = 0;
+           int iOffs = srcIdx;
+           int oOffs = dstIdx;
 
            for (int y=this.height; y>0; y--)
            {
@@ -225,7 +225,8 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
 
              if (grayRangeIdx != 0)
              {
-                offs = this.offset;
+                int iOffs = srcIdx;
+                int oOffs = dstIdx;        
                 final float[] jk0 = this.jk[jk_idx0];
                 final float[] jk1 = this.jk[jk_idx1];
 
@@ -233,11 +234,11 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
                 for (int y=0; y<this.height; y++)
                 {
                    float ys = Math.min(((float) y) * shift_inv, maxH);
-                   final int endX = (offs+w < len) ? w : len-offs;
+                   final int endX = (iOffs+w < len) ? w : len-iOffs;
 
                    for (int x=0; x<endX; x++)
                    {
-                      final int val = (src[offs+x] >> shift) & 0xFF;
+                      final int val = (src[iOffs+x] >> shift) & 0xFF;
                       final float kf = ((float) (val - min) * delta_scale);
                       final int k = (int) kf;
 
@@ -246,21 +247,22 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
                           final float alpha = (float) (k+1) - kf;
                           final float xs = Math.min(((float) x) * shift_inv, maxW);
                           final int val2 = (int) interpolateLinearXY2(jk0, jk1, alpha, xs, ys, scaledW);
-                          dst[offs+x] &= ~(0xFF << shift); //src can be the same buffer as dst
-                          dst[offs+x] |= ((val2 & 0xFF) << shift);
+                          dst[oOffs+x] &= ~(0xFF << shift); //src can be the same buffer as dst
+                          dst[oOffs+x] |= ((val2 & 0xFF) << shift);
                       }
                       else if ((grayRangeIdx == maxGrayIdx) && (k == grayRangeIdx))
                       {
                           final float xs = Math.min(((float) x) * shift_inv, maxW);
                           final int val2 = (int) (interpolateLinearXY(jk1, xs , ys, scaledW) + 0.5f);
-                          dst[offs+x] &= ~(0xFF << shift); //src can be the same buffer as dst
-                          dst[offs+x] |= ((val2 & 0xFF) << shift);
+                          dst[oOffs+x] &= ~(0xFF << shift); //src can be the same buffer as dst
+                          dst[oOffs+x] |= ((val2 & 0xFF) << shift);
                       }
                    }
 
-                   offs += this.stride;
+                   iOffs += this.stride;
+                   oOffs += this.stride;
 
-                   if (offs >= len)
+                   if (iOffs >= len)
                       break;
                 }
 
@@ -272,7 +274,7 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
            }
         }
 
-        return dst;
+        return true;
     }
 
 
@@ -426,24 +428,5 @@ public final class FastBilateralFilter implements VideoEffectWithOffset
         float res2 = ((d00*image2[offs0+x0]) + (d0t*image2[offs0+xt]) +
                (dt0*image2[offst+x0]) + (dtt*image2[offst+xt]));
         return alpha * res1 + (1.0f-alpha) * res2;
-    }
-
-
-    @Override
-    public int getOffset()
-    {
-        return this.offset;
-    }
-
-
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-        if (offset < 0)
-            return false;
-
-        this.offset = offset;
-        return true;
     }
 }

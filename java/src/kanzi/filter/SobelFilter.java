@@ -15,10 +15,11 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 
 
-public final class SobelFilter implements VideoEffectWithOffset
+public final class SobelFilter implements IntFilter
 {
     public static final int HORIZONTAL = 1;
     public static final int VERTICAL = 2;
@@ -36,22 +37,21 @@ public final class SobelFilter implements VideoEffectWithOffset
     private final int direction;
     private final int mask;
     private final int channels;
-    private int offset;
 
 
     public SobelFilter(int width, int height)
     {
-       this(width, height, 0, width, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE);
+       this(width, height, width, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE);
     }
 
 
-    public SobelFilter(int width, int height, int offset, int stride)
+    public SobelFilter(int width, int height, int stride)
     {
-       this(width, height, offset, stride, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE);
+       this(width, height, stride, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE);
     }
 
 
-    public SobelFilter(int width, int height, int offset, int stride,
+    public SobelFilter(int width, int height, int stride,
             int direction, int nbChannels, int filterType)
     {
         if (height < 8)
@@ -59,10 +59,7 @@ public final class SobelFilter implements VideoEffectWithOffset
 
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
-
+        
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
 
@@ -80,7 +77,6 @@ public final class SobelFilter implements VideoEffectWithOffset
 
         this.height = height;
         this.width = width;
-        this.offset = offset;
         this.stride = stride;
         this.direction = direction;
         this.mask = filterType;
@@ -97,9 +93,12 @@ public final class SobelFilter implements VideoEffectWithOffset
     // A naive implementation requires around 10*w*h accesses
     // This implementation requires around 4*w*h accesses
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray source, IndexedIntArray destination)
     {
-        int startLine = this.offset;
+        final int[] src = source.array;
+        final int[] dst = destination.array;
+        int srcStart = source.index;
+        int dstStart = destination.index;
         final int mask_ = this.mask;
         final int h = this.height;
         final int w = this.width;
@@ -111,12 +110,13 @@ public final class SobelFilter implements VideoEffectWithOffset
 
         for (int y=2; y<h; y++)
         {
-           final int line = (startLine + this.stride >= srcLen) ? startLine : startLine + this.stride;
-           final int endLine = (line + this.stride >= srcLen) ? line : line + this.stride ;
-           final int pixel00 = src[startLine];
-           final int pixel01 = src[startLine+1];
-           final int pixel10 = src[line];
-           final int pixel11 = src[line+1];
+           final int srcLine = (srcStart + this.stride >= srcLen) ? srcStart : srcStart + this.stride;
+           final int endLine = (srcLine + this.stride >= srcLen) ? srcLine : srcLine + this.stride ;
+           final int dstLine = dstStart + this.stride;
+           final int pixel00 = src[srcStart];
+           final int pixel01 = src[srcStart+1];
+           final int pixel10 = src[srcLine];
+           final int pixel11 = src[srcLine+1];
            final int pixel20 = src[endLine];
            final int pixel21 = src[endLine+1];
            int val00, val01, val10, val11, val20, val21;
@@ -143,8 +143,8 @@ public final class SobelFilter implements VideoEffectWithOffset
 
            for (int x=2; x<w; x++)
            {
-             final int pixel02 = src[startLine+x];
-             final int pixel12 = src[line+x];
+             final int pixel02 = src[srcStart+x];
+             final int pixel12 = src[srcLine+x];
              final int pixel22 = src[endLine+x];
              final int val02, val12, val22;
              int val;
@@ -181,7 +181,7 @@ public final class SobelFilter implements VideoEffectWithOffset
                 val = (val + (val >> 31)) ^ (val >> 31);
              }
 
-             dst[line+x-1] = (val > 255) ? maxVal : ((val << 16) | (val << 8) | val) & mask_;
+             dst[dstLine+x-1] = (val > 255) ? maxVal : ((val << 16) | (val << 8) | val) & mask_;
 
              // Slide the 3x3 window (reassign 6 pixels: left + center columns)
              val00 = val01;
@@ -193,16 +193,17 @@ public final class SobelFilter implements VideoEffectWithOffset
           }
 
           // Boundary processing, just duplicate pixels
-          dst[line] = dst[line+1] & mask_;
-          dst[line+w-1] = dst[line+w-2] & mask_;
-          startLine = line;
+          dst[dstLine] = dst[dstLine+1] & mask_;
+          dst[dstLine+w-1] = dst[dstLine+w-2] & mask_;
+          srcStart = srcLine;
+          dstStart = dstLine;
 
-          if (startLine >= srcLen)
+          if (srcStart >= srcLen)
              break;
        }
 
-       final int firstLine = this.offset;
-       final int lastLine = this.offset + this.stride * (this.height - 1);
+       final int firstLine = destination.index;
+       final int lastLine = destination.index + this.stride * (this.height - 1);
 
        // Duplicate first and last lines
        System.arraycopy(dst, firstLine+this.stride, dst, firstLine, w);
@@ -210,25 +211,6 @@ public final class SobelFilter implements VideoEffectWithOffset
        if (lastLine + w <= dst.length)
           System.arraycopy(dst, lastLine-this.stride, dst, lastLine, w);
 
-       return dst;
-    }
-
-
-    @Override
-    public int getOffset()
-    {
-        return this.offset;
-    }
-
-
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-        if (offset < 0)
-            return false;
-
-        this.offset = offset;
-        return true;
+       return true;
     }
 }

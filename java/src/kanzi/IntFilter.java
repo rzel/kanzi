@@ -16,9 +16,10 @@ limitations under the License.
 package kanzi;
 
 
-public interface VideoEffect
+public interface IntFilter
 {
-    // Apply filter on src and put result in dst (return dst)
-    // The src and dst array must have the same size
-    public int[] apply(int[] src, int[] dst);
+    // Apply filter on src and put result in dst
+    // The dst array must have enough space
+    // If the filter fails, it returns false.
+    public boolean apply(IndexedIntArray src, IndexedIntArray dst);
 }

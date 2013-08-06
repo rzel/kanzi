@@ -15,37 +15,34 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 
 
-public class ContrastFilter implements VideoEffectWithOffset
+public class ContrastFilter implements IntFilter
 {
     private final int width;
     private final int height;
     private final int stride;
     private final int[] intensities;
-    private int offset;
     private int contrast256;
 
     
     // contrast in percent
     public ContrastFilter(int width, int height, int contrast)
     {
-       this(width, height, 0, width, contrast);
+       this(width, height, width, contrast);
     }
 
     
     // contrast in percent
-    public ContrastFilter(int width, int height, int offset, int stride, int contrast)
+    public ContrastFilter(int width, int height, int stride, int contrast)
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
 
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
 
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
@@ -55,7 +52,6 @@ public class ContrastFilter implements VideoEffectWithOffset
         
         this.height = height;
         this.width = width;
-        this.offset = offset;
         this.stride = stride;
         this.intensities = new int[256];
         this.contrast256 = contrast << 8;
@@ -64,35 +60,39 @@ public class ContrastFilter implements VideoEffectWithOffset
     
     
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray source, IndexedIntArray destination)
     {
         // Aliasing
+        final int[] src = source.array;
+        final int[] dst = destination.array;
+        int srcIdx = source.index;
+        int dstIdx = destination.index;
         final int w = this.width;
         final int h = this.height;
         final int len = src.length;
         final int[] buffer = this.intensities;
-        int offs = this.offset;
         
         for (int y=0; y<h; y++)
         {
-           final int endX = (offs + w < len) ? offs + w : len;
+           final int endX = (srcIdx + w < len) ? srcIdx + w : len;
            
-           for (int x=offs; x<endX; x++)
+           for (int xs=srcIdx, xd=dstIdx; xs<endX; xs++, xd++)
            {
-              final int pixel = src[x];
+              final int pixel = src[xs];
               final int r = buffer[(pixel >> 16) & 0xFF];
               final int g = buffer[(pixel >>  8) & 0xFF];
               final int b = buffer[pixel & 0xFF];
-              dst[x] = (r << 16) | (g << 8) | b;
+              dst[xd] = (r << 16) | (g << 8) | b;
            }
            
-           offs += this.stride;
+           srcIdx += this.stride;
+           dstIdx += this.stride;
 
-           if (offs >= len)
+           if (srcIdx >= len)
               break;
         }
         
-        return dst;
+        return true;
     }
     
     
@@ -131,24 +131,4 @@ public class ContrastFilter implements VideoEffectWithOffset
           this.intensities[i] = val;
        }
    }    
-   
-    
-    @Override
-    public int getOffset()
-    {
-       return this.offset;
-    }
-    
-    
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-       if (offset < 0)
-          return false;
-        
-       this.offset = offset;
-       return true;
-    }    
-   
 }

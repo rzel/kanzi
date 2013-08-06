@@ -16,8 +16,9 @@ limitations under the License.
 package kanzi.filter.seam;
 
 
+import kanzi.IndexedIntArray;
 import kanzi.IntSorter;
-import kanzi.VideoEffectWithOffset;
+import kanzi.IntFilter;
 import kanzi.filter.SobelFilter;
 import kanzi.util.sort.BucketSort;
 import kanzi.util.sort.RadixSort;
@@ -35,7 +36,7 @@ import kanzi.util.sort.RadixSort;
 // Note: the name seam carving is a bit unfortunate, what the algo achieves
 // is detection and removal of the paths of least resistance (energy wise) in
 // the image. These paths really are geodesics.
-public class ContextResizer implements VideoEffectWithOffset
+public class ContextResizer implements IntFilter
 {
     // Possible directions
     public static final int HORIZONTAL = 1;
@@ -60,17 +61,22 @@ public class ContextResizer implements VideoEffectWithOffset
     private final int maxAvgGeoPixCost;
     private final int[] costs;
     private final int nbGeodesics;
-    private int offset;
     private int action;
     private boolean debug;
     private final IntSorter sorter;
-    private int[] buffer;
-    private final int sobelMode;
+    private IndexedIntArray buffer;
+    private final boolean fastMode;
 
 
     public ContextResizer(int width, int height, int direction, int action)
     {
-        this(width, height, 0, width, direction, action, 1, 1, false);
+        this(width, height, width, direction, action, 1, false, false);
+    }
+
+
+    public ContextResizer(int width, int height, int stride, int direction, int action)
+    {
+        this(width, height, stride, direction, action, 1, false, false);
     }
 
 
@@ -78,12 +84,12 @@ public class ContextResizer implements VideoEffectWithOffset
     // For packed RGB images, use 3 channels mode for more accurate results (fastMode=false)
     // and one channel mode (fastMode=true) for faster results.  
     // For unpacked images, use one channel mode (fastMode=true).
-    public ContextResizer(int width, int height, int offset, int stride,
-            int direction, int action, int maxSearches, int nbGeodesics,
-            boolean fastMode)
+    public ContextResizer(int width, int height, int stride,
+            int direction, int action, int nbGeodesics,
+            boolean fastMode, boolean debug)
     {
-        this(width, height, offset, stride, direction, action, maxSearches,
-                nbGeodesics, fastMode, DEFAULT_MAX_COST_PER_PIXEL);
+        this(width, height, stride, direction, action, nbGeodesics, 
+                Math.max(width, height), fastMode, debug, DEFAULT_MAX_COST_PER_PIXEL);
     }
 
 
@@ -94,18 +100,15 @@ public class ContextResizer implements VideoEffectWithOffset
     // For packed RGB images, use 3 channels mode for more accurate results (fastMode=false)
     // and one channel mode (fastMode=true) for faster results.  
     // For unpacked images, use one channel mode (fastMode=true).
-    public ContextResizer(int width, int height, int offset, int stride,
-            int direction, int action, int maxSearches, int nbGeodesics,
-             boolean fastMode, int maxAvgGeoPixCost)
+    public ContextResizer(int width, int height, int stride,
+            int direction, int action, int nbGeodesics, int maxSearches,
+             boolean fastMode, boolean debug, int maxAvgGeoPixCost)
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
 
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
 
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
@@ -126,22 +129,15 @@ public class ContextResizer implements VideoEffectWithOffset
         {
            if (nbGeodesics > width)
               throw new IllegalArgumentException("The number of geodesics must be at most "+width);
-
-           if ((maxSearches < 1) || (maxSearches > width))
-              throw new IllegalArgumentException("The number of checks must be in the [1.."+width+"] range");
         }
         else
         {
            if (nbGeodesics > height)
               throw new IllegalArgumentException("The number of geodesics must be at most "+height);
-   
-           if ((maxSearches < 1) || (maxSearches > height))
-              throw new IllegalArgumentException("The number of checks must be in the [1.."+height+"] range");
         }
 
         this.height = height;
         this.width = width;
-        this.offset = offset;
         this.stride = stride;
         this.direction = direction;
         this.maxSearches = maxSearches;
@@ -149,8 +145,9 @@ public class ContextResizer implements VideoEffectWithOffset
         this.nbGeodesics = nbGeodesics;
         this.maxAvgGeoPixCost = maxAvgGeoPixCost;
         this.action = action;
-        this.buffer = new int[0];
-        this.sobelMode = (fastMode == true) ? SobelFilter.ONE_CHANNEL : SobelFilter.THREE_CHANNELS;
+        this.buffer = new IndexedIntArray(new int[0], 0);
+        this.fastMode = fastMode;
+        this.debug = debug;
         int dim = (height >= width) ? height : width;
         int log = 0;
 
@@ -191,23 +188,6 @@ public class ContextResizer implements VideoEffectWithOffset
     }
 
 
-    public int getOffset()
-    {
-        return this.offset;
-    }
-
-
-    // Not thread safe
-    public boolean setOffset(int offset)
-    {
-        if (offset < 0)
-            return false;
-
-        this.offset = offset;
-        return true;
-    }
-
-
     public int getAction()
     {
         return this.action;
@@ -225,14 +205,14 @@ public class ContextResizer implements VideoEffectWithOffset
     }
 
 
-    public int[] shrink(int[] src, int[] dst)
+    public boolean shrink(IndexedIntArray src, IndexedIntArray dst)
     {
         this.setAction(SHRINK);
         return this.shrink_(src, dst);
     }
 
 
-    public int[] expand(int[] src, int[] dst)
+    public boolean expand(IndexedIntArray src, IndexedIntArray dst)
     {
         this.setAction(EXPAND);
         return this.expand_(src, dst);
@@ -242,26 +222,27 @@ public class ContextResizer implements VideoEffectWithOffset
     // Will modify the width and/or height attributes
     // The src image is modified if both directions are selected
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray src, IndexedIntArray dst)
     {
-       return (this.action == SHRINK) ? this.shrink_(src, dst) : this.expand_(src, dst);
+       return (this.action == SHRINK) ? this.shrink_(src, dst) : 
+               this.expand_(src, dst);
     }
 
 
     // Will increase the width and/or height attributes. Result must fit in width*height
-    private int[] expand_(int[] src, int[] dst)
+    private boolean expand_(IndexedIntArray src, IndexedIntArray dst)
     {
         int processed = 0;
-        int[] input = src;
-        int[] output = dst;
+        IndexedIntArray input = src;
+        IndexedIntArray output = dst;
 
         if ((this.direction & VERTICAL) != 0)
         {
             if ((this.direction & HORIZONTAL) != 0)
             {
                // Lazy dynamic memory allocation
-               if (this.buffer.length < this.width * this.height)
-                  this.buffer = new int[this.width*this.height];
+               if (this.buffer.array.length < this.stride * this.height)
+                  this.buffer.array = new int[this.stride*this.height];
                
                output = this.buffer;              
             }
@@ -292,29 +273,29 @@ public class ContextResizer implements VideoEffectWithOffset
             }
         }
 
-        if ((processed == 0) && (src != dst))
+        if ((processed == 0) && (src.array != dst.array))
         {
-           System.arraycopy(src, this.offset, dst, this.offset, this.height*this.stride);
+           System.arraycopy(src.array, src.index, dst.array, dst.index, this.height*this.stride);
         }
 
-        return dst;
+        return true;
     }
 
 
     // Will decrease the width and/or height attributes
-    private int[] shrink_(int[] src, int[] dst)
+    private boolean shrink_(IndexedIntArray src, IndexedIntArray dst)
     {
         int processed = 0;
-        int[] input = src;
-        int[] output = dst;
+        IndexedIntArray input = src;
+        IndexedIntArray output = dst;
 
         if ((this.direction & VERTICAL) != 0)
         {
             if ((this.direction & HORIZONTAL) != 0)
             {
                // Lazy dynamic memory allocation
-               if (this.buffer.length < this.width * this.height)
-                  this.buffer = new int[this.width*this.height];
+               if (this.buffer.array.length < this.stride * this.height)
+                  this.buffer.array = new int[this.stride*this.height];
                
                output = this.buffer;              
             }
@@ -345,17 +326,18 @@ public class ContextResizer implements VideoEffectWithOffset
             }   
         }
 
-        if ((processed == 0) && (src != dst))
+        if ((processed == 0) && (src.array != dst.array))
         {
-           System.arraycopy(src, this.offset, dst, this.offset, this.height*this.stride);
+           System.arraycopy(src.array, src.index, dst.array, dst.index, this.height*this.stride);
         }
 
-        return dst;
+        return true;
     }
 
 
     // dir must be either VERTICAL or HORIZONTAL
-    public boolean addGeodesics(Geodesic[] geodesics, int[] src, int[] dst, int dir)
+    public boolean addGeodesics(Geodesic[] geodesics, IndexedIntArray source, 
+            IndexedIntArray destination, int dir)
     {
         if (((dir & VERTICAL) == 0) && ((dir & HORIZONTAL) == 0))
            return false;
@@ -366,8 +348,10 @@ public class ContextResizer implements VideoEffectWithOffset
         if (geodesics.length == 0)
            return true ;
 
-        int srcStart = this.offset;
-        int dstStart = this.offset;
+        final int[] src = source.array;
+        final int[] dst = destination.array;    
+        int srcStart = source.index;
+        int dstStart = destination.index;
         final int[] linePositions = new int[geodesics.length];
         final int endj;
         final int endi;
@@ -478,16 +462,22 @@ public class ContextResizer implements VideoEffectWithOffset
     
     
     // dir must be either VERTICAL or HORIZONTAL
-    public boolean removeGeodesics(Geodesic[] geodesics, int[] src, int[] dst, int dir)
+    public boolean removeGeodesics(Geodesic[] geodesics, IndexedIntArray source, 
+            IndexedIntArray destination, int dir)
     {
         if (((dir & VERTICAL) == 0) && ((dir & HORIZONTAL) == 0))
            return false;
                
         if (((dir & VERTICAL) != 0) && ((dir & HORIZONTAL) != 0))
            return false;
-               
+        
         if (geodesics.length == 0)
-           return true;
+           return true ;
+
+        final int[] src = source.array;
+        final int[] dst = destination.array;    
+        int srcStart = source.index;
+        int dstStart = destination.index;
 
         final int[] linePositions = new int[geodesics.length];
         final int endj;
@@ -512,9 +502,6 @@ public class ContextResizer implements VideoEffectWithOffset
             incStart = this.stride;
             color = RED_COLOR;
         }
-
-        int srcStart = this.offset;
-        int dstStart = this.offset;
 
         for (int j=0; j<endj; j++)
         {
@@ -549,7 +536,7 @@ public class ContextResizer implements VideoEffectWithOffset
                     }
                     else
                     {
-                       // Either incIdx != 1 or not enough pixels for arraycopy to be worth it
+                       // Either incIdx != 1 or not enough pixels for arraycopy to be worth it                       
                        copy(src, srcIdx, dst, dstIdx, len, incIdx);
                        srcIdx += (len * incIdx);
                        dstIdx += (len * incIdx);
@@ -597,7 +584,7 @@ public class ContextResizer implements VideoEffectWithOffset
 
 
     // dir must be either VERTICAL or HORIZONTAL
-    public Geodesic[] computeGeodesics(int[] src, int dir)
+    public Geodesic[] computeGeodesics(IndexedIntArray source, int dir)
     {          
         if (((dir & VERTICAL) == 0) && ((dir & HORIZONTAL) == 0))
            return new Geodesic[0];
@@ -606,7 +593,8 @@ public class ContextResizer implements VideoEffectWithOffset
            return new Geodesic[0];
 
         final int dim = (dir == HORIZONTAL) ? this.height : this.width;
-        int[] firstPositions = new int[this.maxSearches];
+        final int searches = Math.min(dim, this.maxSearches);
+        int[] firstPositions = new int[searches];
         int n = 0;
 
         // Spread the first position along 'direction' for better uniformity
@@ -614,21 +602,21 @@ public class ContextResizer implements VideoEffectWithOffset
         // geodesic crossing management.
         // It will improve quality by spreading the search over the whole image
         // if maxSearches is small.
-        for (int i=0; ((n<this.maxSearches) && (i<24)); i+=3)
+        for (int i=0; ((n<searches) && (i<24)); i+=3)
         {
             // i & 7 shuffles the start position : 0, 3, 6, 1, 4, 7, 2, 5
-            for (int j=(i & 7); ((n<this.maxSearches) && (j<dim)); j+=8)
+            for (int j=(i & 7); ((n<searches) && (j<dim)); j+=8)
                 firstPositions[n++] = j;
         }
 
-        return this.computeGeodesics_(src, dir, firstPositions, this.maxSearches);
+        return this.computeGeodesics_(source, dir, firstPositions, searches);
     }
 
 
     // Compute the geodesics but give a constraint on where to start from
     // All first position values must be different
     // dir must be either VERTICAL or HORIZONTAL
-    public Geodesic[] computeGeodesics(int[] src, int dir, int[] firstPositions)
+    public Geodesic[] computeGeodesics(IndexedIntArray source, int dir, int[] firstPositions)
     {
         if (((dir & VERTICAL) == 0) && ((dir & HORIZONTAL) == 0))
            return new Geodesic[0];
@@ -636,18 +624,20 @@ public class ContextResizer implements VideoEffectWithOffset
         if (((dir & VERTICAL) != 0) && ((dir & HORIZONTAL) != 0))
            return new Geodesic[0];
 
-        return this.computeGeodesics_(src, dir, firstPositions, this.maxSearches);
+        final int dim = (dir == HORIZONTAL) ? this.height : this.width;
+        final int searches = Math.min(dim, this.maxSearches);
+        return this.computeGeodesics_(source, dir, firstPositions, searches);
     }
 
 
-    private Geodesic[] computeGeodesics_(int[] src, int dir, int[] firstPositions, int maxSearches)
+    private Geodesic[] computeGeodesics_(IndexedIntArray source, int dir, int[] firstPositions, int searches)
     {
-        if ((maxSearches == 0) || (src == null) || (firstPositions == null))
+        if ((searches == 0) || (source == null) || (source.array == null) || (firstPositions == null))
             return new Geodesic[0];
 
         // Limit searches if there are not enough starting positions
-        if (maxSearches > firstPositions.length)
-            maxSearches = firstPositions.length;
+        if (searches > firstPositions.length)
+            searches = firstPositions.length;
 
         final int geoLength;
         final int inc;
@@ -670,8 +660,8 @@ public class ContextResizer implements VideoEffectWithOffset
         }
 
         // Calculate cost at each pixel
-        this.calculateCosts(src, this.costs);
-        final int maxGeo = (this.nbGeodesics > maxSearches) ? maxSearches : this.nbGeodesics;
+        this.calculateCosts(source, this.costs);
+        final int maxGeo = (this.nbGeodesics > searches) ? searches : this.nbGeodesics;
 
         // Queue of geodesics sorted by cost
         // The queue size could be less than firstPositions.length
@@ -683,14 +673,14 @@ public class ContextResizer implements VideoEffectWithOffset
         final int[] costs_ = this.costs; // aliasing
 
         // Calculate path and cost for each geodesic
-        for (int i=0; i<maxSearches; i++)
+        for (int i=0; i<searches; i++)
         {
             if (consumed == true)
                 geodesic = new Geodesic(dir, geoLength);
 
             consumed = false;
             int bestLinePos = firstPositions[i];
-            int costIdx = this.offset + (inc * bestLinePos);
+            int costIdx = inc * bestLinePos;
             geodesic.positions[0] = bestLinePos;
             geodesic.cost = costs_[costIdx];
 
@@ -774,7 +764,7 @@ public class ContextResizer implements VideoEffectWithOffset
                  {
                      // If the previous last element has been expelled from the queue,
                      // the corresponding pixels can be reused by other geodesics
-                     int startLine = this.offset;
+                     int startLine = 0;
                      final int[] gp = geodesic.positions;
 
                      if (last != null)
@@ -876,22 +866,26 @@ public class ContextResizer implements VideoEffectWithOffset
     }
 
     
-    private int[] calculateCosts(int[] src, int[] costs_)
+    private int[] calculateCosts(IndexedIntArray source, int[] costs_)
     {
         // For packed RGB images, use 3 channels mode for more accurate results and 
         // one channel mode (blue) for faster results.  
         // For unpacked images, use one channel mode (Y for YUV or any for RGB).
+        int sobelMode = (this.fastMode == true) ? SobelFilter.ONE_CHANNEL : SobelFilter.THREE_CHANNELS;
         SobelFilter gradientFilter = new SobelFilter(this.width, this.height,
-                this.offset, this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
-                this.sobelMode, SobelFilter.COST);
-        gradientFilter.apply(src, costs_);
+                this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
+                sobelMode, SobelFilter.COST);
+        gradientFilter.apply(source, new IndexedIntArray(costs_, 0));
         
-        // Add a quadratic contribution to the cost
-        // Favor straight lines if costs of neighbors are all low
-        for (int i=0; i<costs_.length; i++)
+        if (this.fastMode == false)
         {
-           final int c = costs_[i];           
-           costs_[i] = (c < 5) ? 0 :  c + ((c * c) >> 8); 
+           // Add a quadratic contribution to the cost
+           // Favor straight lines if costs of neighbors are all low
+           for (int i=0; i<costs_.length; i++)
+           {
+              final int c = costs_[i];           
+              costs_[i] = (c < 5) ? 0 :  c + ((c * c) >> 8); 
+           }
         }
         
         return costs_;

@@ -24,6 +24,7 @@ import java.awt.image.BufferedImage;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import kanzi.IndexedIntArray;
 import kanzi.filter.ColorClusterFilter;
 import kanzi.filter.FastBilateralFilter;
 import kanzi.filter.SobelFilter;
@@ -46,19 +47,20 @@ public class TestColorClusterFilter
             BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
             img.getGraphics().drawImage(image, 0, 0, null);
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            int[] source = new int[w*h];
-            int[] temp = new int[w*h];
-            int[] dest = new int[w*h];
+            IndexedIntArray source = new IndexedIntArray(new int[w*h], 0);
+            IndexedIntArray temp = new IndexedIntArray(new int[w*h], 0);
+            IndexedIntArray dest = new IndexedIntArray(new int[w*h], 0);
             boolean applySobel = true;
             boolean applyBilateral = true;
 
             // Do NOT use img.getRGB(): it is more than 10 times slower than
             // img.getRaster().getDataElements()
-            img.getRaster().getDataElements(0, 0, w, h, source);
+            img.getRaster().getDataElements(0, 0, w, h, source.array);
 
-            ColorClusterFilter effect = new ColorClusterFilter(w, h, 30, 12, null);
+            ColorClusterFilter effect = new ColorClusterFilter(w, h, w, 30, 12, null, 1);
             //System.arraycopy(dest, 0, source, 0, w*h);
             effect.apply(source, dest);
+            final int[] dArray = dest.array;
 
             if (applySobel == true)
             {
@@ -68,16 +70,16 @@ public class TestColorClusterFilter
 
                for (int i=0; i<w*h; i++)
                {
-                  int pix = temp[i] & 0xFF;
+                  int pix = temp.array[i] & 0xFF;
 
                   // Add a line
                   if (pix < 0x40)
                      continue;
 
                   pix >>= 1;
-                  int r = (dest[i] >> 16) & 0xFF;
-                  int g = (dest[i] >>  8) & 0xFF;
-                  int b =  dest[i] & 0xFF;
+                  int r = (dArray[i] >> 16) & 0xFF;
+                  int g = (dArray[i] >>  8) & 0xFF;
+                  int b =  dArray[i] & 0xFF;
 
                   r += pix;
                   g += pix;
@@ -90,7 +92,7 @@ public class TestColorClusterFilter
                   if (b > 255)
                      b = 255;
 
-                 dest[i] = (r<<16) | (g<<8) | b;
+                 dArray[i] = (r<<16) | (g<<8) | b;
                }
             }
 
@@ -101,7 +103,7 @@ public class TestColorClusterFilter
                fbl.apply(dest, dest);
             }
 
-            img2.getRaster().setDataElements(0, 0, w, h, dest);
+            img2.getRaster().setDataElements(0, 0, w, h, dest.array);
 
             //icon = new ImageIcon(img);
             JFrame frame = new JFrame("Original");
@@ -116,16 +118,16 @@ public class TestColorClusterFilter
 
             // Speed test
             {
-                int[] tmp = new int[w*h];
-                System.arraycopy(source, 0, tmp, 0, w * h);
+                IndexedIntArray tmp = new IndexedIntArray(new int[w*h], 0);
+                System.arraycopy(source.array, 0, tmp.array, 0, w * h);
                 System.out.println("Speed test");
                 int iters = 1000;
                 long before = 0, after = 0, delta = 0;
 
                 for (int ii=0; ii<iters; ii++)
                 {
+                   effect = new ColorClusterFilter(w, h, w, 30, 12);
                    before = System.nanoTime();
-                   effect = new ColorClusterFilter(w, h, 30, 12);
                    effect.apply(source, tmp);
                    after = System.nanoTime();
                    delta += (after - before);

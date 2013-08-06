@@ -15,14 +15,15 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 
 // Fast implementation of a Gaussian filter approximation based on a recursive
 // algorithm defined by Rachid Deriche.
 // [See Deriche, R.: Recursively implementing the gaussian and its derivatives]
 // http://hal.archives-ouvertes.fr/inria-00074778
 
-public class GaussianFilter implements VideoEffectWithOffset
+public class GaussianFilter implements IntFilter
 {
     private final int width;
     private final int height;
@@ -31,27 +32,23 @@ public class GaussianFilter implements VideoEffectWithOffset
     private int[] buffer1;
     private int[] buffer2;
     private int sigma16;
-    private int offset;
 
 
     // sigma16 is the blurriness coefficient (multiplied by 16)
     public GaussianFilter(int width, int height, int sigma16)
     {
-       this(width, height, 0, width, sigma16, 3);
+       this(width, height, width, sigma16, 3);
     }
 
 
     // sigma16 is the blurriness coefficient (multiplied by 16)
-    public GaussianFilter(int width, int height, int offset, int stride, int sigma16, int channels)
+    public GaussianFilter(int width, int height, int stride, int sigma16, int channels)
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
 
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
 
         if ((sigma16 < 0) || (sigma16 > 255))
             throw new IllegalArgumentException("The sigma coefficient must be in [0..255]");
@@ -65,7 +62,6 @@ public class GaussianFilter implements VideoEffectWithOffset
         this.height = height;
         this.width = width;
         this.stride = stride;
-        this.offset = offset;
         this.sigma16 = sigma16;
         this.buffer1 = new int[width*height];
         this.buffer2 = new int[width*height];
@@ -74,12 +70,17 @@ public class GaussianFilter implements VideoEffectWithOffset
 
 
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray source, IndexedIntArray destination)
     {
+       final int[] src = source.array;
+       final int[] dst = destination.array;
+       final int srcIdx = source.index;
+       final int dstIdx = destination.index;
+       
        if (this.sigma16 == 0)
        {
-          System.arraycopy(src, this.offset, dst, this.offset, this.width*this.height);
-          return dst;
+          System.arraycopy(src, srcIdx, dst, dstIdx, this.width*this.height);
+          return true;
        }
 
        final float sigma = (float) this.sigma16 / 16.0f;
@@ -108,7 +109,7 @@ public class GaussianFilter implements VideoEffectWithOffset
        for (int channel=0; channel<this.channels; channel++)
        {
           final int shift = channel << 3;
-          int startLine  = this.offset;
+          int startLine = srcIdx;
           int idx = 0;
 
           // Extract channel
@@ -126,20 +127,17 @@ public class GaussianFilter implements VideoEffectWithOffset
           this.gaussianRecursiveX(buf1, buf2, a0, a1, a2, a3, b1, b2, coefp, coefn);
           this.gaussianRecursiveY(buf2, buf1, a0, a1, a2, a3, b1, b2, coefp, coefn);
 
-          startLine = this.offset;
+          startLine = dstIdx;
           idx = 0;
 
-          // Add channel
+          // Insert channel
           for (int y=0; y<h; y++)
           {
-             if (startLine >= len)
-                break;
-
-             final int endX = (startLine+w < len) ? startLine+w : len;
+             final int endX = startLine + w;
 
              for (int x=startLine; x<endX; x++)
              {
-                dst[x] &= ~(0xFF << shift); //src can be the same buffer as dst
+                dst[x] &= ~(0xFF << shift); //src and dst can share the same array
                 dst[x] |= (buf1[idx++] & 0xFF) << shift;
              }
 
@@ -147,7 +145,7 @@ public class GaussianFilter implements VideoEffectWithOffset
           }
        }
 
-       return dst;
+       return true;
     }
 
 
@@ -257,25 +255,6 @@ public class GaussianFilter implements VideoEffectWithOffset
           return false;
 
        this.sigma16 = sigma16;
-       return true;
-    }
-
-
-    @Override
-    public int getOffset()
-    {
-       return this.offset;
-    }
-
-
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-       if (offset < 0)
-          return false;
-
-       this.offset = offset;
        return true;
     }
 }

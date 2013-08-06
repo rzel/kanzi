@@ -25,6 +25,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.Global;
+import kanzi.IndexedIntArray;
 import kanzi.filter.RainDropEffect;
 
 
@@ -46,17 +47,16 @@ public class TestRainDropEffect
             BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
             img.getGraphics().drawImage(image, 0, 0, null);
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            int[] source = new int[w*h];
-            int[] dest = new int[w*h];
+            IndexedIntArray source = new IndexedIntArray(new int[w*h], 0);
+            IndexedIntArray dest = new IndexedIntArray(new int[w*h], 0);
 
             // Do NOT use img.getRGB(): it is more than 10 times slower than
             // img.getRaster().getDataElements()
-            img.getRaster().getDataElements(0, 0, w, h, source);
+            img.getRaster().getDataElements(0, 0, w, h, source.array);
 
-            RainDropEffect effect = new RainDropEffect(w, h, 0, w, 400, 30, 70, 0);
-            //effect.addDrop(300, 300, 250);
+            RainDropEffect effect = new RainDropEffect(w, h, w, 400, 30, 70, 0);
             effect.apply(source, dest);
-            img2.getRaster().setDataElements(0, 0, w, h, dest);
+            img2.getRaster().setDataElements(0, 0, w, h, dest.array);
 
             //icon = new ImageIcon(img);
             JFrame frame = new JFrame("Original");
@@ -74,7 +74,7 @@ public class TestRainDropEffect
                 effect.setAmplitude(effect.getAmplitude()-1);
                 effect.setPhase((effect.getPhase()+500)%Global.PI_1024_MULT2);
                 effect.apply(source, dest);
-                img2.getRaster().setDataElements(0, 0, w, h, dest);
+                img2.getRaster().setDataElements(0, 0, w, h, dest.array);
                 frame2.invalidate();
                 frame2.repaint();
                 Thread.sleep(80);
@@ -82,8 +82,8 @@ public class TestRainDropEffect
             
             // Speed test
             {
-                int[] tmp = new int[w*h];
-                System.arraycopy(source, 0, tmp, 0, w * h);
+                IndexedIntArray tmp = new IndexedIntArray(new int[w*h], 0);
+                System.arraycopy(source.array, 0, tmp.array, 0, w * h);
                 System.out.println("Speed test");
                 int iters = 1000;
                 long before = System.nanoTime();

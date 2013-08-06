@@ -24,7 +24,8 @@ import java.awt.image.BufferedImage;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import kanzi.VideoEffect;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 import kanzi.filter.BilateralFilter;
 import kanzi.filter.FastBilateralFilter;
 
@@ -46,22 +47,22 @@ public class TestBilateralFilter
         img.getGraphics().drawImage(image, 0, 0, null);
         BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
         BufferedImage img3 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-        int[] src = new int[w*h];
-        int[] dst1 = new int[w*h];
-        int[] dst2 = new int[w*h];
+        IndexedIntArray src = new IndexedIntArray(new int[w*h], 0);
+        IndexedIntArray dst1 = new IndexedIntArray(new int[w*h], 0);
+        IndexedIntArray dst2 = new IndexedIntArray(new int[w*h], 0);
 
         // Do NOT use img.getRGB(): it is more than 10 times slower than
         // img.getRaster().getDataElements()
-        img.getRaster().getDataElements(0, 0, w, h, src);
+        img.getRaster().getDataElements(0, 0, w, h, src.array);
 
         float sigmaR = 30.0f;
         float sigmaD = 0.03f;
-        VideoEffect fbf = new FastBilateralFilter(w, h, sigmaR, sigmaD);
+        IntFilter fbf = new FastBilateralFilter(w, h, w, sigmaR, sigmaD);
         fbf.apply(src, dst1);
-        img2.getRaster().setDataElements(0, 0, w, h, dst1);
-        VideoEffect bf = new BilateralFilter(w, h, 0, w, 3, 8);
+        img2.getRaster().setDataElements(0, 0, w, h, dst1.array);
+        IntFilter bf = new BilateralFilter(w, h, w, 3, 8);
         bf.apply(src, dst2);
-        img3.getRaster().setDataElements(0, 0, w, h, dst2);
+        img3.getRaster().setDataElements(0, 0, w, h, dst2.array);
         JFrame frame = new JFrame("Original");
         frame.setBounds(200, 100, w, h);
         frame.add(new JLabel(icon));

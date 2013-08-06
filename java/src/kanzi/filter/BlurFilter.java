@@ -15,12 +15,13 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 
 
 // Based on algorithm from http://www.blackpawn.com/texts/blur/default.html
 
-public final class BlurFilter implements VideoEffectWithOffset
+public final class BlurFilter implements IntFilter
 {
     private final int width;
     private final int height;
@@ -28,31 +29,27 @@ public final class BlurFilter implements VideoEffectWithOffset
     private final int radius;
     private final int iterations;
     private final int[] line;
-    private int offset;
-    
+ 
     
     public BlurFilter(int width, int height, int radius)
     {
-        this(width, height, 0, width, radius, 4);
+        this(width, height, width, radius, 4);
     }
     
     
-    public BlurFilter(int width, int height, int offset, int stride, int radius)
+    public BlurFilter(int width, int height, int stride, int radius)
     {
-        this(width, height, offset, stride, radius, 4);
+        this(width, height, stride, radius, 4);
     }
     
     
-    public BlurFilter(int width, int height, int offset, int stride, int radius, int iterations)
+    public BlurFilter(int width, int height, int stride, int radius, int iterations)
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
         
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-        
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
         
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
@@ -68,7 +65,6 @@ public final class BlurFilter implements VideoEffectWithOffset
         
         this.height = height;
         this.width = width;
-        this.offset = offset;
         this.stride = stride;
         this.radius = radius;
         this.iterations = iterations;
@@ -78,91 +74,60 @@ public final class BlurFilter implements VideoEffectWithOffset
     
 
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray src, IndexedIntArray dst)
     {
         this.blurHorizontal(src, dst);
         this.blurVertical(dst, dst);
         
-        for (int i=0; i<this.iterations-1; i++)
+        for (int i=1; i<this.iterations; i++)
         {
-            this.blurHorizontal(dst, dst);
-            this.blurVertical(dst, dst);
+           this.blurHorizontal(dst, dst);
+           this.blurVertical(dst, dst);
         }
         
-        // Is there a part umodified ? If so copy pixels from src to dst
-        int remaining = this.stride - this.width - this.offset;
-        
-        if ((remaining > 0) || (this.offset > 0))
-        {
-            int startLine = 0;
-            
-            for (int j=0; j<this.height; j++)
-            {
-                if (this.offset > 0)
-                    System.arraycopy(src, startLine, dst, startLine, this.offset);
-                
-                if (remaining > 0)
-                {
-                    int start = startLine + this.offset + this.width;
-                    System.arraycopy(src, start, dst, start, remaining);
-                }
-                
-                startLine += this.stride;
-            }
-        }
-        
-        return dst;
-    }
-    
-    
-    @Override
-    public int getOffset()
-    {
-        return this.offset;
-    }
-    
-    
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-        if (offset < 0)
-            return false;
-        
-        this.offset = offset;
         return true;
     }
     
     
     // Implementation using a sliding box to reduce the number of operations
-    private int[] blurHorizontal(int[] src, int[] dst)
+    private boolean blurHorizontal(IndexedIntArray source, IndexedIntArray destination)
     {
-        int boxSize = (2 * this.radius) + 1;
-        int startLine = this.offset;
+        final int[] src = source.array;
+        final int[] dst = destination.array;
+        final int srcIdx = source.index;
+        final int dstIdx = destination.index;
+        final int rd = this.radius;
+        final int w = this.width;
+        final int h = this.height;
+        final int st = this.stride;
         
-        for (int j=0; j<this.height; j++)
+        int boxSize = (2 * rd) + 1;
+        int srcStart = srcIdx;
+        int dstStart = dstIdx;
+        
+        for (int j=0; j<h; j++)
         {
             // First pixel of each line: calculate the sum over the whole box
-            int pixel = src[startLine];
+            int pixel = src[srcStart];
             
             // Pixel 0: sum 'negative' x pixels ('radius' times)
-            int totalR = this.radius * ((pixel >> 16) & 0xFF);
-            int totalG = this.radius * ((pixel >>  8) & 0xFF);
-            int totalB = this.radius * ( pixel & 0xFF);
+            int totalR = rd * ((pixel >> 16) & 0xFF);
+            int totalG = rd * ((pixel >>  8) & 0xFF);
+            int totalB = rd * ( pixel & 0xFF);
             
-            for (int i=0, n=0; i<=this.radius; i++)
+            for (int i=0, n=0; i<=rd; i++)
             {
-                pixel = src[startLine+n];
+                pixel = src[srcStart+n];
                 totalR += ((pixel >> 16) & 0xFF);
                 totalG += ((pixel >>  8) & 0xFF);
                 totalB +=  (pixel & 0xFF);
                 
-                if (n < this.width - 1)
+                if (n < w - 1)
                     n++;
             }
             
             // Subsequent pixels: update the sum by sliding the whole box
-            for (int i=0; i<this.width; i++)
+            for (int i=0; i<w; i++)
             {
                 int val;
                 val  = (totalR / boxSize) << 16;
@@ -171,16 +136,16 @@ public final class BlurFilter implements VideoEffectWithOffset
                 this.line[i] = val;
                 
                 // Limit lastIdx to positive or null values
-                int lastIdx = i - this.radius;
+                int lastIdx = i - rd;
                 lastIdx = lastIdx & (-lastIdx >> 31);
                 
                 // Limit newIdx to values less than width
-                int newIdx = i + this.radius + 1;
-                int mask = (newIdx - this.width) >>> 31;
-                newIdx = (newIdx & -mask) | ((this.width - 1) & (mask - 1));
+                int newIdx = i + rd + 1;
+                final int mask = (newIdx - w) >>> 31;
+                newIdx = (newIdx & -mask) | ((w - 1) & (mask - 1));
                 
-                int enteringPixel = src[startLine+newIdx];
-                int leavingPixel  = src[startLine+lastIdx];
+                final int enteringPixel = src[srcStart+newIdx];
+                final int leavingPixel  = src[srcStart+lastIdx];
                 
                 // Update sums of sliding window
                 totalR += ((enteringPixel >> 16) & 0xFF);
@@ -191,47 +156,58 @@ public final class BlurFilter implements VideoEffectWithOffset
                 totalB -=  (leavingPixel & 0xFF);
             }
             
-            for (int i=0, n=startLine; i<this.width; i++, n++)
+            for (int i=0, n=dstStart; i<w; i++, n++)
                 dst[n] = this.line[i];
             
-            startLine += this.stride;
+            srcStart += st;
+            dstStart += st;
         }
         
-        return dst;
+        return true;
     }
     
     
     
     // Implementation using a sliding box to reduce the number of operations
-    private int[] blurVertical(int[] src, int[] dst)
+    private boolean blurVertical(IndexedIntArray source, IndexedIntArray destination)
     {
-        int len = this.stride * this.height;
-        int boxSize = (2 * this.radius) + 1;
-        int startLine = this.offset;
+        final int[] src = source.array;
+        final int[] dst = destination.array;
+        final int srcIdx = source.index;
+        final int dstIdx = destination.index;
+        final int rd = this.radius;
+        final int w = this.width;
+        final int h = this.height;
+        final int st = this.stride;
         
-        for (int j=0; j<this.width; j++)
+        int len = st * h;
+        int boxSize = (2 * rd) + 1;
+        int srcStart = srcIdx;
+        int dstStart = dstIdx;
+        
+        for (int j=0; j<w; j++)
         {
             // First pixel of each line: calculate the sum over the whole box
-            int pixel = src[startLine];
+            int pixel = src[srcStart];
             
             // Pixel 0: sum 'negative' x pixels ('radius' times)
-            int totalR = this.radius * ((pixel >> 16) & 0xFF);
-            int totalG = this.radius * ((pixel >>  8) & 0xFF);
-            int totalB = this.radius * ( pixel & 0xFF);
+            int totalR = rd * ((pixel >> 16) & 0xFF);
+            int totalG = rd * ((pixel >>  8) & 0xFF);
+            int totalB = rd * (pixel & 0xFF);
             
-            for (int i=0, n=0; i<=this.radius; i++)
+            for (int i=0, n=0; i<=rd; i++)
             {
-                pixel = src[startLine+n];
+                pixel = src[srcStart+n];
                 totalR += ((pixel >> 16) & 0xFF);
                 totalG += ((pixel >>  8) & 0xFF);
                 totalB +=  (pixel & 0xFF);
                 
-                if (n + this.stride < len)
-                    n += this.stride;
+                if (n + st < len)
+                    n += st;
             }
             
             // Subsequent pixels: update the sum by sliding the window
-            for (int i=0; i<this.height; i++)
+            for (int i=0; i<h; i++)
             {
                 int val;
                 val  = (totalR / boxSize) << 16;
@@ -240,18 +216,18 @@ public final class BlurFilter implements VideoEffectWithOffset
                 this.line[i] = val;
                 
                 // Limit lastIdx to positive or null values
-                int lastIdx = i - this.radius;
+                int lastIdx = i - rd;
                 lastIdx = lastIdx & (-lastIdx >> 31);
-                lastIdx *= this.stride;
+                lastIdx *= st;
                 
                 // Limit newIdx to values less than height
-                int newIdx  = i + this.radius + 1;
-                int mask = (newIdx - this.height) >>> 31;
-                newIdx = (newIdx & -mask) | ((this.height - 1) & (mask - 1));
-                newIdx *= this.stride;
+                int newIdx  = i + rd + 1;
+                final int mask = (newIdx - h) >>> 31;
+                newIdx = (newIdx & -mask) | ((h - 1) & (mask - 1));
+                newIdx *= st;
                 
-                int enteringPixel = src[startLine+newIdx];
-                int leavingPixel  = src[startLine+lastIdx];
+                final int enteringPixel = src[srcStart+newIdx];
+                final int leavingPixel  = src[srcStart+lastIdx];
                 
                 // Update sums of sliding window
                 totalR += ((enteringPixel >> 16) & 0xFF);
@@ -262,13 +238,14 @@ public final class BlurFilter implements VideoEffectWithOffset
                 totalB -=  (leavingPixel & 0xFF);
             }
             
-            for (int i=0, n=startLine; i<this.height; i++, n+=this.stride)
+            for (int i=0, n=dstStart; i<h; i++, n+=st)
                 dst[n] = this.line[i];
             
-            startLine++;
+            srcStart++;
+            dstStart++;
         }
         
-        return dst;
+        return true;
     }
        
 }

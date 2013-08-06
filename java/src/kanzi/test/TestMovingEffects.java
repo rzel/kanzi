@@ -30,7 +30,8 @@ import java.util.Random;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 import kanzi.filter.ContrastFilter;
 import kanzi.filter.FastBilateralFilter;
 import kanzi.filter.GaussianFilter;
@@ -38,7 +39,7 @@ import kanzi.filter.LightingEffect;
 import kanzi.filter.SobelFilter;
 
 
-public class TestEffects
+public class TestMovingEffects
 {
     public static void main(String[] args)
     {
@@ -87,19 +88,19 @@ public class TestEffects
             BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
             img.getGraphics().drawImage(image, 0, 0, null);
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            int[] source = new int[w*h];
-            int[] dest = new int[w*h];
-            int[] tmp = new int[w*h];
+            IndexedIntArray source = new IndexedIntArray(new int[w*h], 0);
+            IndexedIntArray tmp = new IndexedIntArray(new int[w*h], 0);
+            IndexedIntArray dest = new IndexedIntArray(new int[w*h], 0);
 
             // Sanity check, prefill the destination image
-            for (int i=0; i<dest.length; i++)
-               dest[i] = i ;
+            for (int i=0; i<dest.array.length; i++)
+               dest.array[i] = i ;
 
             // Do NOT use img.getRGB(): it is more than 10 times slower than
             // img.getRaster().getDataElements()
-            img.getRaster().getDataElements(0, 0, w, h, source);
-            System.arraycopy(source, 0, dest, 0, w * h);
-            System.arraycopy(source, 0, tmp, 0, w * h);
+            img.getRaster().getDataElements(0, 0, w, h, source.array);
+            System.arraycopy(source.array, 0, dest.array, 0, w * h);
+            System.arraycopy(source.array, 0, tmp.array, 0, w * h);
 
             int x, y, dw, dh;
             dw = 128;
@@ -108,24 +109,24 @@ public class TestEffects
             MovingEffect[] effects = new MovingEffect[5];
             x = 64   + rnd.nextInt(10);
             y = 64   + rnd.nextInt(60);
-            effects[0] = new MovingEffect(new SobelFilter(dw, dh, y*w+x, w),
+            effects[0] = new MovingEffect(new SobelFilter(dw, dh, w),
                     x, y, 1, 1, "Sobel");
             x = 128 + rnd.nextInt(10);
             y = 192 + rnd.nextInt(60);
-            effects[1] = new MovingEffect(new GaussianFilter(dw, dh, y*w+x, w, 100, 3),
+            effects[1] = new MovingEffect(new GaussianFilter(dw, dh, w, 100, 3),
                     x, y, 1, -1, "Gaussian");
             x = 192 + rnd.nextInt(10);
             y = 128 + rnd.nextInt(60);
-            effects[2] = new MovingEffect(new FastBilateralFilter(dw, dh, y*w+x, w, 30.0f, 0.03f, 4, 1, 3),
+            effects[2] = new MovingEffect(new FastBilateralFilter(dw, dh, w, 30.0f, 0.03f, 4, 1, 3),
                     x, y, -1, 1, "Bilateral");
             x = 256 + rnd.nextInt(10);
             y =  64 + rnd.nextInt(60);
             boolean bump = true;
-            effects[3] = new MovingEffect(new LightingEffect(dw, dh, y*w+x, w, dw/2, dh/2, dw/2, 100, bump),
+            effects[3] = new MovingEffect(new LightingEffect(dw, dh, w, dw/2, dh/2, dw/2, 100, bump),
                     x, y, -1, -1, ((bump==false)?"Lighting":"Lighting+Bump"));
             x = 128 + rnd.nextInt(10);
             y =  64 + rnd.nextInt(60);
-            effects[4] = new MovingEffect(new ContrastFilter(dw, dh, y*w+x, w, 115),
+            effects[4] = new MovingEffect(new ContrastFilter(dw, dh, w, 115),
                     x, y, 2, 1, "Contrast");
 
             for (MovingEffect e : effects)
@@ -133,7 +134,7 @@ public class TestEffects
                e.effect.apply(tmp, dest);
             }
 
-            img2.getRaster().setDataElements(0, 0, w, h, dest);
+            img2.getRaster().setDataElements(0, 0, w, h, dest.array);
 
             JFrame frame2 = new JFrame("Filters");
             frame2.setBounds(700, 150, w, h);
@@ -165,16 +166,17 @@ public class TestEffects
                   idx = (idx + 1) % len;
 
                img.getGraphics().drawImage(image, 0, 0, null);
-               img.getRaster().getDataElements(0, 0, w, h, source);
-               System.arraycopy(source, 0, tmp, 0, w * h);
-               System.arraycopy(source, 0, dest, 0, w * h);
+               img.getRaster().getDataElements(0, 0, w, h, source.array);
+               System.arraycopy(source.array, 0, tmp.array, 0, w * h);
+               System.arraycopy(source.array, 0, dest.array, 0, w * h);
 
                for (MovingEffect e : effects)
                {
+                  tmp.index = e.y*w+e.x;
+                  dest.index = e.y*w+e.x;
                   e.effect.apply(tmp, dest);
                   e.x += e.vx;
                   e.y += e.vy;
-                  e.effect.setOffset(e.y*w+e.x);
 
                   if ((e.x + dw > (w*15/16)) && (e.vx > 0))
                      e.vx = - e.vx;
@@ -189,7 +191,7 @@ public class TestEffects
                      e.vy = - e.vy;
                }
 
-               img2.getRaster().setDataElements(0, 0, w, h, dest);
+               img2.getRaster().setDataElements(0, 0, w, h, dest.array);
                long after = System.nanoTime();
                delta += (after - before);
 
@@ -234,14 +236,14 @@ public class TestEffects
 
     static class MovingEffect
     {
-       VideoEffectWithOffset effect;
+       IntFilter effect;
        int x;
        int y;
        int vx;
        int vy;
        String name;
 
-       MovingEffect(VideoEffectWithOffset effect, int x, int y, int vx, int vy, String name)
+       MovingEffect(IntFilter effect, int x, int y, int vx, int vy, String name)
        {
           this.effect = effect;
           this.x = x;

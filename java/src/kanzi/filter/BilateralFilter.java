@@ -15,7 +15,8 @@ limitations under the License.
 
 package kanzi.filter;
 
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 
 
 // Implementation of a bilateral filter using integer gaussian filters.
@@ -29,7 +30,7 @@ import kanzi.VideoEffectWithOffset;
 // histogram pictures (big memory consumption). The gaussian filter for distance
 // is approximated by a linear combination of (power) images and the convolution
 // is calculated using the histogram pictures.
-public final class BilateralFilter implements VideoEffectWithOffset
+public final class BilateralFilter implements IntFilter
 { 
     private final int width;
     private final int height;
@@ -37,7 +38,6 @@ public final class BilateralFilter implements VideoEffectWithOffset
     private final int radius;
     private final int[] kernel;
     private final int[] intensities;
-    private int offset;
     
     
     // Table with 1024 values: 2048 * exp(-x) with x in [0, 8[ (step = 8/1024)
@@ -111,7 +111,7 @@ public final class BilateralFilter implements VideoEffectWithOffset
 
     // sigmaR = sigma Range (for pixel intensities)
     // sigmaD = sigma Distance (for pixel locations)
-    public BilateralFilter(int width, int height, int offset, int stride,
+    public BilateralFilter(int width, int height, int stride,
             int sigmaR, int sigmaD)
     {
         if (height < 8)
@@ -119,9 +119,6 @@ public final class BilateralFilter implements VideoEffectWithOffset
         
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-        
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
         
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
@@ -134,7 +131,6 @@ public final class BilateralFilter implements VideoEffectWithOffset
 
         this.height = height;
         this.width = width;
-        this.offset = offset;
         this.stride = stride;
         int sigma = (sigmaR > sigmaD) ? sigmaR : sigmaD;
         this.radius = sigma + sigma;
@@ -183,9 +179,13 @@ public final class BilateralFilter implements VideoEffectWithOffset
     // plan (no conversion is made from RGB to YUV and back). However, RGB works
     // fine (with a small distorsion).
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray source, IndexedIntArray destination)
     {
         // Aliasing
+        final int[] src = source.array;
+        final int[] dst = destination.array;
+        int srcIdx = source.index;
+        int dstIdx = destination.index;
         final int r = this.radius;
         final int w = this.width;
         final int h = this.height;
@@ -193,7 +193,6 @@ public final class BilateralFilter implements VideoEffectWithOffset
         final int[] k = this.kernel;
 
         final int mult = (r << 1) + 1;
-        int offs = 0;
 
         for (int j=0; j<h; j++)
         {
@@ -201,9 +200,9 @@ public final class BilateralFilter implements VideoEffectWithOffset
             int startY = (j >= r) ? j - r : 0;
             int endY = (j + r < h) ? j + r : h;
 
-            for (int i=this.offset; i<w; i++)
+            for (int i=0; i<w; i++)
             {
-                int val1 = src[offs+i];
+                final int val1 = src[srcIdx+i];
                 int r1 = (val1 >> 16) & 0xFF;
                 int g1 = (val1 >>  8) & 0xFF;
                 int b1 =  val1 & 0xFF;
@@ -211,8 +210,8 @@ public final class BilateralFilter implements VideoEffectWithOffset
                 // For now, exclude first and last columns (within radius of border)
                 final int startX = (i >= r) ? i - r : 0;
                 final int endX = (i + r < w) ? i + r : w;
-                int offs2 = startY * this.stride;
-                int offs3 = 0;
+                int offs = source.index + (startY * this.stride);
+                int kIdx = 0;
 
                 long sumR = 0;
                 long sumG = 0;
@@ -225,10 +224,10 @@ public final class BilateralFilter implements VideoEffectWithOffset
                 // of width and height 'radius'
                 for (int y=startY; y<endY; y++) 
                 {                        
-                    for (int x=startX, ii=offs3; x<endX; x++, ii++)
+                    for (int x=startX, ii=kIdx; x<endX; x++, ii++)
                     {
                         int dist, weight;
-                        final int val2 = src[offs2+x];
+                        final int val2 = src[offs+x];
                         final int val3 = k[ii];
                         final int r2 = (val2 >> 16) & 0xFF;
                         final int g2 = (val2 >>  8) & 0xFF;
@@ -247,40 +246,22 @@ public final class BilateralFilter implements VideoEffectWithOffset
                         sumB += (weight * b2);
                     }
 
-                    offs2 += this.stride;
-                    offs3 += mult;
+                    offs += this.stride;
+                    kIdx += mult;
                 }
 
                 // Set the destination pixel to the average value of the 
                 // weighted convoluted pixel values in the window 
-                r1 = (totalWeightR != 0) ? (int) (sumR / totalWeightR) : 0;
-                g1 = (totalWeightG != 0) ? (int) (sumG / totalWeightG) : 0;
-                b1 = (totalWeightB != 0) ? (int) (sumB / totalWeightB) : 0;
-                dst[offs+i] = (r1 << 16) | (g1 << 8) | b1;
+                r1 = (int) ((sumR << 5) / ((totalWeightR << 5) + 1));
+                g1 = (int) ((sumG << 5) / ((totalWeightG << 5) + 1));
+                b1 = (int) ((sumB << 5) / ((totalWeightB << 5) + 1));
+                dst[dstIdx+i] = (r1 << 16) | (g1 << 8) | b1;
             }
 
-            offs += this.stride;
+            srcIdx += this.stride;
+            dstIdx += this.stride;
         }
         
-        return dst;
-    }
-    
-    
-    @Override
-    public int getOffset()
-    {
-        return this.offset;
-    }
-    
-    
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-        if (offset < 0)
-            return false;
-        
-        this.offset = offset;
         return true;
     }
 }

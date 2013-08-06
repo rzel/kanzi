@@ -16,17 +16,17 @@ limitations under the License.
 package kanzi.filter;
 
 import kanzi.Global;
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 
 
 // An effect that simulates the ripple effect created by a rain drop falling
 // into a liquid surface
-public class RainDropEffect implements VideoEffectWithOffset
+public class RainDropEffect implements IntFilter
 {
    private final int width;
    private final int height;
    private final int stride;
-   private int offset;
    private int radius;
    private int amplitude;  // times 128
    private int phase;      // times 1024
@@ -37,25 +37,25 @@ public class RainDropEffect implements VideoEffectWithOffset
    
    public RainDropEffect(int width, int height, int radius)
    {
-      this(width, height, 0, width, radius, 100, 128, 0);
+      this(width, height, width, radius, 100, 128, 0);
    }
 
 
-   public RainDropEffect(int width, int height, int offset, int stride, int radius,
+   public RainDropEffect(int width, int height, int stride, int radius,
            int wavelength)
    {
-      this(width, height, 0, width, radius, wavelength, 128, 0);
+      this(width, height, stride, radius, wavelength, 128, 0);
    }
 
 
-   public RainDropEffect(int width, int height, int offset, int stride, int radius,
+   public RainDropEffect(int width, int height, int stride, int radius,
            int wavelength, int amplitude128, int phase1024)
    {
-      this(width, height, 0, width, radius, wavelength, 128, 0, width/2, height/2);
+      this(width, height, stride, radius, wavelength, 128, 0, width/2, height/2);
    }
    
    // pahe1024 in radians
-   public RainDropEffect(int width, int height, int offset, int stride, int radius,
+   public RainDropEffect(int width, int height, int stride, int radius,
            int wavelength, int amplitude128, int phase1024, int dropX, int dropY)
    {
       if (height < 8)
@@ -63,9 +63,6 @@ public class RainDropEffect implements VideoEffectWithOffset
 
       if (width < 8)
          throw new IllegalArgumentException("The width must be at least 8");
-
-      if (offset < 0)
-         throw new IllegalArgumentException("The offset must be at least 0");
 
       if (stride < 8)
          throw new IllegalArgumentException("The stride must be at least 8");
@@ -85,7 +82,6 @@ public class RainDropEffect implements VideoEffectWithOffset
       this.height = height;
       this.width = width;
       this.stride = stride;
-      this.offset = offset;
       this.radius = radius;
       this.amplitude = amplitude128;
       this.phase = phase1024;
@@ -96,8 +92,12 @@ public class RainDropEffect implements VideoEffectWithOffset
 
 
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray source, IndexedIntArray destination)
     {
+       final int[] src = source.array;
+       final int[] dst = destination.array;
+       int srcStart = source.index;
+       int dstStart = destination.index;
        final int w = this.width;
        final int h = this.height;
        final int st = this.stride;
@@ -110,7 +110,6 @@ public class RainDropEffect implements VideoEffectWithOffset
        final int amplitude128 = this.amplitude;
        final int wl = wavelength;
        final int phase1024 = this.phase;
-       int offs = this.offset;
 
        for (int y=0; y<w; y++)
        {
@@ -126,7 +125,7 @@ public class RainDropEffect implements VideoEffectWithOffset
            if (d2 > r2)
            {
               // Outside of scope, just copy original pixel
-              dst[offs+x] = src[offs+x];
+              dst[dstStart+x] = src[srcStart+x];
               continue;
            }
            
@@ -139,28 +138,30 @@ public class RainDropEffect implements VideoEffectWithOffset
            if (distance1024 != 0)
               amount1024 = (amount1024 * (wl<<10)) / distance1024;
 
-           final int srcX = ((x<<10) + dx*amount1024) >> 10;
-           final int srcY = ( y1024  + dy*amount1024) >> 10;
+           final int srcX = ((x<<10) + dx*amount1024 + 512) >> 10;
+ 
+           final int srcY = ( y1024  + dy*amount1024 + 512) >> 10;
 
            if ((srcX >= 0) && (srcX < maxX) && (srcY >= 0) && (srcY < maxY))
            {      
-              final int xw256 = srcX % 256; // keep sign
-              final int yw256 = srcY % 256; // keep sign
-              final int idx = (int) (srcY * st + srcX);
-              dst[offs+x] = bilinearInterpolateRGB(xw256, yw256, src[idx], src[idx+1], 
+              final int xw256 = srcX & 0xFF; 
+              final int yw256 = srcY & 0xFF;               
+              final int idx = (srcY * st) + srcX + source.index;
+              dst[dstStart+x] = bilinearInterpolateRGB(xw256, yw256, src[idx], src[idx+1], 
                       src[idx+st], src[idx+st+1]);
-            }
+           }
            else
            {
               // Outside of scope, just copy original pixel
-              dst[offs+x] = src[offs+x];
+              dst[dstStart+x] = src[srcStart+x];
            }
 	}
 
-        offs += this.stride;
+        srcStart += st;
+        dstStart += st;
       }
 
-      return dst;
+      return true;
     }
 
     
@@ -178,39 +179,20 @@ public class RainDropEffect implements VideoEffectWithOffset
        final int r3 = (p3 >> 16) & 0xFF;
        final int g3 = (p3 >>  8) & 0xFF;
        final int b3 =  p3 & 0xFF;
-       final int cx = 256 - xRatio256;
-       final int cy = 256 - yRatio256;
-       final int rval0 = cx * r0 + xRatio256 * r1;
-       final int rval1 = cx * r2 + xRatio256 * r3;
-       final int r = (cy * rval0 + yRatio256 * rval1) >> 16;
-       final int gval0 = cx * g0 + xRatio256 * g1;
-       final int gval1 = cx * g2 + xRatio256 * g3;
-       final int g = (cy * gval0 + yRatio256 * gval1) >> 16;
-       final int bval0 = cx * b0 + xRatio256 * b1;
-       final int bval1 = cx * b2 + xRatio256 * b3;
-       final int b = (cy * bval0 + yRatio256 * bval1) >> 16;
+       final int cx256 = 256 - xRatio256;
+       final int cy256 = 256 - yRatio256;
+       final int rval0 = cx256 * r0 + xRatio256 * r1;
+       final int rval1 = cx256 * r2 + xRatio256 * r3;
+       final int r = (cy256 * rval0 + yRatio256 * rval1 + 256) >> 16;
+       final int gval0 = cx256 * g0 + xRatio256 * g1;
+       final int gval1 = cx256 * g2 + xRatio256 * g3;
+       final int g = (cy256 * gval0 + yRatio256 * gval1 + 256) >> 16;
+       final int bval0 = cx256 * b0 + xRatio256 * b1;
+       final int bval1 = cx256 * b2 + xRatio256 * b3;
+       final int b = (cy256 * bval0 + yRatio256 * bval1 + 256) >> 16;
        return (r << 16) | (g << 8) | b;
     }
 
-
-    @Override
-    public int getOffset()
-    {
-        return this.offset;
-    }
-
-
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-        if (offset < 0)
-           return false;
-
-        this.offset = offset;
-        return true;
-    }
-    
     
     // Return 128 * amplitude
     public int getAmplitude()

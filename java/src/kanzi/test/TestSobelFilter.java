@@ -25,6 +25,8 @@ import java.awt.image.BufferedImage;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 import kanzi.filter.SobelFilter;
 
 
@@ -39,59 +41,33 @@ public class TestSobelFilter
             Image image = icon.getImage();
             int w = image.getWidth(null);
             int h = image.getHeight(null);
+            
+            if ((w < 0) || (h < 0))
+            {
+               System.err.println("Cannot find or read: "+fileName);
+               System.exit(1);
+            }
+
+            System.out.println(fileName);
             System.out.println(w+"x"+h);
-            GraphicsDevice gs = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
-            GraphicsConfiguration gc = gs.getDefaultConfiguration();
-            BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            img.getGraphics().drawImage(image, 0, 0, null);
-            BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            int[] source = new int[w*h];
-            int[] dest = new int[w*h];
-            int[] tmp = new int[w*h];
-
-            // Do NOT use img.getRGB(): it is more than 10 times slower than
-            // img.getRaster().getDataElements()
-            img.getRaster().getDataElements(0, 0, w, h, source);
-
-            SobelFilter effect = new SobelFilter(w, h);
-            effect.apply(source, dest);
-            System.arraycopy(dest, 0, tmp, 0, w * h);
-            img2.getRaster().setDataElements(0, 0, w, h, dest);
-
-            //icon = new ImageIcon(img);
             JFrame frame = new JFrame("Original");
-            frame.setBounds(150, 100, w, h);
+            frame.setBounds(100, 50, w, h);
             frame.add(new JLabel(icon));
-            frame.setVisible(true);
-            JFrame frame2 = new JFrame("Filter");
-            frame2.setBounds(700, 150, w, h);
-            ImageIcon newIcon = new ImageIcon(img2);
-            frame2.add(new JLabel(newIcon));
-            frame2.setVisible(true);
-
-            // Speed test
-            {
-                System.arraycopy(source, 0, tmp, 0, w * h);
-                System.out.println("Speed test");
-                int iters = 1000;
-                long before = System.nanoTime();
-
-                for (int ii=0; ii<iters; ii++)
-                {
-                   effect.apply(source, tmp);
-                }
-
-                long after = System.nanoTime();
-                System.out.println("Elapsed [ms]: "+ (after-before)/1000000+" ("+iters+" iterations)");
-            }
-
-            try
-            {
-                Thread.sleep(45000);
-            }
-            catch (Exception e)
-            {
-            }
+            frame.setVisible(true);            
+            IntFilter effect;
+            
+            effect = new SobelFilter(w/2, h, w);
+            test(effect, icon, "Filter - left half", 0, 200, 150, 0, 0);
+            effect = new SobelFilter(w/2, h, w);
+            test(effect, icon, "Filter - right half", w/2, 300, 250, 0, 0);
+            effect = new SobelFilter(w, h/2, w);
+            test(effect, icon, "Filter - upper half", 0, 400, 350, 0, 0);
+            effect = new SobelFilter(w, h/2, w);
+            test(effect, icon, "Filter - lower half", h*w/2, 500, 450, 0, 0);
+            effect = new SobelFilter(w/2, h/2, w);
+            test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
+            effect = new SobelFilter(w, h, w);
+            test(effect, icon, "Filter - full", 0, 700, 650, 4000, 30000);
         }
         catch (Exception e)
         {
@@ -99,5 +75,55 @@ public class TestSobelFilter
         }
 
         System.exit(0);
+    }
+
+    
+    public static void test(IntFilter effect, ImageIcon icon, String title, 
+            int offset, int xx, int yy, int iters, long sleep)
+    {
+         Image image = icon.getImage();
+         int w = image.getWidth(null);
+         int h = image.getHeight(null);
+         GraphicsDevice gs = GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()[0];
+         GraphicsConfiguration gc = gs.getDefaultConfiguration();
+         BufferedImage img = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
+         img.getGraphics().drawImage(image, 0, 0, null);
+         BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
+         IndexedIntArray source = new IndexedIntArray(new int[w*h], offset);
+         IndexedIntArray dest = new IndexedIntArray(new int[w*h], offset);
+  
+         // Do NOT use img.getRGB(): it is more than 10 times slower than
+         // img.getRaster().getDataElements()
+         img.getRaster().getDataElements(0, 0, w, h, source.array);
+         effect.apply(source, dest);
+         img2.getRaster().setDataElements(0, 0, w, h, dest.array);
+
+         JFrame frame2 = new JFrame(title);
+         frame2.setBounds(xx, yy, w, h);
+         ImageIcon newIcon = new ImageIcon(img2);
+         frame2.add(new JLabel(newIcon));
+         frame2.setVisible(true);
+
+         // Speed test
+         if (iters > 0)
+         {
+             System.out.println("Speed test");
+             long before = System.nanoTime();
+
+             for (int ii=0; ii<iters; ii++)
+                effect.apply(source, dest);
+
+             long after = System.nanoTime();
+             System.out.println("Elapsed [ms]: "+ (after-before)/1000000+" ("+iters+" iterations)");
+             System.out.println(1000000000*(long)iters/(after-before)+" FPS");
+         }
+
+         try
+         {
+             Thread.sleep(sleep);
+         }
+         catch (Exception e)
+         {
+         }
     }
 }

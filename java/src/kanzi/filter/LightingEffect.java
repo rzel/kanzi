@@ -16,16 +16,16 @@ limitations under the License.
 package kanzi.filter;
 
 import kanzi.Global;
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 
 
-public class LightingEffect implements VideoEffectWithOffset
+public class LightingEffect implements IntFilter
 {
     private final int width;
     private final int height;
     private final int radius;
     private final int stride;
-    private int offset;
     private final int[] normalXY;
     private final int[] distanceMap;
     private int lightX;
@@ -36,12 +36,12 @@ public class LightingEffect implements VideoEffectWithOffset
 
     public LightingEffect(int width, int height, int lightX, int lightY, int radius, boolean bumpMapping)
     {
-       this(width, height, 0, width, lightX, lightY, radius, 100, bumpMapping);
+       this(width, height, width, lightX, lightY, radius, 100, bumpMapping);
     }
 
 
     // power in % (max pixel intensity)
-    public LightingEffect(int width, int height, int offset, int stride, int lightX, int lightY, int radius,
+    public LightingEffect(int width, int height, int stride, int lightX, int lightY, int radius,
              int power, boolean bumpMapping)
     {
         if (height < 8)
@@ -49,9 +49,6 @@ public class LightingEffect implements VideoEffectWithOffset
 
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
 
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
@@ -66,7 +63,6 @@ public class LightingEffect implements VideoEffectWithOffset
         this.height = height;
         this.bumpMapping = bumpMapping;
         this.stride = stride;
-        this.offset = offset;
         this.distanceMap = new int[radius*radius];
         this.normalXY = (this.bumpMapping == true) ? new int[width*height] : null;
 
@@ -94,12 +90,12 @@ public class LightingEffect implements VideoEffectWithOffset
     }
 
 
-    private void calculateNormalMap(int[] rgb)
+    private void calculateNormalMap(int[] rgb, int offset)
     {
         // Initialize the normal table
         final int length = this.width * this.height;
         int idx = 0;
-        int startLine = this.offset;
+        int startLine = offset;
 
         if (this.heightMap == null)
             this.heightMap = new int[length];
@@ -168,15 +164,20 @@ public class LightingEffect implements VideoEffectWithOffset
 
 
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray source, IndexedIntArray destination)
     {
+        final int[] src = source.array;
+        final int[] dst = destination.array;
+        final int srcIdx = source.index;
+        final int dstIdx = destination.index;
         final int lx = this.lightX;
         final int ly = this.lightY;
         final int x0 = (lx >= this.radius) ? lx - this.radius : 0;
         final int x1 = (lx + this.radius) < this.width ? lx + this.radius : this.width;
         final int y0 = (ly >= this.radius) ? ly - this.radius : 0;
         final int y1 = (ly + this.radius) < this.height ? ly + this.radius : this.height;
-        int lineStart = this.offset + x0 + this.stride * y0;
+        int srcStart = srcIdx + x0 + (this.stride * y0);
+        int dstStart = dstIdx + x0 + (this.stride * y0);
         final int[] normals = this.normalXY;
         final int[] intensities = this.distanceMap;
         final int rd = this.radius;
@@ -187,7 +188,7 @@ public class LightingEffect implements VideoEffectWithOffset
         if (y0 > 0)
         {
            // First lines are black
-           int offs = this.offset;
+           int offs = dstIdx;
 
            for (int yy=0; yy<y0; yy++)
            {
@@ -206,7 +207,7 @@ public class LightingEffect implements VideoEffectWithOffset
         if (y1 < h)
         {
            // Last lines are black
-           int offs = this.offset + (this.stride * h);
+           int offs = dstIdx + (this.stride * h);
 
            for (int yy=h; yy>=y1; yy--)
            {
@@ -225,18 +226,19 @@ public class LightingEffect implements VideoEffectWithOffset
         // Is there a bump mapping effect ?
         if (this.bumpMapping == true)
         {
-            this.calculateNormalMap(src);
+            this.calculateNormalMap(src, srcIdx);
 
             for (int y=y0; y<y1; y++)
             {
-                int idx = lineStart - x0;
-                int offs = y * w;
+                int iOffs = srcStart;
+                int oOffs = dstStart;
+                final int offs = y * w;
 
                 if (x0 > 0)
                 {
                    // First pixels
                    for (int xx=0; xx<x0; xx++)
-                      dst[idx++] = 0;
+                      dst[dstStart-xx] = 0;
                 }
 
                 for (int x=x0; x<x1; x++)
@@ -259,26 +261,27 @@ public class LightingEffect implements VideoEffectWithOffset
                     dy = (dy < rd) ? dy : rd-1;
 
                     final int intensity = intensities[dy*rd+dx];
-                    final int pixel = src[idx];
+                    final int pixel = src[iOffs++];
                     int r = (pixel >> 16) & 0xFF;
                     int g = (pixel >>  8) & 0xFF;
                     int b =  pixel & 0xFF;
                     r = (intensity * r) >> 8;
                     g = (intensity * g) >> 8;
                     b = (intensity * b) >> 8;
-                    dst[idx++] = (r << 16) | (g << 8) | b;
+                    dst[oOffs++] = (r << 16) | (g << 8) | b;
                 }
 
                 if (x1 < w)
                 {
                    // First pixels
-                   for (int xx=x1; xx<w; xx++)
-                      dst[idx++] = 0;
+                   for (int xx=x1-x0; xx<w-x0; xx++)
+                      dst[dstStart+xx] = 0;
                 }
 
-                lineStart += this.stride;
+                srcStart += this.stride;
+                dstStart += this.stride;
 
-                if (lineStart >= len)
+                if (srcStart >= len)
                    break;
             }
         }
@@ -286,13 +289,14 @@ public class LightingEffect implements VideoEffectWithOffset
         {
             for (int y=y0; y<y1; y++)
             {
-                int idx = lineStart - x0;
+                int iOffs = srcStart;
+                int oOffs = dstStart;
 
                 if (x0 > 0)
                 {
                    // First pixels
                    for (int xx=0; xx<x0; xx++)
-                      dst[idx++] = 0;
+                      dst[dstStart-xx] = 0;
                 }
 
                 int dy = (y > ly) ? y - ly : ly - y;
@@ -304,31 +308,32 @@ public class LightingEffect implements VideoEffectWithOffset
                     int dx = (x > lx) ? x - lx : lx - x;
                     dx = (dx < rd) ? dx : rd - 1;
                     final int intensity = intensities[yy+dx];
-                    final int pixel = src[idx];
+                    final int pixel = src[iOffs++];
                     int r = (pixel >> 16) & 0xFF;
                     int g = (pixel >>  8) & 0xFF;
                     int b =  pixel & 0xFF;
                     r = (intensity * r) >> 8;
                     g = (intensity * g) >> 8;
                     b = (intensity * b) >> 8;
-                    dst[idx++] = (r << 16) | (g << 8) | b;
+                    dst[oOffs++] = (r << 16) | (g << 8) | b;
                 }
 
                 if (x1 < w)
                 {
                    // First pixels
-                   for (int xx=x1; xx<w; xx++)
-                      dst[idx++] = 0;
+                   for (int xx=x1-x0; xx<w-x0; xx++)
+                      dst[dstStart+xx] = 0;
                 }
 
-                lineStart += this.stride;
+                srcStart += this.stride;
+                dstStart += this.stride;
 
-                if (lineStart >= len)
+                if (srcStart >= len)
                    break;
             }
         }
 
-        return dst;
+        return true;
     }
 
 
@@ -338,24 +343,4 @@ public class LightingEffect implements VideoEffectWithOffset
         this.lightX = x;
         this.lightY = y;
     }
-
-
-    @Override
-    public int getOffset()
-    {
-        return this.offset;
-    }
-
-
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-        if (offset < 0)
-            return false;
-
-        this.offset = offset;
-        return true;
-    }
 }
-

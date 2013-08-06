@@ -17,10 +17,11 @@ package kanzi.filter;
 
 
 import java.lang.reflect.Method;
-import kanzi.VideoEffectWithOffset;
+import kanzi.IndexedIntArray;
+import kanzi.IntFilter;
 
 
-public class JNA_VideoEffect implements VideoEffectWithOffset
+public class JNA_VideoEffect implements IntFilter
 {
    static 
    { 
@@ -40,56 +41,35 @@ public class JNA_VideoEffect implements VideoEffectWithOffset
    private final int width;
    private final int height;
    private final int stride;
-   private int offset;
 
 
-    public JNA_VideoEffect(int width, int height, int offset, int stride)
+    public JNA_VideoEffect(int width, int height, int stride)
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
 
         if (width < 8)
             throw new IllegalArgumentException("The width must be at least 8");
-
-        if (offset < 0)
-            throw new IllegalArgumentException("The offset must be at least 0");
-
+        
         if (stride < 8)
             throw new IllegalArgumentException("The stride must be at least 8");
 
         this.height = height;
         this.width = width;
         this.stride = stride;
-        this.offset = offset;
     }
 
 
-    // Implement the filter in C/C++/ASM !
-    public native int[] native_apply(int width, int height, int offset, int stride, int[] src, int[] dst);
+    // Implement the filter in C/C++/ASM 
+    public native boolean native_apply(int width, int height, int stride,
+            int[] src, int srcIdx, int[] dst, int dstIdx);
 
 
     @Override
-    public int[] apply(int[] src, int[] dst)
+    public boolean apply(IndexedIntArray source, IndexedIntArray destination)
     {
-        return native_apply(this.width, this.height, this.offset, this.stride, src, dst);
+        return native_apply(this.width, this.height, this.stride, source.array, source.index,
+                destination.array, destination.index);
     }
 
-
-    @Override
-    public int getOffset()
-    {
-        return this.offset;
-    }
-
-
-    // Not thread safe
-    @Override
-    public boolean setOffset(int offset)
-    {
-        if (offset < 0)
-            return false;
-
-        this.offset = offset;
-        return true;
-    }
 }
