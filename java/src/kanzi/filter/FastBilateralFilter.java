@@ -99,8 +99,9 @@ public final class FastBilateralFilter implements IntFilter
         this.height = height;
         this.width = width;
         this.stride = stride;
-        int scaledH = this.height >> downSampling;
-        int scaledW = this.width >> downSampling;
+        final int adjust = (1 << downSampling) - 1;
+        int scaledH = (height + adjust) >> downSampling;
+        int scaledW = (width + adjust) >> downSampling;
         this.box = new float[scaledW*scaledH];
         this.jk = new float[][] { new float[scaledW*scaledH], new float[scaledW*scaledH] };
         this.wk = new float[scaledW*scaledH];
@@ -113,7 +114,7 @@ public final class FastBilateralFilter implements IntFilter
         this.colors = new int[256];
 
         for (int i=0; i<this.colors.length; i++)
-          this.colors[i] = (int) (256f * Math.exp(-(float)(i*i)/(2*sigmaR*sigmaR)));
+           this.colors[i] = (int) (256f * Math.exp(-(float)(i*i)/(2*sigmaR*sigmaR)));
     }
 
 

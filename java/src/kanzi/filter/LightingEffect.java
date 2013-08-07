@@ -273,7 +273,7 @@ public class LightingEffect implements IntFilter
 
                 if (x1 < w)
                 {
-                   // First pixels
+                   // Last pixels
                    for (int xx=x1-x0; xx<w-x0; xx++)
                       dst[dstStart+xx] = 0;
                 }
@@ -320,7 +320,7 @@ public class LightingEffect implements IntFilter
 
                 if (x1 < w)
                 {
-                   // First pixels
+                   // Last pixels
                    for (int xx=x1-x0; xx<w-x0; xx++)
                       dst[dstStart+xx] = 0;
                 }

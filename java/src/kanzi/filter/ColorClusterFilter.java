@@ -123,8 +123,9 @@ public class ColorClusterFilter implements IntFilter
     {
        final int[] buf = this.buffer;
        int scale = this.subSample;
-       int scaledW = this.width >> scale;
-       int scaledH = this.height >> scale;
+       final int adjust = (1 << scale) - 1;
+       int scaledW = (this.width + adjust) >> scale;
+       int scaledH = (this.height + adjust) >> scale;
        final Cluster[] cl = this.clusters;
        final int nbClusters = cl.length;
        final int rescaleThreshold = (this.maxIterations * 2 / 3);
