@@ -25,6 +25,7 @@ import java.awt.image.BufferedImage;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import kanzi.Global;
 import kanzi.IndexedIntArray;
 import kanzi.IntFilter;
 import kanzi.filter.BilateralFilter;
@@ -93,7 +94,8 @@ public class TestEffects
             frame.setBounds(100, 50, w, h);
             frame.add(new JLabel(icon));
             IntFilter effect;
-        
+            int adjust = 100 * 512 * 512 / (w * h); // adjust number of tests based on size
+     
             switch (filterName)
             { 
                case "CONTEXTRESIZER" :
@@ -118,7 +120,7 @@ public class TestEffects
                   test(effect, icon, "Filter - one quarter - "+geos+" seams", h*w/4+w/4, 600, 550, 0, 0);
                   geos = 50;
                   effect = new ContextResizer(w, h, w, vertical|horizontal, action, geos, fastMode, debug);
-                  test(effect, icon, "Filter - full - "+geos+" seams", 0, 700, 650, 2000, 30000);
+                  test(effect, icon, "Filter - full - "+geos+" seams", 0, 700, 650, 2000*adjust/100, 30000);
                   break;  
                }
             
@@ -126,7 +128,7 @@ public class TestEffects
                {
                   // Color Cluster
                   frame.setVisible(true);            
-                  int clusters = 15;
+                  int clusters = 20;
                   int iterations = 5;
                   effect = new ColorClusterFilter(w/2, h, w, clusters, iterations);
                   test(effect, icon, "Filter - left half - "+clusters+" clusters", 0, 200, 150, 0, 0);
@@ -139,9 +141,9 @@ public class TestEffects
                   effect = new ColorClusterFilter(w/2, h/2, w, clusters, iterations);
                   clusters = 10;
                   test(effect, icon, "Filter - one quarter - "+clusters+" clusters", h*w/4+w/4, 600, 550, 0, 0);
-                  clusters = 20;
+                  clusters = 5 + (Global.log2(w*h) >> 10);
                   effect = new ColorClusterFilter(w, h, w, clusters, iterations);
-                  test(effect, icon, "Filter - full - "+clusters+" clusters", 0, 700, 650, 1000, 30000);
+                  test(effect, icon, "Filter - full - "+clusters+" clusters", 0, 700, 650, 1000*adjust/100, 30000);
                   break;  
                }
 
@@ -149,7 +151,7 @@ public class TestEffects
                {
                   // Lighting
                   frame.setVisible(true);            
-                  int radius = 120;
+                  int radius = Math.min(w, h) / 4;
                   int power = 120; //per cent
                   boolean bumpMapping = false;
                   effect = new LightingEffect(w/2, h, w, w/4, h/2, radius, power, bumpMapping);
@@ -164,7 +166,7 @@ public class TestEffects
                   test(effect, icon, "Filter - one quarter - radius "+radius, h*w/4+w/4, 600, 550, 0, 0);
                   radius *= 2;
                   effect = new LightingEffect(w, h, w, w/2, h/2, radius, power, bumpMapping);
-                  test(effect, icon, "Filter - full - radius "+radius, 0, 700, 650, 4000, 30000);
+                  test(effect, icon, "Filter - full - radius "+radius, 0, 700, 650, 10000*adjust/100, 30000);
                   break;  
                }
                
@@ -184,7 +186,7 @@ public class TestEffects
                   effect = new BlurFilter(w/2, h/2, w, radius);
                   test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
                   effect = new BlurFilter(w, h, w, radius);
-                  test(effect, icon, "Filter - full", 0, 700, 650, 1000, 30000);
+                  test(effect, icon, "Filter - full", 0, 700, 650, 1000*adjust/100, 30000);
                   break;
                }
             
@@ -205,7 +207,7 @@ public class TestEffects
                   effect = new FastBilateralFilter(w/2, h/2, w, sigmaR, sigmaD);
                   test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
                   effect = new FastBilateralFilter(w, h, w, sigmaR, sigmaD);
-                  test(effect, icon, "Filter - full", 0, 700, 650, 1000, 30000);
+                  test(effect, icon, "Filter - full", 0, 700, 650, 1000*adjust/100, 30000);
                   break;
                }
 
@@ -226,7 +228,7 @@ public class TestEffects
                   effect = new BilateralFilter(w/2, h/2, w, sigmaR, sigmaD);
                   test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
                   effect = new BilateralFilter(w, h, w, sigmaR, sigmaD);
-                  test(effect, icon, "Filter - full", 0, 700, 650, 20, 30000);
+                  test(effect, icon, "Filter - full", 0, 700, 650, 25*adjust/100, 30000);
                   break;
                }
 
@@ -247,7 +249,7 @@ public class TestEffects
                   effect = new GaussianFilter(w/2, h/2, w, sigma16, channels);
                   test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
                   effect = new GaussianFilter(w, h, w, sigma16, channels);
-                  test(effect, icon, "Filter - full", 0, 700, 650, 2000, 30000);
+                  test(effect, icon, "Filter - full", 0, 700, 650, 2000*adjust/100, 30000);
                   break;
                }
                   
@@ -267,7 +269,7 @@ public class TestEffects
                   effect = new ContrastFilter(w/2, h/2, w, contrast);
                   test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
                   effect = new ContrastFilter(w, h, w, contrast);
-                  test(effect, icon, "Filter - full", 0, 700, 650, 4000, 30000);
+                  test(effect, icon, "Filter - full", 0, 700, 650, 10000*adjust/100, 30000);
                   break;
                }
 
@@ -286,7 +288,7 @@ public class TestEffects
                   effect = new SobelFilter(w/2, h/2, w);
                   test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
                   effect = new SobelFilter(w, h, w);
-                  test(effect, icon, "Filter - full", 0, 700, 650, 4000, 30000);
+                  test(effect, icon, "Filter - full", 0, 700, 650, 4000*adjust/100, 30000);
                   break;
                }
                
