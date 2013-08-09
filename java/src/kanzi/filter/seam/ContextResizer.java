@@ -16,9 +16,11 @@ limitations under the License.
 package kanzi.filter.seam;
 
 
+import java.util.concurrent.ExecutorService;
 import kanzi.IndexedIntArray;
 import kanzi.IntSorter;
 import kanzi.IntFilter;
+import kanzi.filter.ParallelFilter;
 import kanzi.filter.SobelFilter;
 import kanzi.util.sort.BucketSort;
 import kanzi.util.sort.RadixSort;
@@ -66,17 +68,18 @@ public class ContextResizer implements IntFilter
     private final IntSorter sorter;
     private IndexedIntArray buffer;
     private final boolean fastMode;
+    private final ExecutorService pool;
 
 
     public ContextResizer(int width, int height, int direction, int action)
     {
-        this(width, height, width, direction, action, 1, false, false);
+        this(width, height, width, direction, action, 1, false, false, null);
     }
 
 
     public ContextResizer(int width, int height, int stride, int direction, int action)
     {
-        this(width, height, stride, direction, action, 1, false, false);
+        this(width, height, stride, direction, action, 1, false, false, null);
     }
 
 
@@ -86,10 +89,10 @@ public class ContextResizer implements IntFilter
     // For unpacked images, use one channel mode (fastMode=true).
     public ContextResizer(int width, int height, int stride,
             int direction, int action, int nbGeodesics,
-            boolean fastMode, boolean debug)
+            boolean fastMode, boolean debug, ExecutorService pool)
     {
         this(width, height, stride, direction, action, nbGeodesics, 
-                Math.max(width, height), fastMode, debug, DEFAULT_MAX_COST_PER_PIXEL);
+                Math.max(width, height), fastMode, debug, pool, DEFAULT_MAX_COST_PER_PIXEL);
     }
 
 
@@ -102,7 +105,7 @@ public class ContextResizer implements IntFilter
     // For unpacked images, use one channel mode (fastMode=true).
     public ContextResizer(int width, int height, int stride,
             int direction, int action, int nbGeodesics, int maxSearches,
-             boolean fastMode, boolean debug, int maxAvgGeoPixCost)
+             boolean fastMode, boolean debug, ExecutorService pool, int maxAvgGeoPixCost)
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
@@ -148,6 +151,7 @@ public class ContextResizer implements IntFilter
         this.buffer = new IndexedIntArray(new int[0], 0);
         this.fastMode = fastMode;
         this.debug = debug;
+        this.pool = pool;
         int dim = (height >= width) ? height : width;
         int log = 0;
 
@@ -865,17 +869,39 @@ public class ContextResizer implements IntFilter
         }
     }
 
-    
+ 
     private int[] calculateCosts(IndexedIntArray source, int[] costs_)
     {
         // For packed RGB images, use 3 channels mode for more accurate results and 
         // one channel mode (blue) for faster results.  
         // For unpacked images, use one channel mode (Y for YUV or any for RGB).
         int sobelMode = (this.fastMode == true) ? SobelFilter.ONE_CHANNEL : SobelFilter.THREE_CHANNELS;
-        SobelFilter gradientFilter = new SobelFilter(this.width, this.height,
-                this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
-                sobelMode, SobelFilter.COST);
-        gradientFilter.apply(source, new IndexedIntArray(costs_, 0));
+        
+        if (this.pool != null)
+        {
+           // Use 4 threads ... may introduce minimal artefacts at sub-pictures boundaries
+           SobelFilter[] gradientFilters = new SobelFilter[4];
+
+           for (int i=0; i<gradientFilters.length; i++)
+           {
+              gradientFilters[i] = new SobelFilter(this.width, this.height/gradientFilters.length,
+                   this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
+                   sobelMode, SobelFilter.COST);
+           }
+           
+           IntFilter pf = new ParallelFilter(this.width, this.height, this.stride, 
+                   this.pool, gradientFilters, ParallelFilter.HORIZONTAL);        
+           pf.apply(source, new IndexedIntArray(costs_, 0));
+        } 
+        else
+        {
+           // Mono threaded
+           SobelFilter gradientFilter = new SobelFilter(this.width, this.height,
+                            this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
+                            sobelMode, SobelFilter.COST);
+
+           gradientFilter.apply(source, new IndexedIntArray(costs_, 0));
+        }
         
         if (this.fastMode == false)
         {

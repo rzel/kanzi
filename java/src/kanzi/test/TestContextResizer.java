@@ -22,6 +22,8 @@ import java.awt.Image;
 import java.awt.Transparency;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -172,7 +174,7 @@ public class TestContextResizer
             }
 
             effect = new ContextResizer(w, h,  w, dir,
-                    ContextResizer.SHRINK, min * effectPct / 100, false, debug);            
+                    ContextResizer.SHRINK, min * effectPct / 100, false, debug, null);            
             effect.apply(src, dst);
 
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
@@ -186,12 +188,13 @@ public class TestContextResizer
             // Speed test
             if (speed == true)
             {
+                ExecutorService pool = Executors.newFixedThreadPool(4);
                 System.out.println("Speed test");
                 long sum = 0;
                 int iter = 1000;
                 System.out.println("Accurate mode");
                 effect = new ContextResizer(w, h, w, dir,
-                       ContextResizer.SHRINK, min * effectPct/100, false, false);
+                       ContextResizer.SHRINK, min * effectPct/100, false, false, pool);
 
                 for (int ii=0; ii<iter; ii++)
                 {
@@ -202,11 +205,12 @@ public class TestContextResizer
                    sum += (after - before);
                 }
 
-                System.out.println("Elapsed [ms]: "+ sum/1000000+" ("+iter+" iterations)");              
+                System.out.println("Elapsed [ms]: "+ sum/1000000+" ("+iter+" iterations)"); 
+                System.out.println(1000000000*(long)iter/sum+" FPS");
                 System.out.println("Fast mode");
                 sum = 0;
                 effect = new ContextResizer(w, h, w, dir,
-                       ContextResizer.SHRINK, min * effectPct/100, true, false);
+                       ContextResizer.SHRINK, min * effectPct/100, true, false, pool);
 
                 for (int ii=0; ii<iter; ii++)
                 {
@@ -218,6 +222,7 @@ public class TestContextResizer
                 }
 
                 System.out.println("Elapsed [ms]: "+ sum/1000000+" ("+iter+" iterations)");
+                System.out.println(1000000000*(long)iter/sum+" FPS");
             }
 
             Thread.sleep(40000);

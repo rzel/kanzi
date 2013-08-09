@@ -108,18 +108,18 @@ public class TestEffects
                   boolean debug = true;
                   int geos = 25;
                   boolean fastMode = false;
-                  effect = new ContextResizer(w/2, h, w, vertical, action, geos, fastMode, debug);
+                  effect = new ContextResizer(w/2, h, w, vertical, action, geos, fastMode, debug, null);
                   test(effect, icon, "Filter - left half - "+geos+" seams", 0, 200, 150, 0, 0);
-                  effect = new ContextResizer(w/2, h, w, vertical, action, geos, fastMode, debug);
+                  effect = new ContextResizer(w/2, h, w, vertical, action, geos, fastMode, debug, null);
                   test(effect, icon, "Filter - right half - "+geos+" seams", w/2, 300, 250, 0, 0);
-                  effect = new ContextResizer(w, h/2, w, horizontal, action, geos, fastMode, debug);
+                  effect = new ContextResizer(w, h/2, w, horizontal, action, geos, fastMode, debug, null);
                   test(effect, icon, "Filter - upper half - "+geos+" seams", 0, 400, 350, 0, 0);
-                  effect = new ContextResizer(w, h/2, w, horizontal, action, geos, fastMode, debug);
+                  effect = new ContextResizer(w, h/2, w, horizontal, action, geos, fastMode, debug, null);
                   test(effect, icon, "Filter - lower half - "+geos+" seams", h*w/2, 500, 450, 0, 0);
-                  effect = new ContextResizer(w/2, h/2, w, vertical|horizontal, action, geos, fastMode, debug);
+                  effect = new ContextResizer(w/2, h/2, w, vertical|horizontal, action, geos, fastMode, debug, null);
                   test(effect, icon, "Filter - one quarter - "+geos+" seams", h*w/4+w/4, 600, 550, 0, 0);
                   geos = 50;
-                  effect = new ContextResizer(w, h, w, vertical|horizontal, action, geos, fastMode, debug);
+                  effect = new ContextResizer(w, h, w, vertical|horizontal, action, geos, fastMode, debug, null);
                   test(effect, icon, "Filter - full - "+geos+" seams", 0, 700, 650, 2000*adjust/100, 30000);
                   break;  
                }

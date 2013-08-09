@@ -102,17 +102,17 @@ public final class SobelFilter implements IntFilter
         final int mask_ = this.mask;
         final int h = this.height;
         final int w = this.width;
-        final int srcLen = src.length;
         final boolean isVertical = ((this.direction & VERTICAL) != 0) ? true : false;
         final boolean isHorizontal = ((this.direction & HORIZONTAL) != 0) ? true : false;
         final int maxVal = 0x00FFFFFF & mask_;
         boolean isPacked = (this.channels == 3) ? true : false;
+        final int st = this.stride;
 
-        for (int y=2; y<h; y++)
+        for (int y=h-2; y>0; y--)
         {
-           final int srcLine = (srcStart + this.stride >= srcLen) ? srcStart : srcStart + this.stride;
-           final int endLine = (srcLine + this.stride >= srcLen) ? srcLine : srcLine + this.stride ;
-           final int dstLine = dstStart + this.stride;
+           final int srcLine = srcStart + st;
+           final int endLine = srcLine + st;
+           final int dstLine = dstStart + st;
            final int pixel00 = src[srcStart];
            final int pixel01 = src[srcStart+1];
            final int pixel10 = src[srcLine];
@@ -152,9 +152,9 @@ public final class SobelFilter implements IntFilter
              if (isPacked == true)
              {                
                 // Use Yreversible = (R + G + G + B) >> 2;
-                val02 = (((pixel02 >> 16) & 0xFF) + ((pixel02 >> 7) & 0x1FE) + (pixel02 & 0xFF)) >>> 2;
-                val12 = (((pixel12 >> 16) & 0xFF) + ((pixel12 >> 7) & 0x1FE) + (pixel12 & 0xFF)) >>> 2;
-                val22 = (((pixel22 >> 16) & 0xFF) + ((pixel22 >> 7) & 0x1FE) + (pixel22 & 0xFF)) >>> 2;
+                val02 = (((pixel02 >> 16) & 0xFF) + ((pixel02 >> 7) & 0x1FE) + (pixel02 & 0xFF)) >> 2;
+                val12 = (((pixel12 >> 16) & 0xFF) + ((pixel12 >> 7) & 0x1FE) + (pixel12 & 0xFF)) >> 2;
+                val22 = (((pixel22 >> 16) & 0xFF) + ((pixel22 >> 7) & 0x1FE) + (pixel22 & 0xFF)) >> 2;
              }
              else
              {
@@ -197,19 +197,16 @@ public final class SobelFilter implements IntFilter
           dst[dstLine+w-1] = dst[dstLine+w-2] & mask_;
           srcStart = srcLine;
           dstStart = dstLine;
-
-          if (srcStart >= srcLen)
-             break;
        }
 
        final int firstLine = destination.index;
-       final int lastLine = destination.index + this.stride * (this.height - 1);
+       final int lastLine = destination.index + st * (h - 1);
 
        // Duplicate first and last lines
-       System.arraycopy(dst, firstLine+this.stride, dst, firstLine, w);
+       System.arraycopy(dst, firstLine+st, dst, firstLine, w);
 
        if (lastLine + w <= dst.length)
-          System.arraycopy(dst, lastLine-this.stride, dst, lastLine, w);
+          System.arraycopy(dst, lastLine-st, dst, lastLine, w);
 
        return true;
     }

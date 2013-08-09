@@ -22,11 +22,14 @@ import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.Transparency;
 import java.awt.image.BufferedImage;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.IndexedIntArray;
 import kanzi.IntFilter;
+import kanzi.filter.ParallelFilter;
 import kanzi.filter.SobelFilter;
 
 
@@ -48,26 +51,34 @@ public class TestSobelFilter
                System.exit(1);
             }
 
+            int adjust = 100 * 512 * 512 / (w * h); // adjust number of tests based on size
             System.out.println(fileName);
             System.out.println(w+"x"+h);
             JFrame frame = new JFrame("Original");
             frame.setBounds(100, 50, w, h);
             frame.add(new JLabel(icon));
-            frame.setVisible(true);            
+            frame.setVisible(true);  
             IntFilter effect;
+            ExecutorService pool = Executors.newFixedThreadPool(4);
             
-            effect = new SobelFilter(w/2, h, w);
-            test(effect, icon, "Filter - left half", 0, 200, 150, 0, 0);
-            effect = new SobelFilter(w/2, h, w);
-            test(effect, icon, "Filter - right half", w/2, 300, 250, 0, 0);
-            effect = new SobelFilter(w, h/2, w);
-            test(effect, icon, "Filter - upper half", 0, 400, 350, 0, 0);
-            effect = new SobelFilter(w, h/2, w);
-            test(effect, icon, "Filter - lower half", h*w/2, 500, 450, 0, 0);
-            effect = new SobelFilter(w/2, h/2, w);
-            test(effect, icon, "Filter - one quarter", h*w/4+w/4, 600, 550, 0, 0);
+            // One thread
             effect = new SobelFilter(w, h, w);
-            test(effect, icon, "Filter - full", 0, 700, 650, 4000, 30000);
+            test(effect, icon, "Sobel - 1 thread", 0, 200, 150, 5000*adjust/100, 0);
+            IntFilter[] effects = new IntFilter[4];
+                        
+            // 4 threads, vertical split
+            for (int i=0; i<effects.length; i++)
+               effects[i] = new SobelFilter(w/effects.length, h, w);
+            
+            effect = new ParallelFilter(w, h, w, pool, effects, ParallelFilter.VERTICAL);            
+            test(effect, icon, "Sobel - 4 threads - vertical split", 0, 300, 350, 10000*adjust/100, 0);
+            
+            // 4 threads, horizontal split
+            for (int i=0; i<effects.length; i++)
+               effects[i] = new SobelFilter(w, h/effects.length, w);
+            
+            effect = new ParallelFilter(w, h, w, pool, effects, ParallelFilter.HORIZONTAL);            
+            test(effect, icon, "Sobel - 4 threads - horizontal split", 0, 400, 550, 10000*adjust/100, 30000);
         }
         catch (Exception e)
         {
@@ -108,6 +119,7 @@ public class TestSobelFilter
          if (iters > 0)
          {
              System.out.println("Speed test");
+             System.out.println(title);
              long before = System.nanoTime();
 
              for (int ii=0; ii<iters; ii++)
