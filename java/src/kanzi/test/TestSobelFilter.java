@@ -66,16 +66,22 @@ public class TestSobelFilter
             test(effect, icon, "Sobel - 1 thread", 0, 200, 150, 5000*adjust/100, 0);
             IntFilter[] effects = new IntFilter[4];
                         
-            // 4 threads, vertical split
+            // 4 threads, vertical split 
+            // Overlap by increasing dim and do not process boundaries to avoid artefacts
+            // Setting 'process boundaries' to true means that the first and last
+            // column/row of each filter is going to be duplicated (since the Sobel
+            // kernel cannot be applied at the boundary), creating visible artefacts.
+            // Overlapping filters and no boundary processing avoids the artefacts.
             for (int i=0; i<effects.length; i++)
-               effects[i] = new SobelFilter(w/effects.length, h, w);
+               effects[i] = new SobelFilter(w/effects.length+2, h+2, w, false);
             
             effect = new ParallelFilter(w, h, w, pool, effects, ParallelFilter.VERTICAL);            
             test(effect, icon, "Sobel - 4 threads - vertical split", 0, 300, 350, 10000*adjust/100, 0);
             
             // 4 threads, horizontal split
+            // Overlap filters and do not process boundaries to avoid artefacts
             for (int i=0; i<effects.length; i++)
-               effects[i] = new SobelFilter(w, h/effects.length, w);
+               effects[i] = new SobelFilter(w+2, h/effects.length+2, w, false);
             
             effect = new ParallelFilter(w, h, w, pool, effects, ParallelFilter.HORIZONTAL);            
             test(effect, icon, "Sobel - 4 threads - horizontal split", 0, 400, 550, 10000*adjust/100, 30000);
@@ -102,7 +108,7 @@ public class TestSobelFilter
          BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
          IndexedIntArray source = new IndexedIntArray(new int[w*h], offset);
          IndexedIntArray dest = new IndexedIntArray(new int[w*h], offset);
-  
+
          // Do NOT use img.getRGB(): it is more than 10 times slower than
          // img.getRaster().getDataElements()
          img.getRaster().getDataElements(0, 0, w, h, source.array);

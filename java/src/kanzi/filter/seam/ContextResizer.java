@@ -879,26 +879,40 @@ public class ContextResizer implements IntFilter
         
         if (this.pool != null)
         {
-           // Use 4 threads ... may introduce minimal artefacts at sub-pictures boundaries
+           // Use 4 threads
            SobelFilter[] gradientFilters = new SobelFilter[4];
 
            for (int i=0; i<gradientFilters.length; i++)
            {
-              gradientFilters[i] = new SobelFilter(this.width, this.height/gradientFilters.length,
+              // Do not process the boundaries and overlap the filters (dim + 2)
+              // to avoid boundary artefacts. 
+              gradientFilters[i] = new SobelFilter(this.width+2, this.height/gradientFilters.length+2,
                    this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
-                   sobelMode, SobelFilter.COST);
+                   sobelMode, SobelFilter.COST, false);
            }
            
+           // Apply the parallel filter
            IntFilter pf = new ParallelFilter(this.width, this.height, this.stride, 
                    this.pool, gradientFilters, ParallelFilter.HORIZONTAL);        
            pf.apply(source, new IndexedIntArray(costs_, 0));
+           
+           // Fix missing first and last rows of costs (due to non boundary processing filters)
+           System.arraycopy(costs_, this.width, costs_, 0, this.width);
+           System.arraycopy(costs_, (this.height-2)*this.stride, 
+                            costs_, (this.height-1)*this.stride, this.width);
+           
+           // Fix missing first column of costs
+           final int area = this.stride * this.height;
+           
+           for (int j=0; j<area; j+=this.stride)
+              costs_[j] = costs_[j+1];
         } 
         else
         {
            // Mono threaded
            SobelFilter gradientFilter = new SobelFilter(this.width, this.height,
                             this.stride, SobelFilter.HORIZONTAL | SobelFilter.VERTICAL,
-                            sobelMode, SobelFilter.COST);
+                            sobelMode, SobelFilter.COST, true);
 
            gradientFilter.apply(source, new IndexedIntArray(costs_, 0));
         }

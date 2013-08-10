@@ -37,22 +37,32 @@ public final class SobelFilter implements IntFilter
     private final int direction;
     private final int mask;
     private final int channels;
+    private final boolean processBoundaries;
 
 
     public SobelFilter(int width, int height)
     {
-       this(width, height, width, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE);
+       this(width, height, width, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE, true);
     }
 
 
     public SobelFilter(int width, int height, int stride)
     {
-       this(width, height, stride, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE);
+       this(width, height, stride, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE, true);
     }
 
 
+    public SobelFilter(int width, int height, int stride, boolean processBoundaries)
+    {
+       this(width, height, stride, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE, processBoundaries);
+    }
+
+
+    // If 'processBoundaries' is false, the first & last lines, first & last rows
+    // are not processed. Otherwise, these boundaries get a copy of the nearest
+    // pixels (since a 3x3 Sobel kernel cannot be applied).
     public SobelFilter(int width, int height, int stride,
-            int direction, int nbChannels, int filterType)
+            int direction, int nbChannels, int filterType, boolean processBoundaries)
     {
         if (height < 8)
             throw new IllegalArgumentException("The height must be at least 8");
@@ -81,6 +91,7 @@ public final class SobelFilter implements IntFilter
         this.direction = direction;
         this.mask = filterType;
         this.channels = nbChannels;
+        this.processBoundaries = processBoundaries;
     }
 
 
@@ -90,7 +101,6 @@ public final class SobelFilter implements IntFilter
     //   -2  0   2  <-->  pix10 pix11 pix12  <-->  0  0  0
     //   -1  0   1        pix20 pix21 pix22       -1 -2 -1
     // Implementation focused on speed through reduction of array access
-    // A naive implementation requires around 10*w*h accesses
     // This implementation requires around 4*w*h accesses
     @Override
     public boolean apply(IndexedIntArray source, IndexedIntArray destination)
@@ -192,9 +202,13 @@ public final class SobelFilter implements IntFilter
              val21 = val22;
           }
 
-          // Boundary processing, just duplicate pixels
-          dst[dstLine] = dst[dstLine+1] & mask_;
-          dst[dstLine+w-1] = dst[dstLine+w-2] & mask_;
+          if (this.processBoundaries == true)
+          {
+             // Boundary processing (first and last row pixels), just duplicate pixels
+             dst[dstLine] = dst[dstLine+1];
+             dst[dstLine+w-1] = dst[dstLine+w-2];
+          }
+          
           srcStart = srcLine;
           dstStart = dstLine;
        }
@@ -202,11 +216,12 @@ public final class SobelFilter implements IntFilter
        final int firstLine = destination.index;
        final int lastLine = destination.index + st * (h - 1);
 
-       // Duplicate first and last lines
-       System.arraycopy(dst, firstLine+st, dst, firstLine, w);
-
-       if (lastLine + w <= dst.length)
+       if (this.processBoundaries == true)
+       {
+          // Duplicate first and last lines
+          System.arraycopy(dst, firstLine+st, dst, firstLine, w);
           System.arraycopy(dst, lastLine-st, dst, lastLine, w);
+       }
 
        return true;
     }
