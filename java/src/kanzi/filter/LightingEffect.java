@@ -170,52 +170,44 @@ public class LightingEffect implements IntFilter
         final int[] dst = destination.array;
         final int srcIdx = source.index;
         final int dstIdx = destination.index;
-        final int lx = this.lightX;
-        final int ly = this.lightY;
-        final int x0 = (lx >= this.radius) ? lx - this.radius : 0;
-        final int x1 = (lx + this.radius) < this.width ? lx + this.radius : this.width;
-        final int y0 = (ly >= this.radius) ? ly - this.radius : 0;
-        final int y1 = (ly + this.radius) < this.height ? ly + this.radius : this.height;
-        int srcStart = srcIdx + x0 + (this.stride * y0);
-        int dstStart = dstIdx + x0 + (this.stride * y0);
-        final int[] normals = this.normalXY;
-        final int[] intensities = this.distanceMap;
         final int rd = this.radius;
         final int w = this.width;
         final int h = this.height;
-        final int len = src.length;
+        final int lx = this.lightX;
+        final int ly = this.lightY;
+        final int st  = this.stride;
+        final int x0 = (lx >= rd) ? lx - rd : 0;
+        final int x1 = (lx + rd) < w ? lx + rd : w;
+        final int y0 = (ly >= rd) ? ly - rd : 0;
+        final int y1 = (ly + rd) < h ? ly + rd : h;
+        int srcStart = srcIdx + (this.stride * y0);
+        int dstStart = dstIdx + (this.stride * y0);
+        final int[] normals = this.normalXY;
+        final int[] intensities = this.distanceMap;
+        final int maxVal = (rd - 1) * rd;
 
         if (y0 > 0)
         {
            // First lines are black
-           int offs = dstIdx;
-
-           for (int yy=0; yy<y0; yy++)
+           for (int yy=0, offs=dstIdx; yy<y0; yy++)
            {
               final int end = offs + w;
 
               for (int xx=offs; xx<end; xx++)
                  dst[xx] = 0;
 
-              offs += this.stride;
-
-              if (offs >= len)
-                 break;
+              offs += st;
            }
         }
 
         if (y1 < h)
         {
            // Last lines are black
-           int offs = dstIdx + (this.stride * h);
+           int offs = dstIdx + (st * h);
 
            for (int yy=h; yy>=y1; yy--)
            {
-              offs -= this.stride;
-
-              if (offs >= len)
-                 continue;
-
+              offs -= st;
               final int end = offs + w;
 
               for (int xx=offs; xx<end; xx++)
@@ -230,15 +222,13 @@ public class LightingEffect implements IntFilter
 
             for (int y=y0; y<y1; y++)
             {
-                int iOffs = srcStart;
-                int oOffs = dstStart;
                 final int offs = y * w;
 
                 if (x0 > 0)
                 {
                    // First pixels
                    for (int xx=0; xx<x0; xx++)
-                      dst[dstStart-xx] = 0;
+                      dst[dstStart+xx] = 0;
                 }
 
                 for (int x=x0; x<x1; x++)
@@ -248,88 +238,75 @@ public class LightingEffect implements IntFilter
                     // First, extract the normal X coord. (16 upper bits) out of normalXY
                     // Use a short first, then expand to an int (takes care of negative
                     // number expansion)
-                    short tmp = (short) (normal >> 16);
-                    int val = tmp - x + lx;
-                    int dx = (val > 0) ? val : -val;
+                    final short nx = (short) (normal >> 16);
+                    int dx = (nx > x - lx) ? nx - x + lx : -nx + x - lx;
                     dx = (dx < rd) ? dx : rd-1;
 
                     // Extract the normal Y coord. as a short then expand to an int
                     // (takes care of negative number expansion)
-                    tmp = (short) (normal & 0xFFFF);
-                    val = tmp - y + ly;
-                    int dy = (val > 0) ? val : -val;
-                    dy = (dy < rd) ? dy : rd-1;
-
-                    final int intensity = intensities[dy*rd+dx];
-                    final int pixel = src[iOffs++];
+                    final short ny = (short) (normal & 0xFFFF);
+                    final int dy = (ny > y - ly) ? ny - y + ly : -ny + y - ly;
+                    final int yy = (dy < rd) ? dy * rd : maxVal;
+                    final int intensity = intensities[yy+dx];
+                    final int pixel = src[srcStart+x];
                     int r = (pixel >> 16) & 0xFF;
                     int g = (pixel >>  8) & 0xFF;
                     int b =  pixel & 0xFF;
                     r = (intensity * r) >> 8;
                     g = (intensity * g) >> 8;
                     b = (intensity * b) >> 8;
-                    dst[oOffs++] = (r << 16) | (g << 8) | b;
+                    dst[dstStart+x] = (r << 16) | (g << 8) | b;
                 }
 
                 if (x1 < w)
                 {
                    // Last pixels
-                   for (int xx=x1-x0; xx<w-x0; xx++)
+                   for (int xx=x1; xx<w; xx++)
                       dst[dstStart+xx] = 0;
                 }
 
-                srcStart += this.stride;
-                dstStart += this.stride;
-
-                if (srcStart >= len)
-                   break;
+                srcStart += st;
+                dstStart += st;
             }
         }
         else // No bump mapping: just lighting
         {
             for (int y=y0; y<y1; y++)
             {
-                int iOffs = srcStart;
-                int oOffs = dstStart;
-
                 if (x0 > 0)
                 {
                    // First pixels
                    for (int xx=0; xx<x0; xx++)
-                      dst[dstStart-xx] = 0;
+                      dst[dstStart+xx] = 0;
                 }
 
-                int dy = (y > ly) ? y - ly : ly - y;
-                dy = (dy < rd) ? dy : rd - 1;
-                final int yy = dy * rd;
+                final int dy = (y > ly) ? y - ly : ly - y;
+                final int yy = (dy < rd) ? dy * rd : maxVal;
 
                 for (int x=x0; x<x1; x++)
                 {
                     int dx = (x > lx) ? x - lx : lx - x;
                     dx = (dx < rd) ? dx : rd - 1;
                     final int intensity = intensities[yy+dx];
-                    final int pixel = src[iOffs++];
+                    final int pixel = src[srcStart+x];
                     int r = (pixel >> 16) & 0xFF;
                     int g = (pixel >>  8) & 0xFF;
                     int b =  pixel & 0xFF;
                     r = (intensity * r) >> 8;
                     g = (intensity * g) >> 8;
                     b = (intensity * b) >> 8;
-                    dst[oOffs++] = (r << 16) | (g << 8) | b;
+                    dst[dstStart+x] = (r << 16) | (g << 8) | b;
                 }
 
                 if (x1 < w)
                 {
                    // Last pixels
-                   for (int xx=x1-x0; xx<w-x0; xx++)
+                   for (int xx=x1; xx<w; xx++)
                       dst[dstStart+xx] = 0;
                 }
 
-                srcStart += this.stride;
-                dstStart += this.stride;
-
-                if (srcStart >= len)
-                   break;
+                srcStart += st;
+                dstStart += st;
             }
         }
 
