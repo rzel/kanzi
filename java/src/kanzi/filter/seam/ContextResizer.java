@@ -893,9 +893,9 @@ public class ContextResizer implements IntFilter
            
            // Apply the parallel filter
            IntFilter pf = new ParallelFilter(this.width, this.height, this.stride, 
-                   this.pool, gradientFilters, ParallelFilter.HORIZONTAL);        
+                   this.pool, gradientFilters, ParallelFilter.HORIZONTAL);  
            pf.apply(source, new IndexedIntArray(costs_, 0));
-           
+
            // Fix missing first and last rows of costs (due to non boundary processing filters)
            System.arraycopy(costs_, this.width, costs_, 0, this.width);
            System.arraycopy(costs_, (this.height-2)*this.stride, 
@@ -917,15 +917,12 @@ public class ContextResizer implements IntFilter
            gradientFilter.apply(source, new IndexedIntArray(costs_, 0));
         }
         
-        if (this.fastMode == false)
+        // Add a quadratic contribution to the cost
+        // Favor straight lines if costs of neighbors are all low
+        for (int i=0; i<costs_.length; i++)
         {
-           // Add a quadratic contribution to the cost
-           // Favor straight lines if costs of neighbors are all low
-           for (int i=0; i<costs_.length; i++)
-           {
-              final int c = costs_[i];           
-              costs_[i] = (c < 5) ? 0 :  c + ((c * c) >> 8); 
-           }
+           final int c = costs_[i];           
+           costs_[i] = (c < 5) ? 0 :  c + ((c * c) >> 8); 
         }
         
         return costs_;
