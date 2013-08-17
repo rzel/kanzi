@@ -59,135 +59,21 @@ public class QuickSort implements IntSorter
         if (len == 1)
            return true;
         
-        if (this.cmp != null)
-            sortWithComparator(input, blkptr, blkptr+len-1, this.cmp);
-        else
-            sortNoComparator(input, blkptr, blkptr+len-1);
-        
+        recursiveSort(input, blkptr, blkptr+len-1, this.cmp);       
         return true;
     }
 
-
-    // Ternary partitioning
-    private static void sortNoComparator(int[] array, int low, int high)
+    
+    // Ternary partitioning 
+    private static void recursiveSort(int[] array, int low, int high, ArrayComparator comp)
     {
         if (high <= low + SMALL_ARRAY_THRESHOLD)
         {
-            sortSmallArrayNoComparator(array, low, high);
-            return;
-        }
-
-        // Regular path
-        // Choose a pivot: this THE most important step of the algorithm since
-        // a bad pivot can really ruin the performance (quadratic). Some research
-        // papers show that picking a random index in the [low+1 .. high-1] range
-        // is a good choice (on average). Here, a median is used
-        final int mid = low + ((high - low) >> 1);
-        final int s = (high - low) >> 3;
-        
-        final int l = (array[low] < array[low+s] ?
-            (array[low+s] < array[low+s+s] ? low+s : array[low] < array[low+s+s] ? low+s+s : low) :
-            (array[low+s] > array[low+s+s] ? low+s : array[low] > array[low+s+s] ? low+s+s : low));
-        final int m = (array[mid-s] < array[mid] ?
-            (array[mid] < array[mid+s] ? mid : array[mid-s] < array[mid+s] ? mid+s : mid-s) :
-            (array[mid] > array[mid+s] ? mid : array[mid-s] > array[mid+s] ? mid+s : mid-s));
-        final int h = (array[high-s-s] < array[high-s] ?
-            (array[high-s] < array[high] ? high-s : array[high-s-s] < array[high] ? high : high-s-s) :
-            (array[high-s] > array[high] ? high-s : array[high-s-s] > array[high] ? high : high-s-s));
-        final int pivIdx = (array[l] < array[m] ?
-            (array[m] < array[h] ? m : array[l] < array[h] ? h : l) :
-            (array[m] > array[h] ? m : array[l] > array[h] ? h : l));
-
-        final int pivot = array[pivIdx];
-        int i = low;
-        int mi = low;
-        int j = high;
-        int mj = high;
-
-        // Use center partition of values equal to pivot
-        while (i <= j)
-        {
-            // Move up
-            while ((i <= j) && (array[i] <= pivot))
-            {
-                if (array[i] == pivot)
-                {
-                    // Move the pivot value to the low end.
-                    // The idea is to accumulate all pivots at the beginning
-                    // and move them to the center partition later
-                    // Yet, it is not necessary to swap array values (just keep
-                    // track of the number of pivots accumulated): skip array[mi] = pivot
-                    array[i] = array[mi];
-                    mi++;
-                }
-
-                i++;
-            }
-
-            // Move down
-            while ((i <= j) && (pivot <= array[j]))
-            {
-                if (array[j] == pivot)
-                {
-                    // Move the pivot value to the high end.
-                    // The idea is to accumulate all pivots at the end
-                    // and move them to the center partition later
-                    // Yet, it is not necessary to swap array values (just keep
-                    // track of the number of pivots accumulated): skip array[mj] = pivot
-                    array[j] = array[mj];
-                    mj--;
-                }
-
-                j--;
-            }
-
-            if (i <= j)
-            {
-                final int tmp = array[i];
-                array[i] = array[j];
-                array[j] = tmp;
-                i++;
-                j--;
-            }
-        }
-
-        // Move the pivot values from the ends to the middle
-        // The values have not been updated (see optimization above),
-        // they are all equal to the pivot
-        mi--;
-        i--;
-
-        for (; mi>=low; mi--, i--)
-        {
-            array[mi] = array[i];
-            array[i] = pivot;
-        }
-
-        mj++;
-        j++;
-
-        for (; mj<=high; mj++, j++)
-        {
-            array[mj] = array[j];
-            array[j] = pivot;
-        }
-
-        // Sort the low and high sub-arrays
-        if (i > low)
-           sortNoComparator(array, low, i);
-
-        if (high > j)
-           sortNoComparator(array, j, high);
-    }
-
-
-    // Ternary partitioning (the performance may be seriously degraded due to the
-    // numerous calls to the array comparator interface).
-    private static void sortWithComparator(int[] array, int low, int high, ArrayComparator comp)
-    {
-        if (high <= low + SMALL_ARRAY_THRESHOLD)
-        {
-            sortSmallArrayWithComparator(array, low, high, comp);
+            if (comp != null)
+               sortSmallArrayWithComparator(array, low, high, comp);
+            else
+               sortSmallArrayNoComparator(array, low, high);
+                       
             return;
         }
 
@@ -220,69 +106,79 @@ public class QuickSort implements IntSorter
         int j = high;
         int mj = high;
 
-        // Use center partition of values equal to pivot
-        while (i <= j)
+        if (comp != null)
         {
-            // Move up
-            while ((i <= j) && (comp.compare(array[i], pivot) <= 0))
+            // Use center partition of values equal to pivot
+            while (i <= j)
             {
-                if (array[i] == pivot)
+                // Move up
+                while ((i <= j) && (comp.compare(array[i], pivot) <= 0))
                 {
-                    // Move the pivot value to the low end.
-                    // The idea is to accumulate all pivots at the beginning
-                    // and move them to the center partition later
-                    // Yet, it is not necessary to swap array values (just keep
-                    // track of the number of pivots accumulated): skip array[mi] = pivot
-                    array[i] = array[mi];
-                    mi++;
+                    if (array[i] == pivot) // Move the pivot value to the low end. 
+                        array[i] = array[mi++];
+
+                    i++;
                 }
 
-                i++;
-            }
-
-            // Move down
-            while ((i <= j) && (comp.compare(pivot, array[j]) <= 0))
-            {
-                if (array[j] == pivot)
+                // Move down
+                while ((i <= j) && (comp.compare(pivot, array[j]) <= 0))
                 {
-                    // Move the pivot value to the high end.
-                    // The idea is to accumulate all pivots at the end
-                    // and move them to the center partition later
-                    // Yet, it is not necessary to swap array values (just keep
-                    // track of the number of pivots accumulated): skip array[mj] = pivot
-                    array[j] = array[mj];
-                    mj--;
+                    if (array[j] == pivot) // Move the pivot value to the high end.
+                        array[j] = array[mj--];
+
+                    j--;
                 }
 
-                j--;
+                if (i <= j)
+                {
+                    int tmp = array[i];
+                    array[i++] = array[j];
+                    array[j--] = tmp;
+                }
             }
-
-            if (i <= j)
+        }
+        else 
+        {
+            // Use center partition of values equal to pivot
+            while (i <= j)
             {
-                int tmp = array[i];
-                array[i] = array[j];
-                array[j] = tmp;
-                i++;
-                j--;
+                // Move up
+                while ((i <= j) && (array[i] <= pivot))
+                {
+                    if (array[i] == pivot) // Move the pivot value to the low end. 
+                        array[i] = array[mi++];
+
+                    i++;
+                }
+
+                // Move down
+                while ((i <= j) && (pivot <= array[j]))
+                {
+                    if (array[j] == pivot) // Move the pivot value to the high end.
+                        array[j] = array[mj--];
+
+                    j--;
+                }
+
+                if (i <= j)
+                {
+                    int tmp = array[i];
+                    array[i++] = array[j];
+                    array[j--] = tmp;
+                }
             }
         }
 
         // Move the pivot values from the ends to the middle
         // The values have not been updated (see optimization above),
         // they are all equal to the pivot
-        mi--;
-        i--;
-
-        for (; mi>=low; mi--, i--)
+        for (mi--, i--; mi>=low; mi--, i--)
         {
             array[mi] = array[i];
             array[i] = pivot;
         }
 
-        mj++;
-        j++;
-
-        for (; mj<=high; mj++, j++)
+        for (mj++, j++; mj<=high; mj++, j++)
         {
             array[mj] = array[j];
             array[j] = pivot;
@@ -290,10 +186,10 @@ public class QuickSort implements IntSorter
 
         // Sort the low and high sub-arrays
         if (i > low)
-           sortWithComparator(array, low, i, comp);
+           recursiveSort(array, low, i, comp);
 
         if (high > j)
-           sortWithComparator(array, j, high, comp);
+           recursiveSort(array, j, high, comp);
     }
 
 
