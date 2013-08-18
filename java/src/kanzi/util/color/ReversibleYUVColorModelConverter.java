@@ -80,7 +80,7 @@ public final class ReversibleYUVColorModelConverter implements ColorModelConvert
                 final int r = (rgbVal >> 16) & 0xFF;
                 final int g = (rgbVal >> 8) & 0xFF;
                 final int b =  rgbVal & 0xFF;
-
+                
                 y[i] = (r + g + g + b) >> 2;
                 u[i] = r - g;
                 v[i] = b - g;
@@ -112,33 +112,12 @@ public final class ReversibleYUVColorModelConverter implements ColorModelConvert
             for (int i=startLine, k=startLine2; i<end; i++)
             {
                 // ------- toRGB 'Macro'
-                // Need to clamp r,g,b to [0..255] because the y,u,v coefficients
-                // may have been modified after the initial color transfom
-                // In other words, it is not required by the color transform itself
-                // but there is no guarantee that y,u,v have not been manipulated
-                int g = y[i] - ((u[i] + v[i]) >> 2);
-
-                if (g > 255)
-                    g = 255;
-                else
-                    g &= ~(g >> 31);
-
-                int r = u[i] + g;
-
-                if (r > 255)
-                    r = 255;
-                else
-                    r &= ~(r >> 31);
-
-                int b = v[i] + g;
-
-                if (b > 255)
-                    b = 255;
-                else
-                    b &= ~(b >> 31);
-
-                // ------- toRGB 'Macro' END
+                final int g = y[i] - ((u[i] + v[i]) >> 2);
+                final int r = u[i] + g;
+                final int b = v[i] + g;
+                
                 rgb[k++] = (r << 16) | (g << 8) | b;
+                // ------- toRGB 'Macro' END
             }
 
             startLine  += this.width;
