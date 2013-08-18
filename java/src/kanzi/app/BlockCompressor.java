@@ -277,7 +277,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
                printOut("-block=<size>        : size of the input blocks (max 16MB - 4 / min 1KB / default 1MB)", true);
                printOut("-entropy=            : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true);
                printOut("-transform=          : transform to use [None|Block*|Snappy|LZ4|RLT]", true);
-               printOut("-checksum =          : enable block checksum", true);
+               printOut("-checksum            : enable block checksum", true);
                System.exit(0);
            }
            else if (arg.equals("-verbose"))
