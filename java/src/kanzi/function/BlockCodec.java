@@ -56,7 +56,7 @@ public class BlockCodec implements ByteFunction
    public BlockCodec(int blockSize)
    {
       if (blockSize < 0)
-         throw new IllegalArgumentException("The block cannot be negative");
+         throw new IllegalArgumentException("The block size cannot be negative");
 
       if (blockSize > MAX_BLOCK_SIZE)
          throw new IllegalArgumentException("The block size must be at most " + MAX_BLOCK_SIZE);
