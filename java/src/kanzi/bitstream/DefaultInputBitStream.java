@@ -53,7 +53,7 @@ public final class DefaultInputBitStream implements InputBitStream
 
    // Return 1 or 0. Trigger exception if stream is closed   
    @Override
-   public synchronized int readBit() throws BitStreamException
+   public int readBit() throws BitStreamException
    {
       if (this.bitIndex == 63)
          this.pullCurrent();
@@ -64,7 +64,7 @@ public final class DefaultInputBitStream implements InputBitStream
    }
 
 
-   private synchronized int readFromInputStream(int count) throws BitStreamException
+   private int readFromInputStream(int count) throws BitStreamException
    {
       try
       {
@@ -90,7 +90,7 @@ public final class DefaultInputBitStream implements InputBitStream
 
    // Return value of 'count' next bits as a long. Trigger exception if stream is closed   
    @Override
-   public synchronized long readBits(int count) throws BitStreamException
+   public long readBits(int count) throws BitStreamException
    {
       if ((count <= 0) || (count > 64))
          throw new IllegalArgumentException("Invalid length: "+count+" (must be in [1..64])");
@@ -168,7 +168,7 @@ public final class DefaultInputBitStream implements InputBitStream
 
    
    @Override
-   public synchronized void close()
+   public void close()
    {
       if (this.isClosed() == true)
          return;
@@ -194,14 +194,14 @@ public final class DefaultInputBitStream implements InputBitStream
 
    // Return number of bits read so far
    @Override
-   public synchronized long read()
+   public long read()
    {
       return this.read + (this.position << 3) - this.bitIndex;
    }
 
 
    @Override
-   public synchronized boolean hasMoreToRead()
+   public boolean hasMoreToRead()
    {
       if (this.isClosed() == true)
          return false;
@@ -222,7 +222,7 @@ public final class DefaultInputBitStream implements InputBitStream
    }
    
    
-   public synchronized boolean isClosed()
+   public boolean isClosed()
    {
       return this.closed;
    }   

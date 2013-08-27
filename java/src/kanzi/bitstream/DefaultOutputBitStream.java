@@ -51,7 +51,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
    // Write least significant bit of the input integer. Trigger exception if stream is closed
    @Override
-   public synchronized boolean writeBit(int bit)
+   public boolean writeBit(int bit)
    {
       if (this.isClosed() == true)
          throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
@@ -69,7 +69,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
    // Write 'count' (in [1..64]) bits. Trigger exception if stream is closed   
    @Override
-   public synchronized int writeBits(long value, int count)
+   public int writeBits(long value, int count)
    {
       if (this.isClosed() == true)
          throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
@@ -127,7 +127,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
 
    // Write buffer to underlying stream
-   private synchronized void flush() throws BitStreamException
+   private void flush() throws BitStreamException
    {
       if (this.isClosed() == true)
          throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
@@ -151,7 +151,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
 
    @Override
-   public synchronized void close()
+   public void close()
    {
       if (this.isClosed() == true)
          return;
@@ -194,14 +194,14 @@ public final class DefaultOutputBitStream implements OutputBitStream
 
    // Return number of bits written so far
    @Override
-   public synchronized long written()
+   public long written()
    {
       // Number of bits flushed + bytes written in memory + bits written in memory
       return this.written + (this.position << 3) + (63 - this.bitIndex);
    }
 
 
-   public synchronized boolean isClosed()
+   public boolean isClosed()
    {
       return this.closed;
    }
