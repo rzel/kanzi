@@ -275,11 +275,11 @@ public final class SnappyCodec implements ByteFunction
      }
 
      // Emit any final pending literal bytes and return
-     if (lit != count)
+     if (lit != srcIdx + count)
      {
         source.index = lit;
         destination.index = d;
-        d += emitLiteral(source, destination, count-lit);
+        d += emitLiteral(source, destination, count+srcIdx-lit);       
      }
 
      source.index = srcIdx + count;
