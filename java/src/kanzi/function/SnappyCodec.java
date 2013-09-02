@@ -184,28 +184,28 @@ public final class SnappyCodec implements ByteFunction
      if ((source == null) || (destination == null) || (source.array == destination.array))
         return false;
 
-     final int srcIdx = source.index;
+     final int srcIdx0 = source.index;
      final byte[] src = source.array;
      final byte[] dst = destination.array;
-     final int count = (this.size > 0) ? this.size : src.length - srcIdx;
+     final int count = (this.size > 0) ? this.size : src.length - srcIdx0;
 
      if (dst.length - destination.index < getMaxEncodedLength(count))
         return false;
 
      // The block starts with the varint-encoded length of the decompressed bytes.
-     int d = putUvarint(destination, (long) count);
+     int dstIdx = destination.index + putUvarint(destination, (long) count);
 
      // Return early if src is short
      if (count <= 4)
      {
         if (count > 0)
         {
-           destination.index = d;
-           d += emitLiteral(source, destination, count);
+           destination.index = dstIdx;
+           dstIdx += emitLiteral(source, destination, count);
         }
 
-        source.index = srcIdx + count;
-        destination.index = d;
+        source.index = srcIdx0 + count;
+        destination.index = dstIdx;
         return true;
      }
 
@@ -225,65 +225,66 @@ public final class SnappyCodec implements ByteFunction
         table[i] = -1;
 
      // Iterate over the source bytes
-     int s = srcIdx; // The iterator position
-     int lit = srcIdx; // The start position of any pending literal bytes
-     final int ends = srcIdx + count - 3;
+     int srcIdx = srcIdx0; // The iterator position
+     int lit = srcIdx0; // The start position of any pending literal bytes
+     final int ends1 = srcIdx0 + count;
+     final int ends2 = ends1 - 3;
      
-     while (s < ends)
+     while (srcIdx < ends2)
      {
         // Update the hash table
-        int h = (readInt(src, s) * HASH_SEED) >>> shift;
-        int t = table[h]; // The last position with the same hash as s
-        table[h] = s;
+        final int h = (readInt(src, srcIdx) * HASH_SEED) >>> shift;
+        int t = table[h]; // The last position with the same hash as srcIdx
+        table[h] = srcIdx;
 
-        // If t is invalid or src[s:s+4] differs from src[t:t+4], accumulate a literal byte
-        if ((t < 0) || (s-t >= MAX_OFFSET))
+        // If t is invalid or src[srcIdx:srcIdx+4] differs from src[t:t+4], accumulate a literal byte
+        if ((t < srcIdx0) || (srcIdx-t >= MAX_OFFSET))
         {
-           s++;
+           srcIdx++;
            continue;
         }
         
-        if (differentInts(src, s, t) == true)
+        if (differentInts(src, srcIdx, t) == true)
         {
-           s++;
+           srcIdx++;
            continue;
         }
 
-        // Otherwise, we have a match. First, emit any pending literal bytes
-        if (lit != s)
+        // We have a match. First, emit any pending literal bytes
+        if (lit != srcIdx)
         {
            source.index = lit;
-           destination.index = d;
-           d += emitLiteral(source, destination, s-lit);
+           destination.index = dstIdx;
+           dstIdx += emitLiteral(source, destination, srcIdx-lit);
         }
 
         // Extend the match to be as long as possible
-        final int s0 = s;
-        s += 4;
+        final int s0 = srcIdx;
+        srcIdx += 4;
         t += 4;
 
-        while ((s < count) && (src[s] == src[t]))
+        while ((srcIdx < ends1) && (src[srcIdx] == src[t]))
         {
-           s++;
+           srcIdx++;
            t++;
         }
 
         // Emit the copied bytes
-        destination.index = d;
-        d += emitCopy(destination, s-t, s-s0);
-        lit = s;
+        destination.index = dstIdx;
+        dstIdx += emitCopy(destination, srcIdx-t, srcIdx-s0);
+        lit = srcIdx;
      }
 
      // Emit any final pending literal bytes and return
-     if (lit != srcIdx + count)
+     if (lit != ends1)
      {
         source.index = lit;
-        destination.index = d;
-        d += emitLiteral(source, destination, count+srcIdx-lit);       
+        destination.index = dstIdx;
+        dstIdx += emitLiteral(source, destination, ends1-lit);       
      }
 
-     source.index = srcIdx + count;
-     destination.index = d;
+     source.index = ends1;
+     destination.index = dstIdx;
      return true;
   }
 
