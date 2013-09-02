@@ -160,7 +160,7 @@ public final class LZ4Codec implements ByteFunction
          return true;
       }
 
-      final int base = (count < LZ4_64K_LIMIT) ? source.index : 0;
+      final int base = source.index;
       final int hashLog = (count < LZ4_64K_LIMIT) ? HASH_LOG_64K : HASH_LOG;
       final int hashShift = 32 - hashLog;
       final int srcEnd = srcIdx0 + count;
