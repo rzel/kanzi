@@ -20,9 +20,12 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import kanzi.io.Error;
 import kanzi.IndexedByteArray;
 import kanzi.io.CompressedInputStream;
@@ -40,9 +43,24 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
    private final String outputName;
    private CompressedInputStream cis;
    private OutputStream fos;
+   private int jobs;
+   private boolean ownPool;
+   private final ExecutorService pool;
 
-
+   
    public BlockDecompressor(String[] args)
+   {
+      this(args, null, true);
+   }
+   
+   
+   public BlockDecompressor(String[] args, ExecutorService threadPool)
+   {
+      this(args, threadPool, false);
+   }
+   
+   
+   protected BlockDecompressor(String[] args, ExecutorService threadPool, boolean ownPool)
    {
       Map<String, Object> map = new HashMap<String, Object>();
       processCommandLine(args, map);
@@ -51,6 +69,10 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       this.overwrite = (Boolean) map.get("overwrite");
       this.inputName = (String) map.get("inputName");
       this.outputName = (String) map.get("outputName");
+      this.jobs = (Integer) map.get("jobs");
+      this.pool = (this.jobs == 1) ? null : 
+              ((threadPool == null) ? Executors.newCachedThreadPool() : threadPool);
+      this.ownPool = ownPool;
    }
 
 
@@ -75,6 +97,9 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       {
          /* ignore */
       }
+      
+      if ((this.pool != null) && (this.ownPool == true))
+         this.pool.shutdown();
    }
 
 
@@ -115,6 +140,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       printOut("Output file name set to '" + this.outputName + "'", this.verbose);
       printOut("Debug set to "+this.verbose, this.verbose);
       printOut("Overwrite set to "+this.overwrite, this.verbose);
+      printOut("Using " + this.jobs + " job" + ((this.jobs > 1) ? "s" : ""), this.verbose);
 
       long read = 0;
       printOut("Decoding ...", !this.silent);
@@ -164,8 +190,9 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
          
          try
          {
+            PrintStream ds = (this.verbose == true) ? System.out : null; 
             this.cis = new CompressedInputStream(new FileInputStream(input),
-                 (this.verbose == true) ? System.out : null);
+                 ds, this.pool, this.jobs);
          }
          catch (Exception e)
          {
@@ -249,6 +276,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
         boolean overwrite = false;
         String inputName = null;
         String outputName = null;
+        int tasks = 1;
 
         for (String arg : args)
         {
@@ -262,6 +290,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
               printOut("-silent              : silent mode, no output (except warnings and errors)", true);
               printOut("-input=<inputName>   : mandatory name of the input file to decode", true);
               printOut("-output=<outputName> : optional name of the output file", true);
+              printOut("-jobs=<jobs>         : number of parallel jobs", true);
               System.exit(0);
            }
            else if (arg.equals("-verbose"))
@@ -283,6 +312,21 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
            else if (arg.startsWith("-output="))
            {
               outputName = arg.substring(8).trim();
+           }
+           else if (arg.startsWith("-jobs="))
+           {
+              arg = arg.substring(6).trim();
+              String str = arg.toUpperCase();
+              
+              try
+              {
+                 tasks = Integer.parseInt(str);
+              }
+              catch (NumberFormatException e)
+              {
+                 System.err.println("Invalid number of jobs provided on command line: "+arg);
+                 System.exit(Error.ERR_BLOCK_SIZE);
+              }
            }
            else
            {
@@ -316,6 +360,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
         map.put("silent", silent);
         map.put("outputName", outputName);
         map.put("inputName", inputName);
+        map.put("jobs", tasks);
     }
 
 

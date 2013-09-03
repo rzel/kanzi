@@ -17,6 +17,8 @@ package kanzi.test;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import kanzi.app.BlockCompressor;
 import kanzi.app.BlockDecompressor;
 
@@ -25,7 +27,8 @@ public class TestBlockCoder
 {
     public static void main(String[] args)
     {
-       BlockCompressor enc = new BlockCompressor(args);
+       ExecutorService pool = Executors.newCachedThreadPool();
+       BlockCompressor enc = new BlockCompressor(args, pool);
        int status = enc.call();
        
        if (status < 0)
@@ -45,10 +48,12 @@ public class TestBlockCoder
              set.add(args[i]);
           else if (args[i].equals("-silent"))
              set.add(args[i]);
+          else if (args[i].startsWith("-jobs="))
+             set.add(args[i]);
        }
 
        args = (String[]) set.toArray(new String[set.size()]);
-       BlockDecompressor dec = new BlockDecompressor(args);
+       BlockDecompressor dec = new BlockDecompressor(args, pool);
        status = dec.call();
 
        if (status < 0)
@@ -56,6 +61,8 @@ public class TestBlockCoder
           System.out.println("Decompression failed with status " + status);
           System.exit(status);
        }
+       
+       pool.shutdown();
     }
     
 }

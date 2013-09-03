@@ -18,6 +18,12 @@ package kanzi.io;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import kanzi.BitStreamException;
 import kanzi.ByteFunction;
 import kanzi.EntropyEncoder;
@@ -49,16 +55,18 @@ public class CompressedOutputStream extends OutputStream
 
    private final int blockSize;
    private final XXHash hasher;
-   private final IndexedByteArray iba1;
-   private final IndexedByteArray iba2;
+   private final IndexedByteArray iba;
+   private final IndexedByteArray[] buffers;
    private final char entropyType;
    private final char transformType;
    private final OutputBitStream  obs;
    private final PrintStream ds;
    private boolean initialized;
    private boolean closed;
-   private int blockId;
-
+   private final AtomicInteger blockId;
+   private final int jobs;
+   private final ExecutorService pool;
+   
 
    public CompressedOutputStream(String entropyCodec, String functionType, OutputStream os)
    {
@@ -69,6 +77,15 @@ public class CompressedOutputStream extends OutputStream
    // debug print stream is optional (may be null)
    public CompressedOutputStream(String entropyCodec, String functionType,
                OutputStream os, int blockSize, boolean checksum, PrintStream debug)
+   {
+      this(entropyCodec, functionType, os, blockSize, checksum, debug, null, 1);
+   }
+   
+   
+   // debug print stream is optional (may be null)
+   public CompressedOutputStream(String entropyCodec, String functionType,
+               OutputStream os, int blockSize, boolean checksum, PrintStream debug,
+               ExecutorService pool, int jobs)
    {
       if (entropyCodec == null)
          throw new NullPointerException("Invalid null entropy encoder type parameter");
@@ -85,31 +102,43 @@ public class CompressedOutputStream extends OutputStream
       if (blockSize < MIN_BLOCK_SIZE)
          throw new IllegalArgumentException("The block size must be at least "+MIN_BLOCK_SIZE);
 
+      if ((jobs < 1) || (jobs > 16))
+         throw new IllegalArgumentException("The number of jobs must be in [1..16]");
+
+      if ((jobs != 1) && (pool == null))
+         throw new IllegalArgumentException("The thread pool cannot be null when the number of jobs is "+jobs);
+
       final int bufferSize = (blockSize > 65536) ? blockSize : 65536;
       this.obs = new DefaultOutputBitStream(os, bufferSize);
 
       // Check entropy type validity (throws if not valid)
-      char type = entropyCodec.toUpperCase().charAt(0);
-      String checkedEntropyType = new EntropyCodecFactory().getName((byte) type);
+      char eType = entropyCodec.toUpperCase().charAt(0);
+      String checkedEntropyType = new EntropyCodecFactory().getName((byte) eType);
 
       if (entropyCodec.equalsIgnoreCase(checkedEntropyType) == false)
          throw new IllegalArgumentException("Unsupported entropy type: " + entropyCodec);
 
-      this.entropyType = type;
-
       // Check transform type validity (throws if not valid)
-      type = functionType.toUpperCase().charAt(0);
-      String checkedFunctionType = new FunctionFactory().getName((byte) type);
+      char tType = functionType.toUpperCase().charAt(0);
+      String checkedFunctionType = new FunctionFactory().getName((byte) tType);
 
       if (functionType.equalsIgnoreCase(checkedFunctionType) == false)
          throw new IllegalArgumentException("Unsupported function type: " + functionType);
 
-      this.transformType = type;
+      this.entropyType = eType;
+      this.transformType = tType;
       this.blockSize = blockSize;
       this.hasher = (checksum == true) ? new XXHash(BITSTREAM_TYPE) : null;
-      this.iba1 = new IndexedByteArray(new byte[blockSize], 0);
-      this.iba2 = new IndexedByteArray(EMPTY_BYTE_ARRAY, 0);
+      this.jobs = jobs;
+      this.pool = pool;
+      this.iba = new IndexedByteArray(new byte[blockSize*this.jobs], 0);
+      this.buffers = new IndexedByteArray[this.jobs]; 
+      
+      for (int i=0; i<this.jobs; i++)
+         this.buffers[i] = new IndexedByteArray(EMPTY_BYTE_ARRAY, 0);
+      
       this.ds = debug;
+      this.blockId = new AtomicInteger(0);
    }
 
 
@@ -180,14 +209,14 @@ public class CompressedOutputStream extends OutputStream
       while (remaining > 0)
       {
          // Limit to number of available bytes in buffer
-         final int lenChunk = (this.iba1.index + remaining < this.iba1.array.length) ? remaining : 
-                 this.iba1.array.length - this.iba1.index;
+         final int lenChunk = (this.iba.index + remaining < this.iba.array.length) ? remaining : 
+                 this.iba.array.length - this.iba.index;
 
          if (lenChunk > 0)
          {
             // Process a chunk of in-buffer data. No access to bitstream required
-            System.arraycopy(array, off, this.iba1.array, this.iba1.index, lenChunk);
-            this.iba1.index += lenChunk;
+            System.arraycopy(array, off, this.iba.array, this.iba.index, lenChunk);
+            this.iba.index += lenChunk;
             off += lenChunk;
             remaining -= lenChunk;
 
@@ -222,10 +251,10 @@ public class CompressedOutputStream extends OutputStream
       try
       {
          // If the buffer is full, time to encode
-         if (this.iba1.index >= this.iba1.array.length)
+         if (this.iba.index >= this.iba.array.length)
             this.processBlock();
 
-         this.iba1.array[this.iba1.index++] = (byte) b;
+         this.iba.array[this.iba.index++] = (byte) b;
       }
       catch (BitStreamException e)
       {
@@ -286,7 +315,7 @@ public class CompressedOutputStream extends OutputStream
       if (this.closed == true)
          return;
 
-      if (this.iba1.index > 0)
+      if (this.iba.index > 0)
          this.processBlock();
 
       try
@@ -303,18 +332,18 @@ public class CompressedOutputStream extends OutputStream
       this.closed = true;
 
       // Release resources
-      this.iba1.array = EMPTY_BYTE_ARRAY;
-      this.iba2.array = EMPTY_BYTE_ARRAY;
-      
       // Force error on any subsequent write attempt
-      this.iba1.index = -1;
-      this.iba2.index = -1;
+      this.iba.array = EMPTY_BYTE_ARRAY;
+      this.iba.index = -1;      
+
+      for (int i=0; i<this.jobs; i++)
+         this.buffers[i] = new IndexedByteArray(EMPTY_BYTE_ARRAY, -1);
    }
 
 
    private void processBlock() throws IOException
    {
-      if (this.iba1.index == 0)
+      if (this.iba.index == 0)
          return;
 
       if (this.initialized == false)
@@ -325,15 +354,46 @@ public class CompressedOutputStream extends OutputStream
 
       try
       {
-         final int sz = this.iba1.index;
-         this.iba1.index = 0;
-         final int encoded = this.encode(this.iba1, sz);
+         final int dataLength = this.iba.index;
+         this.iba.index = 0;
+         List<Callable<Boolean>> tasks = new ArrayList<Callable<Boolean>>(this.jobs);
+         int blockNumber = this.blockId.get();
+         
+         // Create as many tasks as required 
+         for (int jobId=0; jobId<this.jobs; jobId++)
+         {
+            blockNumber++;
+            final int sz = (this.iba.index + this.blockSize > dataLength) ?
+                    dataLength - this.iba.index : this.blockSize;        
+            Callable<Boolean> task = new EncodingTask(this.iba.array, this.iba.index,
+                    this.buffers[jobId].array, sz, (byte) this.transformType, 
+                    (byte) this.entropyType, blockNumber,
+                    this.obs, this.ds, this.hasher, this.blockId);
+            tasks.add(task);
+            this.iba.index += sz;
+            
+            if (sz < this.blockSize)
+               break;
+         }
+         
+         if (this.jobs == 1)
+         {
+            // Synchronous call
+            if (tasks.get(0).call() == false)
+               throw new kanzi.io.IOException("Error in transform forward()", Error.ERR_PROCESS_BLOCK); 
+         }
+         else
+         {
+            // Invoke the tasks in parallel and validate the results
+            for (Future<Boolean> result : this.pool.invokeAll(tasks))
+            {
+               // Wait for completion of next task and validate result
+               if (result.get() == false)
+                  throw new kanzi.io.IOException("Error in transform forward()", Error.ERR_PROCESS_BLOCK);         
+            }
+         }
 
-         if (encoded < 0)
-            throw new kanzi.io.IOException("Error in transform forward()", Error.ERR_PROCESS_BLOCK);
-
-         this.iba1.index = 0;
-         this.blockId++;
+         this.iba.index = 0;
       }
       catch (kanzi.io.IOException e)
       {
@@ -355,123 +415,182 @@ public class CompressedOutputStream extends OutputStream
    }
 
 
-   // Return -1 if error, otherwise the number of encoded bytes
-   private int encode(IndexedByteArray data, int blockLength)
+   
+   // A task used to encode a block
+   // Several tasks may run in parallel. The transforms can be computed in parallel
+   // but the entropy encoding is sequential since all tasks share the same bitstream.
+   class EncodingTask implements Callable<Boolean>
    {
-      EntropyEncoder ee = null;
-
-      try
+      private final IndexedByteArray data;
+      private final IndexedByteArray buffer;
+      private final int length;
+      private final byte transformType;
+      private final byte entropyType;
+      private final int blockId;
+      private final OutputBitStream obs;
+      private final PrintStream ds;
+      private final XXHash hasher;
+      private final AtomicInteger processedBlockId;
+      
+      
+      EncodingTask(byte[] data, int offset, byte[] buffer, int length, 
+              byte transformType, byte entropyType, int blockId,
+              OutputBitStream obs, PrintStream ds, XXHash hasher,
+              AtomicInteger processedBlockId)
       {
-         if (this.transformType == 'N')
-            this.iba2.array = data.array; // share buffers if no transform
-         else if (this.iba2.array.length < blockLength*5/4) // ad-hoc size
-             this.iba2.array = new byte[blockLength*5/4];
+         this.data = new IndexedByteArray(data, offset);
+         this.buffer = new IndexedByteArray(buffer, 0);
+         this.length = length;
+         this.transformType = transformType;
+         this.entropyType = entropyType;
+         this.blockId = blockId;
+         this.obs = obs;
+         this.ds = ds;
+         this.hasher = hasher;
+         this.processedBlockId = processedBlockId;
+      }
 
-         ByteFunction transform = new FunctionFactory().newFunction(blockLength,
-                 (byte) this.transformType);
+      
+      @Override
+      public Boolean call() throws Exception 
+      {
+         return this.encodeBlock(this.data, this.buffer, this.length, 
+                 this.transformType, this.entropyType, this.blockId);
+      }
 
-         this.iba2.index = 0;
-         byte mode = 0;
-         int dataSize = 0;
-         int compressedLength = blockLength;
-         int checksum = 0;
+      
+      private boolean encodeBlock(IndexedByteArray data, IndexedByteArray buffer,
+           int blockLength, byte typeOfTransform, 
+           byte typeOfEntropy, int currentBlockId)
+      {
+         EntropyEncoder ee = null;
 
-         if (blockLength <= SMALL_BLOCK_SIZE)
+         try
          {
-            // Just copy
-            if (data.array != this.iba2.array)
-               System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
+            ByteFunction transform = new FunctionFactory().newFunction(blockLength, typeOfTransform);
+            final int requiredSize = transform.getMaxEncodedLength(blockLength);
 
-            data.index += blockLength;
-            this.iba2.index = blockLength;
-            mode = (byte) (SMALL_BLOCK_MASK | (blockLength & COPY_LENGTH_MASK));
-         }
-         else
-         {
-            // Compute block checksum
-            if (this.hasher != null)
-               checksum = this.hasher.hash(data.array, data.index, blockLength);
+            if (typeOfTransform == 'N')
+               buffer.array = data.array; // share buffers if no transform
+            else if (buffer.array.length < requiredSize) 
+                buffer.array = new byte[requiredSize];
 
-            final int savedIdx = data.index;
+            buffer.index = 0;
+            byte mode = 0;
+            int dataSize = 0;
+            int compressedLength = blockLength;
+            int checksum = 0;
 
-            // Forward transform
-            if ((transform.forward(data, this.iba2) == false) || (this.iba2.index >= blockLength))
+            if (blockLength <= SMALL_BLOCK_SIZE)
             {
-               data.index = savedIdx;
-
-               // Transform failed or did not compress, skip and copy block
-               if (data.array != this.iba2.array)
-                  System.arraycopy(data.array, data.index, this.iba2.array, 0, blockLength);
+               // Just copy
+               if (data.array != buffer.array)
+                  System.arraycopy(data.array, data.index, buffer.array, 0, blockLength);
 
                data.index += blockLength;
-               this.iba2.index = blockLength;
-               mode |= SKIP_FUNCTION_MASK;
+               buffer.index = blockLength;
+               mode = (byte) (SMALL_BLOCK_MASK | (blockLength & COPY_LENGTH_MASK));
             }
+            else
+            {
+               // Compute block checksum
+               if (this.hasher != null)
+                  checksum = this.hasher.hash(data.array, data.index, blockLength);
 
-            compressedLength = this.iba2.index;
-            dataSize++;
+               final int savedIdx = data.index;
 
-            for (int i=0xFF; i<compressedLength; i<<=8)
+               // Forward transform
+               if ((transform.forward(data, buffer) == false) || (buffer.index >= blockLength))
+               {
+                  // Transform failed or did not compress, skip and copy block
+                  if (data.array != buffer.array)
+                     System.arraycopy(data.array, savedIdx, buffer.array, 0, blockLength);
+
+                  data.index = savedIdx +  blockLength;
+                  buffer.index = blockLength;
+                  mode |= SKIP_FUNCTION_MASK;
+               }
+
+               compressedLength = buffer.index;
+               
+               if (compressedLength < 0)
+                  return false;
+               
                dataSize++;
 
-            // Record size of 'block size' in bytes
-            mode |= (dataSize & 0x03);
-         }
+               for (int i=0xFF; i<compressedLength; i<<=8)
+                  dataSize++;
 
-         // Each block is encoded separately
-         // Rebuild the entropy encoder to reset block statistics
-         ee = new EntropyCodecFactory().newEncoder(this.obs, (byte) this.entropyType);
+               // Record size of 'block size' in bytes
+               mode |= (dataSize & 0x03);
+            }
 
-         // Write block 'header' (mode + compressed length);
-         final long written = this.obs.written();
-         this.obs.writeBits(mode, 8);
+            // Lock free synchronization
+            while (this.processedBlockId.get() != currentBlockId-1)
+            {
+               // Wait for the parallel task processing the previous block to complete
+               // entropy encoding. Entropy encoding must happen sequentially (and 
+               // in the correct block order) in the bitstream.
+            }
 
-         if (dataSize > 0)
-            this.obs.writeBits(compressedLength, 8*dataSize);
+            // Each block is encoded separately
+            // Rebuild the entropy encoder to reset block statistics
+            ee = new EntropyCodecFactory().newEncoder(this.obs, typeOfEntropy);
 
-         // Write checksum (unless small block)
-         if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
-            this.obs.writeBits(checksum, 32);
+            // Write block 'header' (mode + compressed length);
+            final long written = this.obs.written();
+            this.obs.writeBits(mode, 8);
 
-         // Entropy encode block
-         final int encoded = ee.encode(this.iba2.array, 0, compressedLength);
+            if (dataSize > 0)
+               this.obs.writeBits(compressedLength, 8*dataSize);
 
-         // Dispose before displaying statistics. Dispose may write to the bitstream
-         ee.dispose();
-         
-         // Force ee to null to avoid double dispose (in the finally section)
-         ee = null; 
-         
-         // Print info if debug stream is not null
-         if (this.ds != null)
-         {
-            this.ds.print("Block "+this.blockId+": "+
-                   blockLength + " => " + encoded + " => " +
-                  ((this.obs.written()-written)/8L)+" ("+
-                  ((this.obs.written()-written)*100L/(blockLength*8L))+"%)");
-
+            // Write checksum (unless small block)
             if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
-               this.ds.print("  [" + Integer.toHexString(checksum) + "]");
+               this.obs.writeBits(checksum, 32);
 
-            this.ds.println();
+            // Entropy encode block
+            final int encoded = ee.encode(buffer.array, 0, compressedLength);
+
+            // Dispose before displaying statistics. Dispose may write to the bitstream
+            ee.dispose();
+
+            // Force ee to null to avoid double dispose (in the finally section)
+            ee = null; 
+
+            // Print info if debug stream is not null
+            if (this.ds != null)
+            {
+               this.ds.print("Block "+(currentBlockId-1)+": "+
+                      blockLength + " => " + encoded + " => " +
+                     ((this.obs.written()-written)/8L)+" ("+
+                     ((this.obs.written()-written)*100L/(blockLength*8L))+"%)");
+
+               if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
+                  this.ds.print("  [" + Integer.toHexString(checksum) + "]");
+
+               this.ds.println();
+            }
+
+            // After completion of the entropy coding, increment the block id.
+            // It unfreezes the task processing the next block (if any)
+            this.processedBlockId.incrementAndGet();
+
+            return true;
          }
+         catch (Exception e)
+         {
+            return false;
+         }
+         finally
+         {
+            // Reset buffer in case another block uses a different transform
+            if (typeOfTransform == 'N')
+               buffer.array = EMPTY_BYTE_ARRAY;
 
-         return encoded;
-      }
-      catch (Exception e)
-      {
-         return -1;
-      }
-      finally
-      {
-         // Reset buffer in case another block uses a different transform
-         if (this.transformType == 'N')
-            this.iba2.array = EMPTY_BYTE_ARRAY;
-
-         if (ee != null)
-           ee.dispose();
-      }
+            if (ee != null)
+              ee.dispose();
+         }
+      }     
    }
-
 
 }

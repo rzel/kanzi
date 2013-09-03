@@ -20,9 +20,12 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import kanzi.IndexedByteArray;
 import kanzi.io.CompressedOutputStream;
 import kanzi.io.Error;
@@ -42,11 +45,26 @@ public class BlockCompressor implements Runnable, Callable<Integer>
    private String codec;
    private String transform;
    private int blockSize;
+   private int jobs;
    private InputStream is;
    private CompressedOutputStream cos;
+   private boolean ownPool;
+   private final ExecutorService pool;
 
-
+   
    public BlockCompressor(String[] args)
+   {
+      this(args, null, true);
+   }
+   
+   
+   public BlockCompressor(String[] args, ExecutorService threadPool)
+   {
+      this(args, threadPool, false);
+   }
+   
+   
+   protected BlockCompressor(String[] args, ExecutorService threadPool, boolean ownPool)
    {
       Map<String, Object> map = new HashMap<String, Object>();
       processCommandLine(args, map);
@@ -59,6 +77,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       this.blockSize = (Integer) map.get("blockSize");
       this.transform = (String) map.get("transform");
       this.checksum = (Boolean) map.get("checksum");
+      this.jobs = (Integer) map.get("jobs");
+      this.pool = (this.jobs == 1) ? null : 
+              ((threadPool == null) ? Executors.newCachedThreadPool() : threadPool);
+      this.ownPool = ownPool;
    }
 
 
@@ -106,6 +128,9 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       {
          /* ignore */
       }
+      
+      if ((this.pool != null) && (this.ownPool == true))
+         this.pool.shutdown();
    }
 
 
@@ -130,6 +155,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       printOut("Using " + etransform + " transform (stage 1)", this.verbose);
       String ecodec = ("NONE".equals(this.codec)) ? "no" : this.codec;
       printOut("Using " + ecodec + " entropy codec (stage 2)", this.verbose);
+      printOut("Using " + this.jobs + " job" + ((this.jobs > 1) ? "s" : ""), this.verbose);
 
       try
       {
@@ -153,11 +179,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
 
          try
          {
+            PrintStream ds = (this.verbose == true) ? System.out : null;
             this.cos = new CompressedOutputStream(this.codec, this.transform,
-                 new FileOutputStream(output),
-                 this.blockSize,
-                 this.checksum,
-                 (this.verbose == true) ? System.out : null);
+                 new FileOutputStream(output), this.blockSize, this.checksum,
+                 ds, this.pool, this.jobs);
          }
          catch (Exception e)
          {
@@ -261,6 +286,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
         String outputName = null;
         String codec = "HUFFMAN"; // default
         String transform = "BLOCK"; // default
+        int tasks = 1;
 
         for (String arg : args)
         {
@@ -275,9 +301,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
                printOut("-input=<inputName>   : mandatory name of the input file to encode", true);
                printOut("-output=<outputName> : optional name of the output file (defaults to <input.knz>)", true);
                printOut("-block=<size>        : size of the input blocks (max 16MB - 4 / min 1KB / default 1MB)", true);
-               printOut("-entropy=            : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true);
-               printOut("-transform=          : transform to use [None|Block*|Snappy|LZ4|RLT]", true);
+               printOut("-entropy=<codec>     : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true);
+               printOut("-transform=<codec>   : transform to use [None|Block*|Snappy|LZ4|RLT]", true);
                printOut("-checksum            : enable block checksum", true);
+               printOut("-jobs=<jobs>         : number of parallel jobs", true);
                System.exit(0);
            }
            else if (arg.equals("-verbose"))
@@ -340,6 +367,21 @@ public class BlockCompressor implements Runnable, Callable<Integer>
                  System.exit(Error.ERR_BLOCK_SIZE);
               }
            }
+           else if (arg.startsWith("-jobs="))
+           {
+              arg = arg.substring(6).trim();
+              String str = arg.toUpperCase();
+              
+              try
+              {
+                 tasks = Integer.parseInt(str);
+              }
+              catch (NumberFormatException e)
+              {
+                 System.err.println("Invalid number of jobs provided on command line: "+arg);
+                 System.exit(Error.ERR_BLOCK_SIZE);
+              }
+           }
            else
            {
               printOut("Warning: ignoring unknown option ["+ arg + "]", true);
@@ -370,6 +412,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
         map.put("codec", codec);
         map.put("transform", transform);
         map.put("checksum", checksum);
+        map.put("jobs", tasks);
     }
 
 
