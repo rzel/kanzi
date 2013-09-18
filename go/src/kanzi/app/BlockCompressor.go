@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"kanzi/io"
 	"os"
-	"strings"
+	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -40,6 +41,7 @@ type BlockCompressor struct {
 	entropyCodec string
 	transform    string
 	blockSize    uint
+	jobs         uint
 }
 
 func NewBlockCompressor() (*BlockCompressor, error) {
@@ -56,21 +58,23 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	var entropy = flag.String("entropy", "Huffman", "entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]")
 	var function = flag.String("transform", "Block", "transform to use [None|Block*|Snappy|LZ4|RLT]")
 	var cksum = flag.Bool("checksum", false, "enable block checksum")
+	var tasks = flag.Int("jobs", 1, "number of parallel jobs")
 
 	// Parse
 	flag.Parse()
 
 	if *help == true {
-		printOut("-help              : display this message", true)
-		printOut("-verbose           : display the block size at each stage (in bytes, floor rounding if fractional)", true)
-		printOut("-silent            : silent mode, no output (except warnings and errors)", true)
-		printOut("-overwrite         : overwrite the output file if it already exists", true)
-		printOut("-input=<filename>  : mandatory name of the input file to encode", true)
-		printOut("-output=<filename> : optional name of the output file (defaults to <input.knz>)", true)
-		printOut("-block=<size>      : size of the input blocks (max 16MB - 4 / min 1KB / default 1MB)", true)
-		printOut("-entropy=          : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true)
-		printOut("-transform=        : transform to use [None|Block*|Snappy|LZ4|RLT]", true)
-		printOut("-checksum          : enable block checksum", true)
+		printOut("-help                : display this message", true)
+		printOut("-verbose             : display the block size at each stage (in bytes, floor rounding if fractional)", true)
+		printOut("-silent              : silent mode, no output (except warnings and errors)", true)
+		printOut("-overwrite           : overwrite the output file if it already exists", true)
+		printOut("-input=<inputName>   : mandatory name of the input file to encode", true)
+		printOut("-output=<outputName> : optional name of the output file (defaults to <input.knz>)", true)
+		printOut("-block=<size>        : size of the input blocks (max 16MB - 4 / min 1KB / default 1MB)", true)
+		printOut("-entropy=<codec>     : entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]", true)
+		printOut("-transform=<codec>   : transform to use [None|Block*|Snappy|LZ4|RLT]", true)
+		printOut("-checksum            : enable block checksum", true)
+		printOut("-jobs=<jobs>         : number of parallel jobs", true)
 		os.Exit(0)
 	}
 
@@ -93,16 +97,16 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	this.overwrite = *overwrite
 	this.inputName = *inputName
 	this.outputName = *outputName
-	strBlockSize := strings.ToUpper(*blockSize)	
-	
+	strBlockSize := strings.ToUpper(*blockSize)
+
 	// Process K or M suffix
 	scale := 1
-	
-	if strBlockSize[len(strBlockSize)-1] == 'K' {	
-		strBlockSize = strBlockSize[0:len(strBlockSize)-1]
+
+	if strBlockSize[len(strBlockSize)-1] == 'K' {
+		strBlockSize = strBlockSize[0 : len(strBlockSize)-1]
 		scale = 1024
-	} else if strBlockSize[len(strBlockSize)-1] == 'M' {	
-		strBlockSize = strBlockSize[0:len(strBlockSize)-1]
+	} else if strBlockSize[len(strBlockSize)-1] == 'M' {
+		strBlockSize = strBlockSize[0 : len(strBlockSize)-1]
 		scale = 1024 * 1024
 	}
 
@@ -117,10 +121,12 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	this.entropyCodec = strings.ToUpper(*entropy)
 	this.transform = strings.ToUpper(*function)
 	this.checksum = *cksum
+	this.jobs = uint(*tasks)
 	return this, nil
 }
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	bc, err := NewBlockCompressor()
 
 	if err != nil {
@@ -168,16 +174,24 @@ func (this *BlockCompressor) call() (int, uint64) {
 
 	msg = fmt.Sprintf("Using %s entropy codec (stage 2)", w2)
 	printOut(msg, this.verbose)
+	prefix := ""
+
+	if this.jobs > 1 {
+		prefix = "s"
+	}
+
+	msg = fmt.Sprintf("Using %d job%s", this.jobs, prefix)
+	printOut(msg, this.verbose)
 	written := uint64(0)
 	output, err := os.OpenFile(this.outputName, os.O_RDWR, 666)
 
 	if err == nil {
 		// File exists
 		output.Close()
-		
+
 		if this.overwrite == false {
 			fmt.Print("The output file exists and the 'overwrite' command ")
-			fmt.Println("line option has not been provided")			
+			fmt.Println("line option has not been provided")
 			return io.ERR_OVERWRITE_FILE, written
 		}
 	}
@@ -197,7 +211,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 	}
 
 	cos, err := io.NewCompressedOutputStream(this.entropyCodec, this.transform,
-		output, this.blockSize, this.checksum, verboseWriter)
+		output, this.blockSize, this.checksum, verboseWriter, this.jobs)
 
 	if err != nil {
 		if ioerr, isIOErr := err.(io.IOError); isIOErr == true {

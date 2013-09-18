@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"kanzi/io"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -34,6 +35,7 @@ type BlockDecompressor struct {
 	overwrite  bool
 	inputName  string
 	outputName string
+	jobs       uint
 }
 
 func NewBlockDecompressor() (*BlockDecompressor, error) {
@@ -46,17 +48,19 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 	var silent = flag.Bool("silent", false, "silent mode, no output (except warnings and errors)")
 	var inputName = flag.String("input", "", "mandatory name of the input file to decode")
 	var outputName = flag.String("output", "", "optional name of the output file")
+	var tasks = flag.Int("jobs", 1, "number of parallel jobs")
 
 	// Parse
 	flag.Parse()
 
 	if *help == true {
-		printOut("-help              : display this message", true)
-		printOut("-verbose           : display the block size at each stage (in bytes, floor rounding if fractional)", true)
-		printOut("-silent            : silent mode, no output (except warnings and errors)", true)
-		printOut("-overwrite         : overwrite the output file if it already exists", true)
-		printOut("-input=<filename>  : mandatory name of the input file to encode", true)
-		printOut("-output=<filename> : optional name of the output file", true)
+		printOut("-help                : display this message", true)
+		printOut("-verbose             : display the block size at each stage (in bytes, floor rounding if fractional)", true)
+		printOut("-overwrite           : overwrite the output file if it already exists", true)
+		printOut("-silent              : silent mode, no output (except warnings and errors)", true)
+		printOut("-input=<inputName>   : mandatory name of the input file to decode", true)
+		printOut("-output=<outputName> : optional name of the output file", true)
+		printOut("-jobs=<jobs>         : number of parallel jobs", true)
 		os.Exit(0)
 	}
 
@@ -87,10 +91,12 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 	this.inputName = *inputName
 	this.outputName = *outputName
 	this.overwrite = *overwrite
+	this.jobs = uint(*tasks)
 	return this, nil
 }
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	bd, err := NewBlockDecompressor()
 
 	if err != nil {
@@ -117,6 +123,14 @@ func (this *BlockDecompressor) call() (int, uint64) {
 	msg = fmt.Sprintf("Debug set to %t", this.verbose)
 	printOut(msg, this.verbose)
 	msg = fmt.Sprintf("Overwrite set to %t", this.overwrite)
+	printOut(msg, this.verbose)
+	prefix := ""
+
+	if this.jobs > 1 {
+		prefix = "s"
+	}
+
+	msg = fmt.Sprintf("Using %d job%s", this.jobs, prefix)
 	printOut(msg, this.verbose)
 
 	output, err := os.OpenFile(this.outputName, os.O_RDWR, 666)
@@ -158,7 +172,7 @@ func (this *BlockDecompressor) call() (int, uint64) {
 		verboseWriter = nil
 	}
 
-	cis, err := io.NewCompressedInputStream(input, verboseWriter)
+	cis, err := io.NewCompressedInputStream(input, verboseWriter, this.jobs)
 
 	if err != nil {
 		if err.(*io.IOError) != nil {
