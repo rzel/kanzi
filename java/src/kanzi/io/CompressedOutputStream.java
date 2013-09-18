@@ -24,6 +24,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 import kanzi.BitStreamException;
 import kanzi.ByteFunction;
 import kanzi.EntropyEncoder;
@@ -66,7 +67,7 @@ public class CompressedOutputStream extends OutputStream
    private final AtomicInteger blockId;
    private final int jobs;
    private final ExecutorService pool;
-   
+
 
    public CompressedOutputStream(String entropyCodec, String functionType, OutputStream os)
    {
@@ -80,8 +81,8 @@ public class CompressedOutputStream extends OutputStream
    {
       this(entropyCodec, functionType, os, blockSize, checksum, debug, null, 1);
    }
-   
-   
+
+
    // debug print stream is optional (may be null)
    public CompressedOutputStream(String entropyCodec, String functionType,
                OutputStream os, int blockSize, boolean checksum, PrintStream debug,
@@ -132,11 +133,11 @@ public class CompressedOutputStream extends OutputStream
       this.jobs = jobs;
       this.pool = pool;
       this.iba = new IndexedByteArray(new byte[blockSize*this.jobs], 0);
-      this.buffers = new IndexedByteArray[this.jobs]; 
-      
+      this.buffers = new IndexedByteArray[this.jobs];
+
       for (int i=0; i<this.jobs; i++)
          this.buffers[i] = new IndexedByteArray(EMPTY_BYTE_ARRAY, 0);
-      
+
       this.ds = debug;
       this.blockId = new AtomicInteger(0);
    }
@@ -196,20 +197,20 @@ public class CompressedOutputStream extends OutputStream
      *             stream is closed.
      */
     @Override
-    public void write(byte[] array, int off, int len) throws IOException 
+    public void write(byte[] array, int off, int len) throws IOException
     {
       if ((off < 0) || (len < 0) || (len + off > array.length))
          throw new IndexOutOfBoundsException();
-     
+
       if (this.closed == true)
          throw new kanzi.io.IOException("Stream closed", Error.ERR_WRITE_FILE);
-      
+
       int remaining = len;
 
       while (remaining > 0)
       {
          // Limit to number of available bytes in buffer
-         final int lenChunk = (this.iba.index + remaining < this.iba.array.length) ? remaining : 
+         final int lenChunk = (this.iba.index + remaining < this.iba.array.length) ? remaining :
                  this.iba.array.length - this.iba.index;
 
          if (lenChunk > 0)
@@ -223,7 +224,7 @@ public class CompressedOutputStream extends OutputStream
             if (remaining == 0)
                break;
          }
-         
+
          // Buffer full, time to encode
          this.write(array[off]);
          off++;
@@ -232,7 +233,7 @@ public class CompressedOutputStream extends OutputStream
    }
 
 
-    
+
    /**
     * Writes the specified byte to this output stream. The general
     * contract for <code>write</code> is that one byte is written
@@ -326,7 +327,7 @@ public class CompressedOutputStream extends OutputStream
       }
       catch (BitStreamException e)
       {
-         throw new kanzi.io.IOException(e.getMessage(), ((BitStreamException) e).getErrorCode());        
+         throw new kanzi.io.IOException(e.getMessage(), ((BitStreamException) e).getErrorCode());
       }
 
       this.closed = true;
@@ -334,7 +335,7 @@ public class CompressedOutputStream extends OutputStream
       // Release resources
       // Force error on any subsequent write attempt
       this.iba.array = EMPTY_BYTE_ARRAY;
-      this.iba.index = -1;      
+      this.iba.index = -1;
 
       for (int i=0; i<this.jobs; i++)
          this.buffers[i] = new IndexedByteArray(EMPTY_BYTE_ARRAY, -1);
@@ -358,38 +359,38 @@ public class CompressedOutputStream extends OutputStream
          this.iba.index = 0;
          List<Callable<Boolean>> tasks = new ArrayList<Callable<Boolean>>(this.jobs);
          int blockNumber = this.blockId.get();
-         
-         // Create as many tasks as required 
+
+         // Create as many tasks as required
          for (int jobId=0; jobId<this.jobs; jobId++)
          {
             blockNumber++;
             final int sz = (this.iba.index + this.blockSize > dataLength) ?
-                    dataLength - this.iba.index : this.blockSize;        
+                    dataLength - this.iba.index : this.blockSize;
             Callable<Boolean> task = new EncodingTask(this.iba.array, this.iba.index,
-                    this.buffers[jobId].array, sz, (byte) this.transformType, 
+                    this.buffers[jobId].array, sz, (byte) this.transformType,
                     (byte) this.entropyType, blockNumber,
                     this.obs, this.ds, this.hasher, this.blockId);
             tasks.add(task);
             this.iba.index += sz;
-            
+
             if (sz < this.blockSize)
                break;
          }
-         
+
          if (this.jobs == 1)
          {
             // Synchronous call
             if (tasks.get(0).call() == false)
-               throw new kanzi.io.IOException("Error in transform forward()", Error.ERR_PROCESS_BLOCK); 
+               throw new kanzi.io.IOException("Error in transform forward()", Error.ERR_PROCESS_BLOCK);
          }
          else
          {
-            // Invoke the tasks in parallel and validate the results
+            // Invoke the tasks concurrently and validate the results
             for (Future<Boolean> result : this.pool.invokeAll(tasks))
             {
                // Wait for completion of next task and validate result
                if (result.get() == false)
-                  throw new kanzi.io.IOException("Error in transform forward()", Error.ERR_PROCESS_BLOCK);         
+                  throw new kanzi.io.IOException("Error in transform forward()", Error.ERR_PROCESS_BLOCK);
             }
          }
 
@@ -415,9 +416,9 @@ public class CompressedOutputStream extends OutputStream
    }
 
 
-   
+
    // A task used to encode a block
-   // Several tasks may run in parallel. The transforms can be computed in parallel
+   // Several tasks may run in parallel. The transforms can be computed concurrently
    // but the entropy encoding is sequential since all tasks share the same bitstream.
    class EncodingTask implements Callable<Boolean>
    {
@@ -431,9 +432,9 @@ public class CompressedOutputStream extends OutputStream
       private final PrintStream ds;
       private final XXHash hasher;
       private final AtomicInteger processedBlockId;
-      
-      
-      EncodingTask(byte[] data, int offset, byte[] buffer, int length, 
+
+
+      EncodingTask(byte[] data, int offset, byte[] buffer, int length,
               byte transformType, byte entropyType, int blockId,
               OutputBitStream obs, PrintStream ds, XXHash hasher,
               AtomicInteger processedBlockId)
@@ -450,17 +451,17 @@ public class CompressedOutputStream extends OutputStream
          this.processedBlockId = processedBlockId;
       }
 
-      
+
       @Override
-      public Boolean call() throws Exception 
+      public Boolean call() throws Exception
       {
-         return this.encodeBlock(this.data, this.buffer, this.length, 
+         return this.encodeBlock(this.data, this.buffer, this.length,
                  this.transformType, this.entropyType, this.blockId);
       }
 
-      
+
       private boolean encodeBlock(IndexedByteArray data, IndexedByteArray buffer,
-           int blockLength, byte typeOfTransform, 
+           int blockLength, byte typeOfTransform,
            byte typeOfEntropy, int currentBlockId)
       {
          EntropyEncoder ee = null;
@@ -472,7 +473,7 @@ public class CompressedOutputStream extends OutputStream
 
             if (typeOfTransform == 'N')
                buffer.array = data.array; // share buffers if no transform
-            else if (buffer.array.length < requiredSize) 
+            else if (buffer.array.length < requiredSize)
                 buffer.array = new byte[requiredSize];
 
             buffer.index = 0;
@@ -512,10 +513,10 @@ public class CompressedOutputStream extends OutputStream
                }
 
                compressedLength = buffer.index;
-               
+
                if (compressedLength < 0)
                   return false;
-               
+
                dataSize++;
 
                for (int i=0xFF; i<compressedLength; i<<=8)
@@ -528,9 +529,11 @@ public class CompressedOutputStream extends OutputStream
             // Lock free synchronization
             while (this.processedBlockId.get() != currentBlockId-1)
             {
-               // Wait for the parallel task processing the previous block to complete
-               // entropy encoding. Entropy encoding must happen sequentially (and 
+               // Wait for the concurrent task processing the previous block to complete
+               // entropy encoding. Entropy encoding must happen sequentially (and
                // in the correct block order) in the bitstream.
+               // Backoff improves performance in heavy contention scenarios
+               LockSupport.parkNanos(1);
             }
 
             // Each block is encoded separately
@@ -555,7 +558,7 @@ public class CompressedOutputStream extends OutputStream
             ee.dispose();
 
             // Force ee to null to avoid double dispose (in the finally section)
-            ee = null; 
+            ee = null;
 
             // Print info if debug stream is not null
             if (this.ds != null)
@@ -590,7 +593,7 @@ public class CompressedOutputStream extends OutputStream
             if (ee != null)
               ee.dispose();
          }
-      }     
+      }
    }
 
 }

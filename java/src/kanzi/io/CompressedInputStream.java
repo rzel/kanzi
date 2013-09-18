@@ -24,6 +24,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 import kanzi.BitStreamException;
 import kanzi.ByteFunction;
 import kanzi.EntropyDecoder;
@@ -202,9 +203,15 @@ public class CompressedInputStream extends InputStream
       {
          if (this.iba.index >= this.maxIdx)
          {
+            // Initially this.maxIdx = 0
+            // If this.maxIdx < this.iba.array.length, the end of stream has been
+            // reached in the previous call
+            if ((this.maxIdx > 0) && (this.maxIdx < this.iba.array.length)) 
+               return -1;
+
             this.maxIdx = this.processBlock();
             
-            if (this.maxIdx == 0) // Reached end of stream
+            if (this.maxIdx == 0) // Reached end of stream (1 job)
                return -1;
          }
 
@@ -349,7 +356,7 @@ public class CompressedInputStream extends InputStream
          }
          else
          {            
-            // Invoke the tasks in parallel and validate the results
+            // Invoke the tasks concurrently and validate the results
             for (Future<Integer> result : this.pool.invokeAll(tasks))
             {
                // Wait for completion of next task and validate result
@@ -422,7 +429,7 @@ public class CompressedInputStream extends InputStream
    
  
    // A task used to decode a block
-   // Several tasks may run in parallel. The transforms can be computed in parallel
+   // Several tasks may run in parallel. The transforms can be computed concurrently
    // but the entropy decoding is sequential since all tasks share the same bitstream.
    class DecodingTask implements Callable<Integer>
    {
@@ -471,17 +478,18 @@ public class CompressedInputStream extends InputStream
       private int decodeBlock(IndexedByteArray data, IndexedByteArray buffer, byte typeOfTransform, 
               byte typeOfEntropy, int currentBlockId)
       {
-         int taskId;
+         int taskId = this.processedBlockId.get();
          
          // Lock free synchronization
-         do
+         while ((taskId != CANCEL_TASKS_ID) && (taskId != currentBlockId-1))
          {
-            // Wait for the parallel task processing the previous block to complete
+            // Wait for the concurrent task processing the previous block to complete
             // entropy decoding. Entropy decoding must happen sequentially (and 
             // in the correct block order) in the bitstream.
+            // Backoff improves performance in heavy contention scenarios
+            LockSupport.parkNanos(1);
             taskId = this.processedBlockId.get();
-         }
-         while ((taskId != CANCEL_TASKS_ID) && (taskId != currentBlockId-1));
+         }         
          
          // Skip, either all data have been processed or an error occured
          if (taskId == CANCEL_TASKS_ID)
@@ -513,14 +521,14 @@ public class CompressedInputStream extends InputStream
 
             if (compressedLength == 0)
             {
-               // Last block (empty), more data to read => cancel parallel decoding tasks
+               // Last block is empty, return success and cancel pending tasks
                this.processedBlockId.set(CANCEL_TASKS_ID);
                return 0;
             }
 
             if ((compressedLength < 0) || (compressedLength > MAX_BLOCK_SIZE))
             {
-               // Error => cancel parallel decoding tasks
+               // Error => cancel concurrent decoding tasks
                this.processedBlockId.set(CANCEL_TASKS_ID);
                return -1;
             }
@@ -539,7 +547,7 @@ public class CompressedInputStream extends InputStream
             // Block entropy decode
             if (ed.decode(buffer.array, 0, compressedLength) != compressedLength)
             {
-               // Error => cancel parallel decoding tasks
+               // Error => cancel concurrent decoding tasks
                this.processedBlockId.set(CANCEL_TASKS_ID);
                return -1;
             }
@@ -579,6 +587,8 @@ public class CompressedInputStream extends InputStream
                // output happens in the proper order (increasing block ID)
                while (this.dsSync.get() != currentBlockId-1)
                {    
+                  // Backoff improves performance in heavy contention scenarios
+                  LockSupport.parkNanos(1);
                }
                              
                this.ds.print("Block "+(currentBlockId-1)+": "+
