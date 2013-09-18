@@ -144,6 +144,14 @@ func SameIntSlices(slice1, slice2 []int, checkLengths bool) bool {
 		return true
 	}
 
+	if len(slice2) == 0 {
+		return len(slice1) == 0
+	}
+
+	if len(slice1) == 0 {
+		return false
+	}
+
 	if checkLengths == true && len(slice1) != len(slice2) {
 		return false
 	}
@@ -171,6 +179,14 @@ func SameByteSlices(slice1, slice2 []byte, checkLengths bool) bool {
 
 	if &slice1 == &slice2 {
 		return true
+	}
+
+	if len(slice2) == 0 {
+		return len(slice1) == 0
+	}
+
+	if len(slice1) == 0 {
+		return false
 	}
 
 	if checkLengths == true && len(slice1) != len(slice2) {
