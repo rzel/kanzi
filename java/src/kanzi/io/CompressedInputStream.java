@@ -41,7 +41,7 @@ import kanzi.util.XXHash;
 public class CompressedInputStream extends InputStream
 {
    private static final int BITSTREAM_TYPE           = 0x4B414E5A; // "KANZ"
-   private static final int BITSTREAM_FORMAT_VERSION = 3;
+   private static final int BITSTREAM_FORMAT_VERSION = 4;
    private static final int DEFAULT_BUFFER_SIZE      = 1024*1024;
    private static final int COPY_LENGTH_MASK         = 0x0F;
    private static final int SMALL_BLOCK_MASK         = 0x80;
@@ -534,7 +534,7 @@ public class CompressedInputStream extends InputStream
             }
 
             // Extract checksum from bit stream (if any)
-            if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
+            if (this.hasher != null)
                checksum1 = (int) this.ibs.readBits(32);
 
             if (typeOfTransform == 'N')
@@ -595,15 +595,15 @@ public class CompressedInputStream extends InputStream
                       ((this.ibs.read()-read)/8) + " => " +
                        compressedLength + " => " + decoded);
 
-               if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
+               if (this.hasher != null)
                   this.ds.print("  [" + Integer.toHexString(checksum1) + "]");
 
                this.ds.println();
                this.dsSync.getAndIncrement();
             }
 
-            // Verify checksum (unless small block)
-            if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
+            // Verify checksum 
+            if (this.hasher != null)
             {
                final int checksum2 = this.hasher.hash(data.array, savedIdx, decoded);
 

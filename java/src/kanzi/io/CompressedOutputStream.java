@@ -45,7 +45,7 @@ public class CompressedOutputStream extends OutputStream
 {
    private static final int DEFAULT_BLOCK_SIZE       = 1024 * 1024; // Default block size
    private static final int BITSTREAM_TYPE           = 0x4B414E5A; // "KANZ"
-   private static final int BITSTREAM_FORMAT_VERSION = 3;
+   private static final int BITSTREAM_FORMAT_VERSION = 4;
    private static final int COPY_LENGTH_MASK         = 0x0F;
    private static final int SMALL_BLOCK_MASK         = 0x80;
    private static final int SKIP_FUNCTION_MASK       = 0x40;
@@ -482,6 +482,10 @@ public class CompressedOutputStream extends OutputStream
             int compressedLength = blockLength;
             int checksum = 0;
 
+            // Compute block checksum
+            if (this.hasher != null)
+               checksum = this.hasher.hash(data.array, data.index, blockLength);
+            
             if (blockLength <= SMALL_BLOCK_SIZE)
             {
                // Just copy
@@ -494,10 +498,6 @@ public class CompressedOutputStream extends OutputStream
             }
             else
             {
-               // Compute block checksum
-               if (this.hasher != null)
-                  checksum = this.hasher.hash(data.array, data.index, blockLength);
-
                final int savedIdx = data.index;
 
                // Forward transform
@@ -547,8 +547,8 @@ public class CompressedOutputStream extends OutputStream
             if (dataSize > 0)
                this.obs.writeBits(compressedLength, 8*dataSize);
 
-            // Write checksum (unless small block)
-            if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
+            // Write checksum
+            if (this.hasher != null)
                this.obs.writeBits(checksum, 32);
 
             // Entropy encode block
@@ -568,7 +568,7 @@ public class CompressedOutputStream extends OutputStream
                      ((this.obs.written()-written)/8L)+" ("+
                      ((this.obs.written()-written)*100L/(blockLength*8L))+"%)");
 
-               if ((this.hasher != null) && ((mode & SMALL_BLOCK_MASK) == 0))
+               if (this.hasher != null) 
                   this.ds.print("  [" + Integer.toHexString(checksum) + "]");
 
                this.ds.println();

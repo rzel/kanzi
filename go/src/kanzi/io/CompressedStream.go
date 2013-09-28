@@ -35,7 +35,7 @@ import (
 
 const (
 	BITSTREAM_TYPE           = 0x4B414E5A // "KANZ"
-	BITSTREAM_FORMAT_VERSION = 3
+	BITSTREAM_FORMAT_VERSION = 4
 	DEFAULT_BUFFER_SIZE      = 1024 * 1024
 	COPY_LENGTH_MASK         = 0x0F
 	SMALL_BLOCK_MASK         = 0x80
@@ -401,6 +401,11 @@ func (this *CompressedOutputStream) encode(data, buf []byte, blockLength uint,
 	iIdx := uint(0)
 	oIdx := uint(0)
 
+	// Compute block checksum
+	if this.hasher != nil {
+		checksum = this.hasher.Hash(data[0:blockLength])
+	}
+
 	if blockLength <= SMALL_BLOCK_SIZE {
 		// Just copy
 		if !kanzi.SameByteSlices(buffer, data, false) {
@@ -411,10 +416,6 @@ func (this *CompressedOutputStream) encode(data, buf []byte, blockLength uint,
 		oIdx += blockLength
 		mode = byte(SMALL_BLOCK_SIZE | (blockLength & COPY_LENGTH_MASK))
 	} else {
-		// Compute block checksum
-		if this.hasher != nil {
-			checksum = this.hasher.Hash(data[0:blockLength])
-		}
 
 		// Forward transform
 		iIdx, oIdx, err = transform.Forward(data, buffer)
@@ -468,8 +469,8 @@ func (this *CompressedOutputStream) encode(data, buf []byte, blockLength uint,
 		}
 	}
 
-	// Write checksum (unless small block)
-	if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
+	// Write checksum
+	if this.hasher != nil {
 		if _, err = this.obs.WriteBits(uint64(checksum), 32); err != nil {
 			output <- NewIOError(err.Error(), ERR_WRITE_FILE)
 		}
@@ -491,7 +492,7 @@ func (this *CompressedOutputStream) encode(data, buf []byte, blockLength uint,
 			blockLength, encoded, (this.obs.Written()-written)/8,
 			(this.obs.Written()-written)*100/uint64(blockLength*8))
 
-		if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
+		if this.hasher != nil {
 			fmt.Fprintf(this.debugWriter, "  [%x]", checksum)
 		}
 
@@ -899,7 +900,7 @@ func (this *CompressedInputStream) decode(data, buf []byte,
 	}
 
 	// Extract checksum from bit stream (if any)
-	if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK) == 0 {
+	if this.hasher != nil {
 		if r, err = this.ibs.ReadBits(32); err != nil {
 			// Error => cancel concurrent decoding tasks
 			res.err = NewIOError(err.Error(), ERR_READ_FILE)
@@ -978,7 +979,7 @@ func (this *CompressedInputStream) decode(data, buf []byte,
 		// Print info if debug writer is not nil
 		if this.debugWriter != nil {
 			// Create, format block decoding info and return it
-			if (this.hasher != nil) && (mode&SMALL_BLOCK_MASK == 0) {
+			if this.hasher != nil {
 				res.text = fmt.Sprintf("Block %d: %d => %d => %d  [%x]", currentBlockId,
 					read/8, compressedLength, res.decoded, checksum1)
 			} else {
@@ -987,8 +988,8 @@ func (this *CompressedInputStream) decode(data, buf []byte,
 			}
 		}
 
-		// Verify checksum (unless small block)
-		if (this.hasher != nil) && ((mode & SMALL_BLOCK_MASK) == 0) {
+		// Verify checksum
+		if this.hasher != nil {
 			checksum2 := this.hasher.Hash(data[0:res.decoded])
 
 			if checksum2 != checksum1 {
