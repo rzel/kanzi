@@ -23,21 +23,41 @@ const (
 )
 
 type BlockEvent struct {
-	EventType int
-	BlockId   int
-	BlockSize int
-	Hash      uint32
-	Hashing   bool
+	eventType int
+	blockId   int
+	blockSize int
+	hash      uint32
+	hashing   bool
 }
 
 func NewBlockEvent(type_, blockId, blockSize int, hash uint32, hashing bool) (*BlockEvent, error) {
 	this := new(BlockEvent)
-	this.EventType = type_
-	this.BlockId = blockId
-	this.BlockSize = blockSize
-	this.Hash = hash
-	this.Hashing = hashing
+	this.eventType = type_
+	this.blockId = blockId
+	this.blockSize = blockSize
+	this.hash = hash
+	this.hashing = hashing
 	return this, nil
+}
+
+func (this *BlockEvent) EventType() int {
+	return this.eventType
+}
+
+func (this *BlockEvent) BlockId() int {
+	return this.blockId
+}
+
+func (this *BlockEvent) BlockSize() int {
+	return this.blockSize
+}
+
+func (this *BlockEvent) Hash() uint32 {
+	return this.hash
+}
+
+func (this *BlockEvent) Hashing() bool {
+	return this.hashing
 }
 
 type BlockListener interface {

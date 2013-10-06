@@ -71,21 +71,21 @@ func NewInfoPrinter(type_ uint, writer io.Writer) (*InfoPrinter, error) {
 }
 
 func (this *InfoPrinter) ProcessEvent(evt *BlockEvent) {
-	currentBlockId := evt.BlockId
+	currentBlockId := evt.BlockId()
 
-	if evt.EventType == this.thresholds[0] {
+	if evt.EventType() == this.thresholds[0] {
 		// Register initial block size
-		bi := BlockInfo{stage0Size: evt.BlockSize, time: time.Now()}
+		bi := BlockInfo{stage0Size: evt.BlockSize(), time: time.Now()}
 		this.map_[currentBlockId] = bi
-	} else if evt.EventType == this.thresholds[1] {
+	} else if evt.EventType() == this.thresholds[1] {
 		// Register block size after stage 1
 		bi, exists := this.map_[currentBlockId]
 
 		if exists == true {
-			bi.stage1Size = evt.BlockSize
+			bi.stage1Size = evt.BlockSize()
 			this.map_[currentBlockId] = bi
 		}
-	} else if evt.EventType == this.thresholds[2] {
+	} else if evt.EventType() == this.thresholds[2] {
 		bi, exists := this.map_[currentBlockId]
 
 		if exists == false {
@@ -96,7 +96,7 @@ func (this *InfoPrinter) ProcessEvent(evt *BlockEvent) {
 		//duration_ms := time.Now().Sub(bi.time).Nanoseconds() / 1000000
 
 		// Get block size after stage 2
-		stage2Size := evt.BlockSize
+		stage2Size := evt.BlockSize()
 
 		// Display block info
 		msg := fmt.Sprintf("Block %d: %d => %d => %d", currentBlockId,
@@ -108,8 +108,8 @@ func (this *InfoPrinter) ProcessEvent(evt *BlockEvent) {
 		}
 
 		// Optionally add hash
-		if evt.Hashing == true {
-			msg += fmt.Sprintf("  [%x]", evt.Hash)
+		if evt.Hashing() == true {
+			msg += fmt.Sprintf("  [%x]", evt.Hash())
 		}
 
 		//msg += fmt.Sprintf(" [%d ms]", duration_ms)
