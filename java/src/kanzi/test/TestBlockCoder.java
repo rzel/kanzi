@@ -21,6 +21,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import kanzi.app.BlockCompressor;
 import kanzi.app.BlockDecompressor;
+import kanzi.io.BlockEvent;
+import kanzi.io.BlockListener;
 
 
 public class TestBlockCoder
@@ -29,6 +31,18 @@ public class TestBlockCoder
     {
        ExecutorService pool = Executors.newCachedThreadPool();
        BlockCompressor enc = new BlockCompressor(args, pool);
+       
+       // Trivial example of a block listener
+       enc.addListener(new BlockListener() 
+       {
+          @Override
+          public void processEvent(BlockEvent evt) 
+          {
+            System.out.println(">>> "+evt);
+          }
+       });
+       
+       // enc.addListener(new InfoPrinter(InfoPrinter.Type.ENCODING, System.out));
        int status = enc.call();
        
        if (status < 0)
@@ -54,6 +68,18 @@ public class TestBlockCoder
 
        args = (String[]) set.toArray(new String[set.size()]);
        BlockDecompressor dec = new BlockDecompressor(args, pool);
+
+       // Trivial example of a block listener
+       dec.addListener(new BlockListener() 
+       {
+          @Override
+          public void processEvent(BlockEvent evt) 
+          {
+             System.out.println("<<< "+evt);
+          }
+       });
+       
+       // dec.addListener(new InfoPrinter(InfoPrinter.Type.DECODING, System.out));
        status = dec.call();
 
        if (status < 0)
@@ -64,5 +90,4 @@ public class TestBlockCoder
        
        pool.shutdown();
     }
-    
 }

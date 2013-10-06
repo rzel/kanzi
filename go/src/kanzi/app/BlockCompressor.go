@@ -16,6 +16,7 @@ limitations under the License.
 package main
 
 import (
+	"container/list"
 	"flag"
 	"fmt"
 	"kanzi/io"
@@ -27,8 +28,8 @@ import (
 )
 
 const (
-	DEFAULT_BUFFER_SIZE = 32768
-	WARN_EMPTY_INPUT    = -128
+	COMP_DEFAULT_BUFFER_SIZE = 32768
+	WARN_EMPTY_INPUT         = -128
 )
 
 type BlockCompressor struct {
@@ -42,6 +43,7 @@ type BlockCompressor struct {
 	transform    string
 	blockSize    uint
 	jobs         uint
+	listeners    *list.List
 }
 
 func NewBlockCompressor() (*BlockCompressor, error) {
@@ -122,7 +124,38 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	this.transform = strings.ToUpper(*function)
 	this.checksum = *cksum
 	this.jobs = uint(*tasks)
+	this.listeners = list.New()
+
+	if this.verbose == true {
+		listener, _ := io.NewInfoPrinter(io.ENCODING, os.Stdout)
+		this.listeners.PushFront(listener)
+	}
+
 	return this, nil
+}
+
+func (this *BlockCompressor) AddListener(bl io.BlockListener) bool {
+	if bl == nil {
+		return false
+	}
+
+	this.listeners.PushFront(bl)
+	return true
+}
+
+func (this *BlockCompressor) RemoveListener(bl io.BlockListener) bool {
+	if bl == nil {
+		return false
+	}
+
+	for e := this.listeners.Front(); e != nil; e = e.Next() {
+		if e.Value == bl {
+			this.listeners.Remove(e)
+			return true
+		}
+	}
+
+	return false
 }
 
 func main() {
@@ -142,6 +175,7 @@ func main() {
 	}()
 
 	code, _ := bc.call()
+	bc.listeners.Init()
 	os.Exit(code)
 }
 
@@ -152,7 +186,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 	printOut("Output file name set to '"+this.outputName+"'", this.verbose)
 	msg = fmt.Sprintf("Block size set to %d bytes", this.blockSize)
 	printOut(msg, this.verbose)
-	msg = fmt.Sprintf("Debug set to %t", this.verbose)
+	msg = fmt.Sprintf("Verbose set to %t", this.verbose)
 	printOut(msg, this.verbose)
 	msg = fmt.Sprintf("Overwrite set to %t", this.overwrite)
 	printOut(msg, this.verbose)
@@ -233,12 +267,16 @@ func (this *BlockCompressor) call() (int, uint64) {
 
 	defer input.Close()
 
+	for e := this.listeners.Front(); e != nil; e = e.Next() {
+		cos.AddListener(e.Value.(io.BlockListener))
+	}
+
 	// Encode
 	len := 0
 	read := int64(0)
 	printOut("Encoding ...", !this.silent)
 	written = cos.GetWritten()
-	buffer := make([]byte, DEFAULT_BUFFER_SIZE)
+	buffer := make([]byte, COMP_DEFAULT_BUFFER_SIZE)
 	before := time.Now()
 	len, err = input.Read(buffer)
 

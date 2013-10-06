@@ -16,6 +16,7 @@ limitations under the License.
 package main
 
 import (
+	"container/list"
 	"flag"
 	"fmt"
 	"kanzi/io"
@@ -26,7 +27,7 @@ import (
 )
 
 const (
-	DEFAULT_BUFFER_SIZE = 32768
+	DECOMP_DEFAULT_BUFFER_SIZE = 32768
 )
 
 type BlockDecompressor struct {
@@ -36,6 +37,7 @@ type BlockDecompressor struct {
 	inputName  string
 	outputName string
 	jobs       uint
+	listeners  *list.List
 }
 
 func NewBlockDecompressor() (*BlockDecompressor, error) {
@@ -92,7 +94,38 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 	this.outputName = *outputName
 	this.overwrite = *overwrite
 	this.jobs = uint(*tasks)
+	this.listeners = list.New()
+
+	if this.verbose == true {
+		listener, _ := io.NewInfoPrinter(io.DECODING, os.Stdout)
+		this.listeners.PushFront(listener)
+	}
+
 	return this, nil
+}
+
+func (this *BlockDecompressor) AddListener(bl io.BlockListener) bool {
+	if bl == nil {
+		return false
+	}
+
+	this.listeners.PushFront(bl)
+	return true
+}
+
+func (this *BlockDecompressor) RemoveListener(bl io.BlockListener) bool {
+	if bl == nil {
+		return false
+	}
+
+	for e := this.listeners.Front(); e != nil; e = e.Next() {
+		if e.Value == bl {
+			this.listeners.Remove(e)
+			return true
+		}
+	}
+
+	return false
 }
 
 func main() {
@@ -112,6 +145,7 @@ func main() {
 	}()
 
 	code, _ := bd.call()
+	bd.listeners.Init()
 	os.Exit(code)
 }
 
@@ -120,7 +154,7 @@ func (this *BlockDecompressor) call() (int, uint64) {
 	var msg string
 	printOut("Input file name set to '"+this.inputName+"'", this.verbose)
 	printOut("Output file name set to '"+this.outputName+"'", this.verbose)
-	msg = fmt.Sprintf("Debug set to %t", this.verbose)
+	msg = fmt.Sprintf("Verbose set to %t", this.verbose)
 	printOut(msg, this.verbose)
 	msg = fmt.Sprintf("Overwrite set to %t", this.overwrite)
 	printOut(msg, this.verbose)
@@ -154,10 +188,10 @@ func (this *BlockDecompressor) call() (int, uint64) {
 	}
 
 	defer output.Close()
-	read := uint64(0)
-	printOut("Decoding ...", !this.silent)
 
 	// Decode
+	read := uint64(0)
+	printOut("Decoding ...", !this.silent)
 	input, err := os.Open(this.inputName)
 
 	if err != nil {
@@ -184,7 +218,11 @@ func (this *BlockDecompressor) call() (int, uint64) {
 		}
 	}
 
-	buffer := make([]byte, DEFAULT_BUFFER_SIZE)
+	for e := this.listeners.Front(); e != nil; e = e.Next() {
+		cis.AddListener(e.Value.(io.BlockListener))
+	}
+
+	buffer := make([]byte, DECOMP_DEFAULT_BUFFER_SIZE)
 	decoded := len(buffer)
 	before := time.Now()
 

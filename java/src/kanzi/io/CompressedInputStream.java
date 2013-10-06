@@ -64,7 +64,8 @@ public class CompressedInputStream extends InputStream
    private final AtomicInteger blockId;
    private final int jobs;
    private final ExecutorService pool;
-   private final AtomicInteger dsSync;
+   private final List<BlockListener> listeners;
+   
    
    public CompressedInputStream(InputStream is)
    {
@@ -103,7 +104,7 @@ public class CompressedInputStream extends InputStream
       
       this.ds = debug;
       this.blockId = new AtomicInteger(0); 
-      this.dsSync = new AtomicInteger(0); 
+      this.listeners = new ArrayList<BlockListener>(10);
    }
 
 
@@ -183,6 +184,18 @@ public class CompressedInputStream extends InputStream
       }
    }
 
+
+    public boolean addListener(BlockListener bl)
+    {
+       return (bl != null) ? this.listeners.add(bl) : false;
+    }
+
+   
+    public boolean removeListener(BlockListener bl)
+    {
+       return (bl != null) ? this.listeners.remove(bl) : false;
+    }
+    
 
    /**
     * Reads the next byte of data from the input stream. The value byte is
@@ -341,7 +354,8 @@ public class CompressedInputStream extends InputStream
             Callable<Integer> task = new DecodingTask(this.iba.array, this.iba.index,
                     this.buffers[jobId].array, this.blockSize, (byte) this.transformType, 
                     (byte) this.entropyType, blockNumber,
-                    this.ibs, this.ds, this.hasher, this.blockId, this.dsSync);
+                    this.ibs, this.hasher, this.blockId, 
+                    this.listeners.toArray(new BlockListener[this.listeners.size()]));
             tasks.add(task);
             this.iba.index += this.blockSize;
          }
@@ -440,17 +454,15 @@ public class CompressedInputStream extends InputStream
       private final byte entropyType;
       private final int blockId;
       private final InputBitStream ibs;
-      private final PrintStream ds;
       private final XXHash hasher;
       private final AtomicInteger processedBlockId;
-      private final AtomicInteger dsSync;
+      private final BlockListener[] listeners;
       
       
       DecodingTask(byte[] data, int offset, byte[] buffer, int blockSize, 
               byte transformType, byte entropyType, int blockId,
-              InputBitStream ibs, PrintStream ds, XXHash hasher,
-              AtomicInteger processedBlockId,
-              AtomicInteger dsSync)
+              InputBitStream ibs, XXHash hasher,
+              AtomicInteger processedBlockId, BlockListener[] listeners)
       {
          this.data = new IndexedByteArray(data, offset);
          this.buffer = new IndexedByteArray(buffer, 0);
@@ -459,10 +471,9 @@ public class CompressedInputStream extends InputStream
          this.entropyType = entropyType;
          this.blockId = blockId;
          this.ibs = ibs;
-         this.ds = ds;
          this.hasher = hasher;
          this.processedBlockId = processedBlockId;     
-         this.dsSync = dsSync;
+         this.listeners = ((listeners != null) && (listeners.length > 0)) ? listeners : null;
       }
 
       
@@ -536,6 +547,16 @@ public class CompressedInputStream extends InputStream
             // Extract checksum from bit stream (if any)
             if (this.hasher != null)
                checksum1 = (int) this.ibs.readBits(32);
+            
+            if (this.listeners != null) 
+            {
+               // Notify before entropy (block size in bitstream is unknown)
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.BEFORE_ENTROPY, currentBlockId,
+                       -1, checksum1, this.hasher != null);
+
+               for (BlockListener bl : this.listeners)
+                  bl.processEvent(evt);
+            }
 
             if (typeOfTransform == 'N')
                buffer.array = data.array; // share buffers if no transform
@@ -552,9 +573,29 @@ public class CompressedInputStream extends InputStream
                return -1;
             }
 
+            if (this.listeners != null) 
+            {
+               // Notify after entropy (block size set to size in bitstream)
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.AFTER_ENTROPY, currentBlockId,
+                       (int) ((this.ibs.read()-read)/8L), checksum1, this.hasher != null);
+
+               for (BlockListener bl : this.listeners)
+                  bl.processEvent(evt);
+            }
+
             // After completion of the entropy decoding, increment the block id.
             // It unfreezes the task processing the next block (if any)
             this.processedBlockId.incrementAndGet();
+
+            if (this.listeners != null) 
+            {
+               // Notify before transform (block size after entropy decoding)
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.BEFORE_TRANSFORM, currentBlockId,
+                       compressedLength, checksum1, this.hasher != null);
+
+               for (BlockListener bl : this.listeners)
+                  bl.processEvent(evt);
+            }
 
             if (((mode & SMALL_BLOCK_MASK) != 0) || ((mode & SKIP_FUNCTION_MASK) != 0))
             {
@@ -580,26 +621,14 @@ public class CompressedInputStream extends InputStream
 
             final int decoded = data.index - savedIdx;
 
-            // Print info if debug stream is not null
-            if (this.ds != null)
+            if (this.listeners != null) 
             {
-               // Need another synchronization point to ensure that the data
-               // output happens in the proper order (increasing block ID)
-               while (this.dsSync.get() != currentBlockId-1)
-               {    
-                  // Backoff improves performance in heavy contention scenarios
-                  LockSupport.parkNanos(1);
-               }
-                             
-               this.ds.print("Block "+(currentBlockId-1)+": "+
-                      ((this.ibs.read()-read)/8) + " => " +
-                       compressedLength + " => " + decoded);
+               // Notify after transform
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.AFTER_TRANSFORM, currentBlockId,
+                       decoded, checksum1, this.hasher != null);
 
-               if (this.hasher != null)
-                  this.ds.print("  [" + Integer.toHexString(checksum1) + "]");
-
-               this.ds.println();
-               this.dsSync.getAndIncrement();
+               for (BlockListener bl : this.listeners)
+                  bl.processEvent(evt);
             }
 
             // Verify checksum 

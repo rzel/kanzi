@@ -21,14 +21,18 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import kanzi.IndexedByteArray;
+import kanzi.io.BlockListener;
 import kanzi.io.CompressedOutputStream;
 import kanzi.io.Error;
+import kanzi.io.InfoPrinter;
 
 
 public class BlockCompressor implements Runnable, Callable<Integer>
@@ -50,6 +54,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
    private CompressedOutputStream cos;
    private boolean ownPool;
    private final ExecutorService pool;
+   private final List<BlockListener> listeners;
 
    
    public BlockCompressor(String[] args)
@@ -81,6 +86,10 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       this.pool = (this.jobs == 1) ? null : 
               ((threadPool == null) ? Executors.newCachedThreadPool() : threadPool);
       this.ownPool = ownPool;
+      this.listeners = new ArrayList<BlockListener>(10);
+      
+      if (this.verbose == true)
+         this.addListener(new InfoPrinter(InfoPrinter.Type.ENCODING, System.out));
    }
 
 
@@ -101,13 +110,13 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       final int code = bc.call();
 
       if (code != 0)
-         bc.closeAll();
+         bc.dispose();
 
       System.exit(code);
    }
 
 
-   private void closeAll()
+   protected void dispose()
    {
       try
       {
@@ -131,6 +140,8 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       
       if ((this.pool != null) && (this.ownPool == true))
          this.pool.shutdown();
+      
+      this.listeners.clear();
    }
 
 
@@ -148,7 +159,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
       printOut("Input file name set to '" + this.inputName + "'", this.verbose);
       printOut("Output file name set to '" + this.outputName + "'", this.verbose);
       printOut("Block size set to "+this.blockSize+ " bytes", this.verbose);
-      printOut("Debug set to "+this.verbose, this.verbose);
+      printOut("Verbose set to "+this.verbose, this.verbose);
       printOut("Overwrite set to "+this.overwrite, this.verbose);
       printOut("Checksum set to "+this.checksum, this.verbose);
       String etransform = ("NONE".equals(this.transform)) ? "no" : this.transform;
@@ -183,6 +194,9 @@ public class BlockCompressor implements Runnable, Callable<Integer>
             this.cos = new CompressedOutputStream(this.codec, this.transform,
                  new FileOutputStream(output), this.blockSize, this.checksum,
                  ds, this.pool, this.jobs);
+            
+            for (BlockListener bl : this.listeners)
+               this.cos.addListener(bl);
          }
          catch (Exception e)
          {
@@ -256,7 +270,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
        }
 
        // Close streams to ensure all data are flushed
-       this.closeAll();
+       this.dispose();
 
        long after = System.nanoTime();
        long delta = (after - before) / 1000000L; // convert to ms
@@ -420,5 +434,17 @@ public class BlockCompressor implements Runnable, Callable<Integer>
     {
        if ((print == true) && (msg != null))
           System.out.println(msg);
+    }
+    
+
+    public boolean addListener(BlockListener bl)
+    {
+       return (bl != null) ? this.listeners.add(bl) : false;
+    }
+
+   
+    public boolean removeListener(BlockListener bl)
+    {
+       return (bl != null) ? this.listeners.remove(bl) : false;
     }
 }

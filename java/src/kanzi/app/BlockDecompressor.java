@@ -21,14 +21,18 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import kanzi.io.Error;
 import kanzi.IndexedByteArray;
+import kanzi.io.BlockListener;
 import kanzi.io.CompressedInputStream;
+import kanzi.io.InfoPrinter;
 
 
 
@@ -46,7 +50,8 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
    private int jobs;
    private boolean ownPool;
    private final ExecutorService pool;
-
+   private final List<BlockListener> listeners;
+   
    
    public BlockDecompressor(String[] args)
    {
@@ -73,10 +78,14 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       this.pool = (this.jobs == 1) ? null : 
               ((threadPool == null) ? Executors.newCachedThreadPool() : threadPool);
       this.ownPool = ownPool;
+      this.listeners = new ArrayList<BlockListener>(10);      
+      
+      if (this.verbose == true)
+         this.addListener(new InfoPrinter(InfoPrinter.Type.DECODING, System.out));   
    }
 
 
-   private void closeAll()
+   protected void dispose()
    {
       try
       {
@@ -100,6 +109,8 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       
       if ((this.pool != null) && (this.ownPool == true))
          this.pool.shutdown();
+      
+      this.listeners.clear();      
    }
 
 
@@ -120,7 +131,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       final int code = bd.call();
 
       if (code != 0)
-         bd.closeAll();
+         bd.dispose();
 
       System.exit(code);
    }
@@ -138,7 +149,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
    {
       printOut("Input file name set to '" + this.inputName + "'", this.verbose);
       printOut("Output file name set to '" + this.outputName + "'", this.verbose);
-      printOut("Debug set to "+this.verbose, this.verbose);
+      printOut("Verbose set to "+this.verbose, this.verbose);
       printOut("Overwrite set to "+this.overwrite, this.verbose);
       printOut("Using " + this.jobs + " job" + ((this.jobs > 1) ? "s" : ""), this.verbose);
 
@@ -193,6 +204,9 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
             PrintStream ds = (this.verbose == true) ? System.out : null; 
             this.cis = new CompressedInputStream(new FileInputStream(input),
                  ds, this.pool, this.jobs);
+            
+            for (BlockListener bl : this.listeners)
+               this.cis.addListener(bl);            
          }
          catch (Exception e)
          {
@@ -252,7 +266,7 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
       }
 
       // Close streams to ensure all data are flushed
-      this.closeAll();
+      this.dispose();
 
       long after = System.nanoTime();
       long delta = (after - before) / 1000000L; // convert to ms
@@ -368,5 +382,17 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
     {
        if ((print == true) && (msg != null))
           System.out.println(msg);
+    }
+    
+
+    public boolean addListener(BlockListener bl)
+    {
+       return (bl != null) ? this.listeners.add(bl) : false;
+    }
+
+   
+    public boolean removeListener(BlockListener bl)
+    {
+       return (bl != null) ? this.listeners.remove(bl) : false;
     }
 }

@@ -67,6 +67,7 @@ public class CompressedOutputStream extends OutputStream
    private final AtomicInteger blockId;
    private final int jobs;
    private final ExecutorService pool;
+   private final List<BlockListener> listeners;
 
 
    public CompressedOutputStream(String entropyCodec, String functionType, OutputStream os)
@@ -140,6 +141,7 @@ public class CompressedOutputStream extends OutputStream
 
       this.ds = debug;
       this.blockId = new AtomicInteger(0);
+      this.listeners = new ArrayList<BlockListener>(10);
    }
 
 
@@ -167,6 +169,18 @@ public class CompressedOutputStream extends OutputStream
          throw new kanzi.io.IOException("Cannot write block size to header", Error.ERR_WRITE_FILE);
    }
 
+
+    public boolean addListener(BlockListener bl)
+    {
+       return (bl != null) ? this.listeners.add(bl) : false;
+    }
+
+   
+    public boolean removeListener(BlockListener bl)
+    {
+       return (bl != null) ? this.listeners.remove(bl) : false;
+    }
+    
 
     /**
      * Writes <code>len</code> bytes from the specified byte array
@@ -331,6 +345,7 @@ public class CompressedOutputStream extends OutputStream
       }
 
       this.closed = true;
+      this.listeners.clear();
 
       // Release resources
       // Force error on any subsequent write attempt
@@ -369,7 +384,8 @@ public class CompressedOutputStream extends OutputStream
             Callable<Boolean> task = new EncodingTask(this.iba.array, this.iba.index,
                     this.buffers[jobId].array, sz, (byte) this.transformType,
                     (byte) this.entropyType, blockNumber,
-                    this.obs, this.ds, this.hasher, this.blockId);
+                    this.obs, this.hasher, this.blockId,
+                    this.listeners.toArray(new BlockListener[this.listeners.size()]));
             tasks.add(task);
             this.iba.index += sz;
 
@@ -429,15 +445,15 @@ public class CompressedOutputStream extends OutputStream
       private final byte entropyType;
       private final int blockId;
       private final OutputBitStream obs;
-      private final PrintStream ds;
       private final XXHash hasher;
       private final AtomicInteger processedBlockId;
+      private final BlockListener[] listeners;
 
 
       EncodingTask(byte[] data, int offset, byte[] buffer, int length,
               byte transformType, byte entropyType, int blockId,
-              OutputBitStream obs, PrintStream ds, XXHash hasher,
-              AtomicInteger processedBlockId)
+              OutputBitStream obs, XXHash hasher,
+              AtomicInteger processedBlockId, BlockListener[] listeners)
       {
          this.data = new IndexedByteArray(data, offset);
          this.buffer = new IndexedByteArray(buffer, 0);
@@ -446,9 +462,9 @@ public class CompressedOutputStream extends OutputStream
          this.entropyType = entropyType;
          this.blockId = blockId;
          this.obs = obs;
-         this.ds = ds;
          this.hasher = hasher;
          this.processedBlockId = processedBlockId;
+         this.listeners = ((listeners != null) && (listeners.length > 0)) ? listeners : null;
       }
 
 
@@ -485,6 +501,16 @@ public class CompressedOutputStream extends OutputStream
             // Compute block checksum
             if (this.hasher != null)
                checksum = this.hasher.hash(data.array, data.index, blockLength);
+
+            if (this.listeners != null) 
+            {
+               // Notify before transform               
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.BEFORE_TRANSFORM, currentBlockId,
+                       blockLength, checksum, this.hasher != null);
+               
+               for (BlockListener bl : this.listeners)
+                  bl.processEvent(evt);
+            }
             
             if (blockLength <= SMALL_BLOCK_SIZE)
             {
@@ -526,6 +552,16 @@ public class CompressedOutputStream extends OutputStream
                mode |= (dataSize & 0x03);
             }
 
+            if (this.listeners != null) 
+            {
+               // Notify after transform
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.AFTER_TRANSFORM, currentBlockId,
+                       compressedLength, checksum, this.hasher != null);
+               
+               for (BlockListener bl : this.listeners)
+                  bl.processEvent(evt);
+            }
+
             // Lock free synchronization
             while (this.processedBlockId.get() != currentBlockId-1)
             {
@@ -551,8 +587,19 @@ public class CompressedOutputStream extends OutputStream
             if (this.hasher != null)
                this.obs.writeBits(checksum, 32);
 
+            if (this.listeners != null) 
+            {
+               // Notify before entropy
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.BEFORE_ENTROPY, currentBlockId,
+                       compressedLength, checksum, this.hasher != null);
+               
+               for (BlockListener bl : this.listeners)
+                  bl.processEvent(evt);
+            }
+
             // Entropy encode block
-            final int encoded = ee.encode(buffer.array, 0, compressedLength);
+            if (ee.encode(buffer.array, 0, compressedLength) != compressedLength)
+               return false;
 
             // Dispose before displaying statistics. Dispose may write to the bitstream
             ee.dispose();
@@ -560,18 +607,14 @@ public class CompressedOutputStream extends OutputStream
             // Force ee to null to avoid double dispose (in the finally section)
             ee = null;
 
-            // Print info if debug stream is not null
-            if (this.ds != null)
+            if (this.listeners != null) 
             {
-               this.ds.print("Block "+(currentBlockId-1)+": "+
-                      blockLength + " => " + encoded + " => " +
-                     ((this.obs.written()-written)/8L)+" ("+
-                     ((this.obs.written()-written)*100L/(blockLength*8L))+"%)");
-
-               if (this.hasher != null) 
-                  this.ds.print("  [" + Integer.toHexString(checksum) + "]");
-
-               this.ds.println();
+               // Notify after entropy
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.AFTER_ENTROPY, currentBlockId,
+                       (int) ((this.obs.written()-written)/8L), checksum, this.hasher != null);
+               
+               for (BlockListener bl : this.listeners)
+                  bl.processEvent(evt);
             }
 
             // After completion of the entropy coding, increment the block id.
