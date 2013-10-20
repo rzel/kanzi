@@ -498,7 +498,7 @@ public class CompressedInputStream extends InputStream
             // entropy decoding. Entropy decoding must happen sequentially (and 
             // in the correct block order) in the bitstream.
             // Backoff improves performance in heavy contention scenarios
-            LockSupport.parkNanos(1);
+            LockSupport.parkNanos(10);
             taskId = this.processedBlockId.get();
          }         
          

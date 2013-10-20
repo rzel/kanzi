@@ -569,7 +569,7 @@ public class CompressedOutputStream extends OutputStream
                // entropy encoding. Entropy encoding must happen sequentially (and
                // in the correct block order) in the bitstream.
                // Backoff improves performance in heavy contention scenarios
-               LockSupport.parkNanos(1);
+               LockSupport.parkNanos(10);
             }
 
             // Each block is encoded separately
