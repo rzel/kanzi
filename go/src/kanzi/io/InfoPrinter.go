@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 )
 
@@ -41,6 +42,7 @@ type InfoPrinter struct {
 	type_      uint
 	map_       map[int]BlockInfo
 	thresholds []int
+	lock       sync.RWMutex
 }
 
 func NewInfoPrinter(type_ uint, writer io.Writer) (*InfoPrinter, error) {
@@ -76,17 +78,25 @@ func (this *InfoPrinter) ProcessEvent(evt *BlockEvent) {
 	if evt.EventType() == this.thresholds[0] {
 		// Register initial block size
 		bi := BlockInfo{stage0Size: evt.BlockSize(), time: time.Now()}
+		this.lock.Lock()
 		this.map_[currentBlockId] = bi
+		this.lock.Unlock()
 	} else if evt.EventType() == this.thresholds[1] {
 		// Register block size after stage 1
+		this.lock.RLock()
 		bi, exists := this.map_[currentBlockId]
+		this.lock.RUnlock()
 
 		if exists == true {
 			bi.stage1Size = evt.BlockSize()
+			this.lock.Lock()
 			this.map_[currentBlockId] = bi
+			this.lock.Unlock()
 		}
 	} else if evt.EventType() == this.thresholds[2] {
+		this.lock.RLock()
 		bi, exists := this.map_[currentBlockId]
+		this.lock.RUnlock()
 
 		if exists == false {
 			return
@@ -104,7 +114,9 @@ func (this *InfoPrinter) ProcessEvent(evt *BlockEvent) {
 
 		// Add percentage for encoding
 		if this.type_ == ENCODING {
-			msg += fmt.Sprintf(" (%d%%)", stage2Size*100/bi.stage0Size)
+			if bi.stage0Size != 0 {
+				msg += fmt.Sprintf(" (%d%%)", stage2Size*100/bi.stage0Size)
+			}
 		}
 
 		// Optionally add hash
