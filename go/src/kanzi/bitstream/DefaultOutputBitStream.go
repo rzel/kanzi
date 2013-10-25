@@ -89,6 +89,7 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, count uint) (uint, e
 		// Enough spots available in 'current'
 		remaining := this.bitIndex + 1 - count
 		this.current |= (value << remaining)
+		
 		if remaining == 0 {
 			this.pushCurrent()
 		} else {
