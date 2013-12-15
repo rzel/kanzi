@@ -26,6 +26,8 @@ import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import kanzi.ColorModelType;
+import kanzi.IndexedIntArray;
+import kanzi.transform.DWT_CDF_9_7;
 import kanzi.util.color.ColorModelConverter;
 import kanzi.util.color.YCbCrColorModelConverter;
 import kanzi.util.ImageQualityMonitor;
@@ -65,15 +67,19 @@ public class TestColorModel
         UpSampler uBilinear = new BilinearUpSampler(w/2, h/2, 2);
         DownSampler dFourTap = new DecimateDownSampler(w, h, 2); // For now !!!
         DownSampler dBilinear = new DecimateDownSampler(w, h, 2);//BilinearDownSampler(w, h, 2);
+        DownSampler dDWT = new DWTDownSampler(w, h);
+        UpSampler uDWT = new DWTUpSampler(w, h);
 
         ColorModelConverter[] cvts = new ColorModelConverter[]
         {
            new YCbCrColorModelConverter(w, h, dFourTap, uFourTap1),
            new YCbCrColorModelConverter(w, h, dBilinear, uBilinear),
+           new YCbCrColorModelConverter(w, h, dDWT, uDWT),
            new YCbCrColorModelConverter(w, h),
            new YCbCrColorModelConverter(w, h),
            new YSbSrColorModelConverter(w, h, dFourTap, uFourTap2),
            new YSbSrColorModelConverter(w, h, dBilinear, uBilinear),
+           new YSbSrColorModelConverter(w, h, dDWT, uDWT),
            new YSbSrColorModelConverter(w, h),
            new YSbSrColorModelConverter(w, h),
            new ReversibleYUVColorModelConverter(w, h)
@@ -81,17 +87,19 @@ public class TestColorModel
 
         boolean[] is420 = new boolean[]
         {
-            true, true, true, false,
-            true, true, true, false,
+            true, true, true, true, false,
+            true, true, true, true, false,
             false
         };
 
         String[] names = { "YCbCr - four taps",
                            "YCbCr - bilinear",
+                           "YCbCr - DWT",
                            "YCbCr - built-in (bilinear)",
                            "YCbCr",
                            "YSbSr - four taps",
                            "YSbSr - bilinear",
+                           "YSbSr - DWT",
                            "YSbSr - built-in (bilinear)",
                            "YSbSr",
                            "Reversible YUV"
@@ -129,11 +137,7 @@ public class TestColorModel
         int[] y1 = new int[rgb1.length];
         int[] u1 = new int[rgb1.length];
         int[] v1 = new int[rgb1.length];
-
-        // Do NOT use img.setRGB(): it is more than 10 times slower than
-        // img.getRaster().setDataElements()
-        // img.getRaster().setDataElements(0, 0, w, h, rgb);
-        Arrays.fill(rgb2, 0);
+        Arrays.fill(rgb2, 0x0A0A0A0A);
 
         if (y420)
         {
@@ -193,4 +197,98 @@ public class TestColorModel
 
         System.out.println("Elapsed [ms] ("+nn+" iterations): "+sum/1000000);
     }
+    
+    
+    static class DWTDownSampler implements DownSampler
+    {
+      private final int w;
+      private final int h;
+      
+      public DWTDownSampler(int w, int h)
+      {
+         this.w = w;
+         this.h = h;
+      }
+            
+      @Override
+      public void subSampleHorizontal(int[] input, int[] output) 
+      {
+         throw new UnsupportedOperationException("Not supported yet."); 
+      }
+
+      @Override
+      public void subSampleVertical(int[] input, int[] output)
+      {
+         throw new UnsupportedOperationException("Not supported yet.");
+      }
+
+      @Override
+      public void subSample(int[] input, int[] output) 
+      {
+         DWT_CDF_9_7 dwt = new DWT_CDF_9_7(this.w, this.h, 1);
+         IndexedIntArray src = new IndexedIntArray(input, 0);
+         IndexedIntArray dst = new IndexedIntArray(output, 0);
+         dwt.forward(src, dst);
+         
+         for (int j=0; j<this.h; j++)
+         {
+            int offset = j * this.w;
+            
+            for (int i=0; i<this.w; i++)
+            {
+               // Remove high bands coefficients to down sample
+               if ((i+i >= this.w) || (j+j >= this.h))
+                  output[offset+i] = 0;
+            }
+         }
+      }
+
+      @Override
+      public boolean supportsScalingFactor(int factor) 
+      {
+         return (factor == 2);
+      }
+       
+    }
+    
+    
+    static class DWTUpSampler implements UpSampler
+    {
+      private final int w;
+      private final int h;
+      
+      public DWTUpSampler(int w, int h)
+      {
+         this.w = w;
+         this.h = h;
+      }
+
+      @Override
+      public void superSampleHorizontal(int[] input, int[] output) 
+      {
+         throw new UnsupportedOperationException("Not supported yet.");       
+      }
+
+      @Override
+      public void superSampleVertical(int[] input, int[] output) 
+      {
+         throw new UnsupportedOperationException("Not supported yet."); 
+      }
+
+      @Override
+      public void superSample(int[] input, int[] output) 
+      {
+         DWT_CDF_9_7 dwt = new DWT_CDF_9_7(this.w, this.h, 1);
+         IndexedIntArray src = new IndexedIntArray(input, 0);
+         IndexedIntArray dst = new IndexedIntArray(output, 0);
+         dwt.inverse(src, dst);
+      }
+
+      @Override
+      public boolean supportsScalingFactor(int factor) 
+      {
+         return (factor == 2);
+      }
+    }
+    
 }

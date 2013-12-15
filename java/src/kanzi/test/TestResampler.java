@@ -43,10 +43,7 @@ public class TestResampler
    {
         String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
         roundtrip(fileName, 2, 1);
-        //roundtrip(fileName, 4, 1);
-        upscale("c:\\temp\\lena256.jpg", 4, 100);
-        //upscale("c:\\temp\\lena256.jpg", 4, 1);
-
+        upscale("c:\\temp\\lena256.jpg", 2, 100);
 
         try
         {
