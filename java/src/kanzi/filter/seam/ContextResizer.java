@@ -77,9 +77,10 @@ public class ContextResizer implements IntFilter
     }
 
 
-    public ContextResizer(int width, int height, int stride, int direction, int action)
+    public ContextResizer(int width, int height, int stride, int direction, 
+            int action, int nbGeodesics)
     {
-        this(width, height, stride, direction, action, 1, false, false, null);
+        this(width, height, stride, direction, action, nbGeodesics, false, false, null);
     }
 
 
