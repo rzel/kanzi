@@ -73,6 +73,13 @@ public class TestMovingEffects
             Image image = icon.getImage();
             int w = image.getWidth(null);
             int h = image.getHeight(null);
+            
+            if ((w < 0) || (h < 0))
+            {
+               System.out.println("Cannot load file '"+fileNames[0]+"'");
+               System.exit(1);
+            }
+
             w &= -7;
             h &= -7;
 
@@ -110,15 +117,15 @@ public class TestMovingEffects
             x = 64   + rnd.nextInt(10);
             y = 64   + rnd.nextInt(60);
             effects[0] = new MovingEffect(new SobelFilter(dw, dh, w),
-                    x, y, 1, 1, "Sobel");
+                    x, y, 1, 2, "Sobel");
             x = 128 + rnd.nextInt(10);
             y = 192 + rnd.nextInt(60);
             effects[1] = new MovingEffect(new GaussianFilter(dw, dh, w, 100, 3),
-                    x, y, 1, -1, "Gaussian");
+                    x, y, 2, -2, "Gaussian");
             x = 192 + rnd.nextInt(10);
             y = 128 + rnd.nextInt(60);
             effects[2] = new MovingEffect(new FastBilateralFilter(dw, dh, w, 30.0f, 0.03f, 4, 1, 3),
-                    x, y, -1, 1, "Bilateral");
+                    x, y, -2, 1, "Bilateral");
             x = 256 + rnd.nextInt(10);
             y =  64 + rnd.nextInt(60);
             boolean bump = true;
@@ -136,16 +143,16 @@ public class TestMovingEffects
 
             img2.getRaster().setDataElements(0, 0, w, h, dest.array);
 
-            JFrame frame2 = new JFrame("Filters");
-            frame2.setBounds(700, 150, w, h);
-            frame2.setResizable(false);
+            JFrame frame = new JFrame("Filters");
+            frame.setBounds(700, 150, w, h);
+            frame.setResizable(false);
             ImageIcon newIcon = new ImageIcon(img2);
-            frame2.add(new JLabel(newIcon));
-            frame2.setVisible(true);
+            frame.add(new JLabel(newIcon));
+            frame.setVisible(true);
 
             // Add delay to make sure that the frame is visible before creating back buffer
             Thread.sleep(10);
-            frame2.createBufferStrategy(2);
+            frame.createBufferStrategy(2);
 
             int nn = 0;
             int nn0 = 0;
@@ -202,11 +209,10 @@ public class TestMovingEffects
                   sfps = String.valueOf(Math.round(fps*100+.5)/(float)100+" FPS");
                   delta = 0;
                   nn0 = nn;
-                  frame2.setTitle("Filters - "+sfps);
+                  frame.setTitle("Filters - "+sfps);
                }
 
-               BufferStrategy bufferStrategy = frame2.getBufferStrategy();
-               // Graphics g = img2.getGraphics();
+               BufferStrategy bufferStrategy = frame.getBufferStrategy();
                Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
                g.setColor(Color.WHITE);
                g.drawImage(img2, 0, 0, null);
@@ -217,7 +223,6 @@ public class TestMovingEffects
                   g.drawRect(e.x, e.y, dw, dh);
                }
 
-              //g.drawString(sfps, 32, 50);
                bufferStrategy.show();
                g.dispose();
                //frame2.invalidate();
