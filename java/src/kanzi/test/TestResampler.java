@@ -25,7 +25,10 @@ import java.util.Arrays;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import kanzi.ColorModelType;
 import kanzi.util.ImageQualityMonitor;
+import kanzi.util.color.ColorModelConverter;
+import kanzi.util.color.YCbCrColorModelConverter;
 import kanzi.util.sampling.BilinearUpSampler;
 import kanzi.util.sampling.DecimateDownSampler;
 import kanzi.util.sampling.FourTapUpSampler;
@@ -41,7 +44,7 @@ public class TestResampler
         String fileName = (args.length > 0) ? args[0] : "c:\\temp\\lena.jpg";
         roundtrip(fileName, 2, 1);
         //roundtrip(fileName, 4, 1);
-        upscale("c:\\temp\\lena256.jpg", 2, 1);
+        upscale("c:\\temp\\lena256.jpg", 4, 100);
         //upscale("c:\\temp\\lena256.jpg", 4, 1);
 
 
@@ -78,9 +81,9 @@ public class TestResampler
         // img.getRaster().getDataElements()
         img.getRaster().getDataElements(0, 0, w, h, rgb);
 
-        int[] r = new int[rgb.length];
-        int[] g = new int[rgb.length];
-        int[] b = new int[rgb.length];
+        int[] y = new int[rgb.length];
+        int[] u = new int[rgb.length];
+        int[] v = new int[rgb.length];
         int[] input = rgb;
         //int[] tmp = new int[rgb.length/factor];
         int[] output = new int[rgb.length];
@@ -93,7 +96,7 @@ public class TestResampler
         UpSampler uBilinear = new BilinearUpSampler(w/factor, h/factor, factor);
         DownSampler dBilinear = new DecimateDownSampler(w, h, factor);
         UpSampler uFourtap = new FourTapUpSampler(w/factor, h/factor, factor);
-       //SubSampler dFourtap = new FourTapDownSampler(w, h, factor);
+        //SubSampler dFourtap = new FourTapDownSampler(w, h, factor);
         UpSampler uSixtap = new SixTapUpSampler(w/factor, h/factor, factor);
         //SubSampler dSixtap = new SixTapDownSampler(w, h, factor);
         DownSampler[] subSamplers = new DownSampler[]  { dBilinear, dBilinear, dBilinear };
@@ -109,23 +112,18 @@ public class TestResampler
            Arrays.fill(output, 0);
            System.out.println(title);
            long delta = 0;
+           ColorModelConverter cvt = new YCbCrColorModelConverter(w, h);
+           cvt.convertRGBtoYUV(rgb, y, u, v, ColorModelType.YUV444);
 
            for (int ii=0; ii<iter; ii++)
            {
-               for (int i=0; i<rgb.length; i++)
-               {
-                  r[i] = (rgb[i] >> 16) & 0xFF;
-                  g[i] = (rgb[i] >> 8) & 0xFF;
-                  b[i] = rgb[i] & 0xFF;
-               }
-
                long before = System.nanoTime();
-               subSamplers[s].subSample(r, output);
-               superSamplers[s].superSample(output, r);
-               subSamplers[s].subSample(g, output);
-               superSamplers[s].superSample(output, g);
-               subSamplers[s].subSample(b, output);
-               superSamplers[s].superSample(output, b);
+               subSamplers[s].subSample(y, output);
+               superSamplers[s].superSample(output, y);
+               subSamplers[s].subSample(u, output);
+               superSamplers[s].superSample(output, u);
+               subSamplers[s].subSample(v, output);
+               superSamplers[s].superSample(output, v);
                long after = System.nanoTime();
                delta += (after - before);
            }
@@ -133,8 +131,7 @@ public class TestResampler
            System.out.println("Elapsed [ms] ("+iter+" iterations): "+delta/1000000);
            System.out.println();
 
-           for (int i=0; i<w*h; i++)
-              output[i] = (r[i] << 16) | (g[i] << 8) | b[i];
+           cvt.convertYUVtoRGB(y, u, v, output, ColorModelType.YUV444);
 
            int psnr1024, ssim1024;
            psnr1024 = new ImageQualityMonitor(w, h).computePSNR(input, output);

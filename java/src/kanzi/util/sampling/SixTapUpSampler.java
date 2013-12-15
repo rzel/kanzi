@@ -278,7 +278,7 @@ public class SixTapUpSampler implements UpSampler
                 if ((direction & DIR_HORIZONTAL) != 0)
                 {
                     int bVal = (w06*pH + w07*pI + w08*pJ + w09*pK + w10*pL + w11*pM + ADJUST) >> SHIFT;
-//                    bVal = (bVal > 255) ? 255 : bVal & ~(bVal >> 31);
+                    bVal = (bVal > 255) ? 255 : bVal & ~(bVal >> 31);
 
                     if (scale == 2)
                     {
@@ -287,9 +287,9 @@ public class SixTapUpSampler implements UpSampler
                     else
                     {
                         int aVal = (w00*pH + w01*pI + w02*pJ + w03*pK + w04*pL + w05*pM + ADJUST) >> SHIFT;
-//                        aVal = (aVal > 255) ? 255 : aVal & ~(aVal >> 31);
+                        aVal = (aVal > 255) ? 255 : aVal & ~(aVal >> 31);
                         int cVal = (w12*pH + w13*pI + w14*pJ + w15*pK + w16*pL + w17*pM + ADJUST) >> SHIFT;
-//                        cVal = (cVal > 255) ? 255 : cVal & ~(cVal >> 31);
+                        cVal = (cVal > 255) ? 255 : cVal & ~(cVal >> 31);
                         output[line0+x+1] = aVal - pixel_range_offset;
                         output[line0+x+2] = bVal - pixel_range_offset;
                         output[line0+x+3] = cVal - pixel_range_offset;
@@ -299,7 +299,7 @@ public class SixTapUpSampler implements UpSampler
                 if ((direction & DIR_VERTICAL) != 0)
                 {
                     int hVal = (w06*pB + w07*pE + w08*pJ + w09*pO + w10*pS + w11*pW + ADJUST) >> SHIFT;
-//                    hVal = (hVal > 255) ? 255 : hVal & ~(hVal >> 31);
+                    hVal = (hVal > 255) ? 255 : hVal & ~(hVal >> 31);
 
                     if (scale == 2)
                     {
@@ -308,9 +308,9 @@ public class SixTapUpSampler implements UpSampler
                     else
                     {
                         int dVal = (w00*pB + w01*pE + w02*pJ + w03*pO + w04*pS + w05*pW + ADJUST) >> SHIFT;
-//                        dVal = (dVal > 255) ? 255 : dVal & ~(dVal >> 31);
+                        dVal = (dVal > 255) ? 255 : dVal & ~(dVal >> 31);
                         int nVal = (w12*pB + w13*pE + w14*pJ + w15*pO + w16*pS + w17*pW + ADJUST) >> SHIFT;
-//                        nVal = (nVal > 255) ? 255 : nVal & ~(nVal >> 31);
+                        nVal = (nVal > 255) ? 255 : nVal & ~(nVal >> 31);
                         output[line1+x] = dVal - pixel_range_offset;
                         output[line2+x] = hVal - pixel_range_offset;
                         output[line3+x] = nVal - pixel_range_offset;
@@ -336,7 +336,7 @@ public class SixTapUpSampler implements UpSampler
 
                     int jVal = ((c0*pE + c1*pF) + (c2*pI + c3*pJ + c4*pK + c5*pL) +
                                       (c5*pN + c4*pO + c3*pP + c2*pQ) + (c1*pS + c0*pT) + ADJUST) >> SHIFT;
-//                    jVal = (jVal > 255) ? 255 : jVal & ~(jVal >> 31);
+                    jVal = (jVal > 255) ? 255 : jVal & ~(jVal >> 31);
 
                     if (scale == 2)
                     {
