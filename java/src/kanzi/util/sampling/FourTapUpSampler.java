@@ -249,7 +249,7 @@ public class FourTapUpSampler implements UpSampler
                 if ((direction & DIR_HORIZONTAL) != 0)
                 {
                     int bVal = ((w04*pI + w05*pJ + w06*pK + w07*pL) + ADJUST) >> SHIFT;
-                    bVal = (bVal > 255) ? 255 : bVal & ~(bVal >> 31);
+                    //bVal = (bVal > 255) ? 255 : bVal & ~(bVal >> 31);
 
                     if (scale == 2)
                     {
@@ -258,9 +258,9 @@ public class FourTapUpSampler implements UpSampler
                     else
                     {
                         int aVal = (w00*pI + w01*pJ + w02*pK + w03*pL + ADJUST) >> SHIFT;
-                        aVal = (aVal > 255) ? 255 : aVal & ~(aVal >> 31);
+                        //aVal = (aVal > 255) ? 255 : aVal & ~(aVal >> 31);
                         int cVal = (w08*pI + w09*pJ + w10*pK + w11*pL + ADJUST) >> SHIFT;
-                        cVal = (cVal > 255) ? 255 : cVal & ~(cVal >> 31);
+                        //cVal = (cVal > 255) ? 255 : cVal & ~(cVal >> 31);
                         output[line0+x+1] = aVal - pixel_range_offset;
                         output[line0+x+2] = bVal - pixel_range_offset;
                         output[line0+x+3] = cVal - pixel_range_offset;
@@ -270,7 +270,7 @@ public class FourTapUpSampler implements UpSampler
                 if ((direction & DIR_VERTICAL) != 0)
                 {
                     int hVal = (w04*pE + w05*pJ + w06*pO + w07*pS + ADJUST) >> SHIFT;
-                    hVal = (hVal > 255) ? 255 : hVal & ~(hVal >> 31);
+                    //hVal = (hVal > 255) ? 255 : hVal & ~(hVal >> 31);
 
                     if (scale == 2)
                     {
@@ -279,9 +279,9 @@ public class FourTapUpSampler implements UpSampler
                     else
                     {
                         int dVal = (w00*pE + w01*pJ + w02*pO + w03*pS + ADJUST) >> SHIFT;
-                        dVal = (dVal > 255) ? 255 : dVal & ~(dVal >> 31);
+                        //dVal = (dVal > 255) ? 255 : dVal & ~(dVal >> 31);
                         int nVal = (w08*pE + w09*pJ + w10*pO + w11*pS + ADJUST) >> SHIFT;
-                        nVal = (nVal > 255) ? 255 : nVal & ~(nVal >> 31);
+                        //nVal = (nVal > 255) ? 255 : nVal & ~(nVal >> 31);
                         output[line1+x] = dVal - pixel_range_offset;
                         output[line2+x] = hVal - pixel_range_offset;
                         output[line3+x] = nVal - pixel_range_offset;
@@ -303,7 +303,7 @@ public class FourTapUpSampler implements UpSampler
 
                     int jVal = ((c0*pE + c1*pF) + (c2*pI + c3*pJ + c4*pK + c5*pL) +
                                 (c5*pN + c4*pO + c3*pP + c2*pQ) + (c1*pS + c0*pT) + ADJUST) >> SHIFT;
-                    jVal = (jVal > 255) ? 255 : jVal & ~(jVal >> 31);
+                    //jVal = (jVal > 255) ? 255 : jVal & ~(jVal >> 31);
 
                     if (scale == 2)
                     {
@@ -341,6 +341,8 @@ public class FourTapUpSampler implements UpSampler
             line2 = line1 + dw;
             line3 = line2 + dw;
         }
+        
+        System.arraycopy(output, (dh-2)*dw, output, (dh-1)*dw, dw);
      }
 
 
