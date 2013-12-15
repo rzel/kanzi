@@ -607,19 +607,21 @@ public class CompressedOutputStream extends OutputStream
             // Force ee to null to avoid double dispose (in the finally section)
             ee = null;
 
+            final int w = (int) ((this.obs.written() - written) / 8L);
+            
+            // After completion of the entropy coding, increment the block id.
+            // It unfreezes the task processing the next block (if any)
+            this.processedBlockId.incrementAndGet();
+
             if (this.listeners != null) 
             {
                // Notify after entropy
-               BlockEvent evt = new BlockEvent(BlockEvent.Type.AFTER_ENTROPY, currentBlockId,
-                       (int) ((this.obs.written()-written)/8L), checksum, this.hasher != null);
+               BlockEvent evt = new BlockEvent(BlockEvent.Type.AFTER_ENTROPY, 
+                       currentBlockId, w, checksum, this.hasher != null);
                
                for (BlockListener bl : this.listeners)
                   bl.processEvent(evt);
             }
-
-            // After completion of the entropy coding, increment the block id.
-            // It unfreezes the task processing the next block (if any)
-            this.processedBlockId.incrementAndGet();
 
             return true;
          }
