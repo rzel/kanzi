@@ -15,11 +15,14 @@ limitations under the License.
 
 package kanzi.test;
 
+import java.awt.Graphics2D;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
+import java.awt.Rectangle;
 import java.awt.Transparency;
+import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
@@ -150,6 +153,7 @@ public class TestContextResizer
             frame.add(new JLabel(icon));
             frame.setVisible(true);
             IndexedIntArray src = new IndexedIntArray(new int[w*h], 0);
+            IndexedIntArray tmp = new IndexedIntArray(new int[w*h], 0);
             IndexedIntArray dst = new IndexedIntArray(new int[w*h], 0);
 
             // Do NOT use img.getRGB(): it is more than 10 times slower than
@@ -157,7 +161,7 @@ public class TestContextResizer
             img.getRaster().getDataElements(0, 0, w, h, src.array);
             ContextResizer effect;
 
-            Arrays.fill(dst.array, 0);
+            Arrays.fill(tmp.array, 0);
             int dir = 0;
             int min = Integer.MAX_VALUE;
             
@@ -175,18 +179,19 @@ public class TestContextResizer
 
             effect = new ContextResizer(w, h,  w, dir,
                     ContextResizer.SHRINK, min * effectPct / 100, false, debug, null);            
-            effect.apply(src, dst);
+            effect.apply(src, tmp);
 
+            Rectangle bounds = gs.getDefaultConfiguration().getBounds();
             BufferedImage img2 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
-            img2.getRaster().setDataElements(0, 0, w, h, dst.array);
+            img2.getRaster().setDataElements(0, 0, w, h, tmp.array);
             JFrame frame2 = new JFrame("Filter");
-            frame2.setBounds(500, 80, w, h);
+            frame2.setBounds(Math.max(10, Math.min(w+50,bounds.width-5*w/4)), 80, w, h);
             ImageIcon icon2 = new ImageIcon(img2);
             frame2.add(new JLabel(icon2));
             frame2.setVisible(true);
 
             // Speed test
-            if (speed == true)
+//            if (speed == true)
             {
                 ExecutorService pool = Executors.newFixedThreadPool(4);
                 System.out.println("Speed test");
@@ -200,7 +205,7 @@ public class TestContextResizer
                 {
                    img.getRaster().getDataElements(0, 0, w, h, src);
                    long before = System.nanoTime();
-                   effect.apply(src, dst);
+                   effect.apply(src, tmp);
                    long after = System.nanoTime();
                    sum += (after - before);
                 }
@@ -216,7 +221,7 @@ public class TestContextResizer
                 {
                    img.getRaster().getDataElements(0, 0, w, h, src);
                    long before = System.nanoTime();
-                   effect.apply(src, dst);
+                   effect.apply(src, tmp);
                    long after = System.nanoTime();
                    sum += (after - before);
                 }
@@ -225,7 +230,67 @@ public class TestContextResizer
                 System.out.println(1000000000*(long)iter/sum+" FPS");
             }
 
-            Thread.sleep(40000);
+            Thread.sleep(4000);
+                        
+            JFrame frame3 = new JFrame("Animation");
+            frame3.setBounds(700, 150, w, h);
+            frame3.setResizable(true);
+            frame3.setUndecorated(true);
+            ImageIcon newIcon = new ImageIcon(img2);
+            frame3.add(new JLabel(newIcon));
+            frame3.setVisible(true);
+            BufferedImage img3 = gc.createCompatibleImage(w, h, Transparency.OPAQUE);
+            final int w0 = w;
+
+            // Add delay to make sure that the frame is visible before creating back buffer
+            Thread.sleep(10);
+            frame3.createBufferStrategy(1);
+            ExecutorService pool = Executors.newFixedThreadPool(4);
+            System.arraycopy(src.array, 0, dst.array, 0, src.array.length);
+            int iters = 1;
+            
+            for (int ii=0; ii<iters; ii++)
+            {
+               while (w>= 3*w0/4)
+               {
+                  effect = new ContextResizer(w, h, w0, ContextResizer.VERTICAL,
+                          ContextResizer.SHRINK, 1, true, true, pool);
+                  effect.apply(src, dst);
+                  img3.getRaster().setDataElements(0, 0, w0, h, dst.array);
+                  BufferStrategy bufferStrategy = frame3.getBufferStrategy();
+                  Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
+                  g.drawImage(img3, 0, 0, w0, h, null);
+                  img3.getRaster().setDataElements(0, 0, w0, h, dst.array);
+                  frame3.setBounds(Math.max(10, Math.min(w0+w0+50,bounds.width-5*w0/4)), 100, w0, h);
+                  bufferStrategy.show();
+                  int offset = 0;
+
+                  for (int j=h; j>0; j--, offset+=w0)
+                     src.array[offset+w-1] = 0;
+
+                  Thread.sleep(150);
+                  effect.setDebug(false);
+                  effect.apply(src, dst);
+                  img3.getRaster().setDataElements(0, 0, w0, h, dst.array);
+                  g.drawImage(img3, 0, 0, w0, h, null);
+                  frame3.setBounds(Math.max(10, Math.min(w0+w0+50,bounds.width-5*w0/4)), 100, w0, h);
+                  bufferStrategy.show();
+                  System.arraycopy(dst.array, 0, src.array, 0, dst.array.length);
+                  offset = 0;
+
+                  for (int j=h; j>0; j--, offset+=w0)
+                     src.array[offset+w-1] = 0;
+
+                  Thread.sleep(150);
+                  w--;
+               }
+
+               w = w0;
+               img.getRaster().getDataElements(0, 0, w0, h, src.array);             
+               Thread.sleep(51000);
+            }
+            
+            Thread.sleep(4000);
         }
         catch (Exception e)
         {
