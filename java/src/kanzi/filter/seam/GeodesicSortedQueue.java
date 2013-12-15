@@ -23,7 +23,6 @@ package kanzi.filter.seam;
     private int size;
     private Node head;
     private Node tail;
-    private Node root;
     private final Node[] nodes;
     private int freeNodeIdx;
 
@@ -50,7 +49,6 @@ package kanzi.filter.seam;
            node.value = value;
            this.head = node;
            this.tail = node;
-           this.root = node;
            this.size++;
            return this.tail.value;
         }
@@ -68,6 +66,7 @@ package kanzi.filter.seam;
            node.value = value;
            node.parent = this.tail;
            this.tail.right = node;
+           node.right = null;
            this.tail = node;
         }
         else if (cost < this.head.value.cost)
@@ -75,14 +74,15 @@ package kanzi.filter.seam;
            // New node is head
            Node node = this.nodes[this.freeNodeIdx++];
            node.value = value;
-           node.parent = this.head;
-           this.head.left = node;
+           this.head.parent = node;
+           node.right = this.head;
+           node.left = null;
            this.head = node;
         }
         else
         {
            // New node is not an extremity
-           Node current = this.root;
+           Node current = this.head;
 
            // Locate appropriate position in tree
            while (true)
@@ -132,8 +132,6 @@ package kanzi.filter.seam;
 
                if (parent != null)
                   parent.right = left;
-               else
-                  this.root = left;
                
                last.parent = null;
                last.left = null;
@@ -200,7 +198,7 @@ package kanzi.filter.seam;
         if (array.length < this.size)
            array = new Geodesic[this.size];
 
-        scan(this.root, array, 0);
+        scan(this.head, array, 0);
         return array;
     }
 
