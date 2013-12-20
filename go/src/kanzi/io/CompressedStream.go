@@ -472,7 +472,7 @@ func (this *CompressedOutputStream) encode(data, buf []byte, blockLength uint,
 		// Forward transform
 		iIdx, oIdx, err = transform.Forward(data, buffer)
 
-		if err != nil || iIdx < blockLength {
+		if err != nil || oIdx >= blockLength {
 			// Transform failed or did not compress, skip and copy
 			if !kanzi.SameByteSlices(buffer, data, false) {
 				copy(buffer, data)
