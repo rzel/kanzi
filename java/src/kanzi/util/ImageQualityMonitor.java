@@ -230,60 +230,29 @@ public final class ImageQualityMonitor
                           int[] img2_chan1, int[] img2_chan2, int[] img2_chan3,
                           int x, int y, int w, int h, ColorModelType type)
    {
-       if (x < 0)
-          x = 0;
+      final int scaleX = ((type == ColorModelType.YUV420) || (type == ColorModelType.YUV422)) ? 1 : 0;
+      final int scaleY = (type == ColorModelType.YUV420) ? 1 : 0;
+      final int psnr1024_chan1 = this.computePSNR(img1_chan1, img2_chan1, x, y, w, h, type);
+       
+      if (psnr1024_chan1 == Global.INFINITE_VALUE)
+         return Global.INFINITE_VALUE;
+       
+      final int psnr1024_chan2 = this.computePSNR(img2_chan1, img2_chan2, x>>scaleX, 
+              y>>scaleX, w>>scaleX, h>>scaleX, type);
+       
+      if (psnr1024_chan2 == Global.INFINITE_VALUE)
+         return Global.INFINITE_VALUE;
+       
+      final int psnr1024_chan3 = this.computePSNR(img1_chan3, img2_chan3, x>>scaleY, 
+              y>>scaleY, w>>scaleY, h>>scaleY, type);
 
-       if (y < 0)
-          y = 0;
-
-       if (x >= w)
-          x = w - 1;
-
-       if (y >= h)
-          y = h - 1;
-
-       if (x + w > this.width)
-          w = this.width - x;
-
-       if (y + h > this.height)
-          h = this.height - y;
-
-       final int iterations1 = ((w - x) >> this.downSampling) * ((h - y) >> this.downSampling);
-
-       // Rescale to avoid overflow
-       final long lsum1 = this.computeDeltaSum(img1_chan1, img2_chan1, x, y, w, h, type);
-       final int isum1 = (int) ((lsum1 + 50) / 100);
-
-       if ((type == ColorModelType.YUV420) || (type == ColorModelType.YUV422))
-           w >>= 1;
-
-       if (type == ColorModelType.YUV420)
-           h >>= 1;
-
-       final int iterations2 = ((w - x) >> this.downSampling) * ((h - y) >> this.downSampling);
-
-       // Rescale to avoid overflow
-       final long lsum2 = this.computeDeltaSum(img1_chan2, img2_chan2, x, y, w, h, type);
-       final int isum2 = (int) ((lsum2 + 50) / 100);
-       final long lsum3 = this.computeDeltaSum(img1_chan3, img2_chan3, x, y, w, h, type);
-       final int isum3 = (int) ((lsum3 + 50) / 100);
-
-       if (isum1 + isum2 + isum3 == 0)
-          return Global.INFINITE_VALUE;
-
-       // Formula:  double mse = (double) (sum) / size
-       //           double psnr = 10 * Math.log10(255d*255d/mse);
-       // or        double psnr = 10 * (Math.log10(65025) + (Math.log10(size) - Math.log10(sum))
-       // Calculate PSNR << 10 with 1024 * 10 * (log10(65025L) = 49286
-       // 1024*10*log10(100) = 20480
-       final int psnr1024_chan1 = 49286 + Global.ten_log10(iterations1) - Global.ten_log10(isum1) - 20480;
-       final int psnr1024_chan2 = 49286 + Global.ten_log10(iterations2) - Global.ten_log10(isum2) - 20480;
-       final int pnsr1024_chan3 = 49286 + Global.ten_log10(iterations2) - Global.ten_log10(isum3) - 20480;
-
-       if (type == ColorModelType.RGB) // RGB => weight 1/3 for R, G & B (?)
-          return (psnr1024_chan1 + psnr1024_chan2 + pnsr1024_chan3) / 3;
-       else // YUV => weight 0.8 for Y and 0.1 for U & V
-          return ((102*psnr1024_chan1) + (13*psnr1024_chan2) + (13*pnsr1024_chan3)) >> 7;
+      if (psnr1024_chan3 == Global.INFINITE_VALUE)
+         return Global.INFINITE_VALUE;
+       
+      if (type == ColorModelType.RGB) // RGB => weight 1/3 for R, G & B
+         return (psnr1024_chan1 + psnr1024_chan2 + psnr1024_chan3) / 3;
+      else // YUV => weight 0.8 for Y and 0.1 for U & V
+         return ((102*psnr1024_chan1) + (13*psnr1024_chan2) + (13*psnr1024_chan3)) >> 7;
    }
 
 
@@ -304,18 +273,6 @@ public final class ImageQualityMonitor
    // return psnr * 1024 or INFINITE_PSNR (=0)
    public int computePSNR(int[] data1, int[] data2, int x, int y, int w, int h, ColorModelType type)
    {
-      if (x < 0)
-         x = 0;
-
-      if (y < 0)
-         y = 0;
-
-      if (x + w > this.width)
-         w = this.width - x;
-
-      if (y + h > this.height)
-         h = this.height - y;
-
       final long lsum = this.computeDeltaSum(data1, data2, x, y, w, h, type);
 
       // Rescale to avoid overflow
@@ -337,9 +294,15 @@ public final class ImageQualityMonitor
    // return sum of squared differences between data
    private long computeDeltaSum(int[] data1, int[] data2, int x, int y, int w, int h, ColorModelType type)
    {
+      if ((x < 0) || (y < 0))
+          throw new IllegalArgumentException("Illegal argument: x and y must be positive or null");
+   
+      if ((w <= 0) || (h <= 0))
+          throw new IllegalArgumentException("Illegal argument: w and h must be positive");
+   
       if (data1 == data2)
          return 0;
-
+         
       long sum = 0, sum1 = 0, sum2 = 0, sum3 = 0;
       final int st = this.stride << this.downSampling;
       final int inc = 1 << this.downSampling;
@@ -395,31 +358,39 @@ public final class ImageQualityMonitor
    // that can be detected by the Human Visual System. All channels.
    // Color model must be YUV444 or YUV420.
    // return psnr * 1024 or INFINITE_PSNR (=0)
-   public int computePSNR_HVS_M(int[] src, int[] dst, ColorModelType type) 
+   public int computePSNR_HVS_M(int[] img1_chan1, int[] img1_chan2, int[] img1_chan3,
+                                int[] img2_chan1, int[] img2_chan2, int[] img2_chan3,
+                                ColorModelType type)
    {
-      return this.computePSNR_HVS_M(src, dst, 0, 0, this.width, this.height, type);
+      return this.computePSNR_HVS_M(img1_chan1, img1_chan2, img1_chan3,
+                                    img2_chan1, img2_chan2, img2_chan3,
+                                    0, 0, this.width, this.height, type);
    }
-   
-   
+
+
    // Compute a modified version of the PSNR that takes into account only the errors
    // that can be detected by the Human Visual System. All channels.
    // Color model must be YUV444 or YUV420.
    // return psnr * 1024 or INFINITE_PSNR (=0)
-   public int computePSNR_HVS_M(int[] src, int[] dst, int x, int y, int w, int h,
-           ColorModelType type) 
+   public int computePSNR_HVS_M(int[] img1_chanY, int[] img1_chanU, int[] img1_chanV,
+                                int[] img2_chanY, int[] img2_chanU, int[] img2_chanV,
+                                int x, int y, int w, int h, ColorModelType type)
    {
-      final int scale = (type == ColorModelType.YUV444) ? 0 : 1;
-      int psnr1024_chanY = computePSNR_HVS_M(src, dst, x, y, w, h, 0, type);
+      final int scaleX = ((type == ColorModelType.YUV420) || (type == ColorModelType.YUV422)) ? 1 : 0;
+      final int scaleY = (type == ColorModelType.YUV420) ? 1 : 0;
+      int psnr1024_chanY = computePSNR_HVS_M(img1_chanY, img2_chanY, x, y, w, h, 0, type);
       
       if (psnr1024_chanY == Global.INFINITE_VALUE)
          return psnr1024_chanY;
       
-      int psnr1024_chanU = computePSNR_HVS_M(src, dst, x, y, w>>scale, h>>scale, 1, type);
+      int psnr1024_chanU = computePSNR_HVS_M(img1_chanU, img2_chanU, x>>scaleX, 
+              y>>scaleX, w>>scaleX, h>>scaleX, 1, type);
       
       if (psnr1024_chanU == Global.INFINITE_VALUE)
          return psnr1024_chanU;
       
-      int pnsr1024_chanV = computePSNR_HVS_M(src, dst, x, y, w>>scale, h>>scale, 2, type);
+      int pnsr1024_chanV = computePSNR_HVS_M(img1_chanV, img2_chanV, x>>scaleY, 
+              y>>scaleY, w>>scaleY, h>>scaleY, 2, type);
       
       if (pnsr1024_chanV == Global.INFINITE_VALUE)
          return pnsr1024_chanV;
@@ -446,24 +417,21 @@ public final class ImageQualityMonitor
    public int computePSNR_HVS_M(int[] src, int[] dst, int x, int y, int w, int h,
            int channelIdx, ColorModelType type) 
    {
-      if ((type != ColorModelType.YUV420) && (type != ColorModelType.YUV444))
-         throw new IllegalArgumentException("Invalid image type: must be YUV 420 or 444");
+      if ((type != ColorModelType.YUV420) && (type != ColorModelType.YUV422) && (type != ColorModelType.YUV444))
+         throw new IllegalArgumentException("Invalid image type: must be YUV 420, 422 or 444");
 
       if ((channelIdx !=0) && (channelIdx != 1) && (channelIdx != 2))
          throw new IllegalArgumentException("Invalid channel index: must be 0 for Y, 1 for U or 2 for V");
 
-      if (x < 0)
-         x = 0;
-
-      if (y < 0)
-         y = 0;
-
-      if (x + w > this.width)
-         w = this.width - x;
-
-      if (y + h > this.height)
-         h = this.height - y;
-
+      if ((x < 0) || (y < 0))
+          throw new IllegalArgumentException("Illegal argument: x and y must be positive or null");
+   
+      if ((w <= 0) || (h <= 0))
+          throw new IllegalArgumentException("Illegal argument: w and h must be positive");
+   
+      if (src == dst)
+         return 0;
+      
       final int mse = computeCSFDeltaAvg(src, dst, x, y, w, h, channelIdx);  
 
       if (mse <= 0)
