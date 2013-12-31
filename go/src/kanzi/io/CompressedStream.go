@@ -428,6 +428,11 @@ func (this *CompressedOutputStream) encode(data, buf []byte, blockLength uint,
 	buffer := buf
 	requiredSize := transform.MaxEncodedLen(int(blockLength))
 
+	if requiredSize == -1 {
+		// Max size unknown => guess
+		requiredSize = int(blockLength) * 5 >> 2
+	}
+
 	if typeOfTransform == 'N' {
 		buffer = data // share buffers if no transform
 	} else if len(buf) < requiredSize {
