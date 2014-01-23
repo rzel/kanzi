@@ -20,7 +20,7 @@ import (
 )
 
 // A tree based collection of sorted integers allowing log n time for add/remove
-// and fast access to minimum and maximum values (almost always constant time).
+// and fast access to minimum and maximum values (usually constant time, else log n time).
 
 const (
 	MAX_DIRTY = uint8(1)
@@ -61,111 +61,164 @@ func (this *IntBTree) Add(val int) {
 
 	if this.root == nil {
 		this.root = node
-	} else {
-		this.scanAndAdd(this.root, node)
-	}
-
-	if val < this.min {
 		this.min = val
-	}
-
-	if val > this.max {
 		this.max = val
+	} else {
+		addNode(this.root, node)
+
+		if val < this.min {
+			this.min = val
+		}
+
+		if val > this.max {
+			this.max = val
+		}
 	}
 
 	this.size++
 }
 
-func (this *IntBTree) scanAndAdd(parent, node *IntBTNode) {
-	if parent == nil {
-		return
+func addNode(parent, node *IntBTNode) {
+	value := node.value
+
+	for value != parent.value {
+		if value < parent.value {
+			if parent.left == nil {
+				parent.left = node
+				return
+			}
+
+			parent = parent.left
+		} else {
+			if parent.right == nil {
+				parent.right = node
+				return
+			}
+
+			parent = parent.right
+		}
 	}
 
-	if node.value < parent.value {
-		if parent.left == nil {
-			parent.left = node
-		} else {
-			this.scanAndAdd(parent.left, node)
-		}
-	} else if node.value > parent.value {
-		if parent.right == nil {
-			parent.right = node
-		} else {
-			this.scanAndAdd(parent.right, node)
-		}
-	} else {
-		parent.count++
-	}
-
+	parent.count++
 }
 
-func (this *IntBTree) Remove(value int) *IntBTNode {
-	if this.root == nil {
-		return nil
+// Return the number of matches
+func (this *IntBTree) Contains(value int) uint {
+	res := findNode(this.root, value)
+
+	if res == nil {
+		return 0
 	}
 
-	res := this.scanAndRemove(this.root, nil, value, true)
-
-	if res == this.root && this.root.count == 0 {
-		if res.right != nil {
-			this.root = res.right
-		} else if res.left != nil {
-			this.root = res.left
-		} else {
-			this.root = nil
-		}
-	}
-
-	if res != nil {
-		if this.root == nil {
-			this.size = 0
-		} else {
-			this.size--
-		}
-
-		// Force recomputation of cached fields
-		if this.min == value {
-			this.flags |= MIN_DIRTY
-		}
-
-		if this.max == value {
-			this.flags |= MAX_DIRTY
-		}
-
-	}
-
-	return res
+	return res.count
 }
 
-func (this *IntBTree) scanAndRemove(current, prev *IntBTNode, value int, right bool) *IntBTNode {
+func findNode(current *IntBTNode, value int) *IntBTNode {
 	if current == nil {
 		return nil
 	}
 
-	if value < current.value {
-		if current.left == nil {
-			return nil
+	for value != current.value {
+		if value < current.value {
+			if current.left == nil {
+				return nil
+			}
+
+			current = current.left
 		} else {
-			return this.scanAndRemove(current.left, current, value, false)
-		}
-	} else if value > current.value {
-		if current.right == nil {
-			return nil
-		} else {
-			return this.scanAndRemove(current.right, current, value, true)
+			if current.right == nil {
+				return nil
+			}
+
+			current = current.right
 		}
 	}
 
+	return current
+}
+
+func (this *IntBTree) Remove(value int) bool {
+	if this.root == nil {
+		return false
+	}
+
+	res := this.removeNode(value)
+
+	if res == nil {
+		return false
+	}
+
+	this.size--
+
+	// Force recomputation of cached fields
+	if this.min == value {
+		this.flags |= MIN_DIRTY
+	}
+
+	if this.max == value {
+		this.flags |= MAX_DIRTY
+	}
+
+	return true
+}
+
+func (this *IntBTree) removeNode(value int) *IntBTNode {
+	current := this.root
+	var prev *IntBTNode
+
+	for value != current.value {
+		if value < current.value {
+			if current.left == nil {
+				return nil
+			}
+
+			prev = current
+			current = current.left
+		} else {
+			if current.right == nil {
+				return nil
+			}
+
+			prev = current
+			current = current.right
+		}
+	}
+
+	// Found target
 	current.count--
 
-	if current.count == 0 && prev != nil {
-		if right {
+	if current.count != 0 {
+		return current
+	}
+
+	if current == this.root {
+		// First, try easy substitutions of root
+		if current.right == nil {
+			this.root = current.left
+		} else if current.left == nil {
+			this.root = current.right
+		} else if value&1 == 0 { // random choice or left or right
+			this.root = current.right
+
+			// Re-insert left branch
+			addNode(this.root, current.left)
+		} else {
+			this.root = current.left
+
+			// Re-insert right branch
+			addNode(this.root, current.right)
+		}
+	}
+
+	if prev != nil {
+		// Remove current node from previous node
+		if prev.right == current {
 			if current.left != nil {
 				prev.right = current.left
 
 				if current.right != nil {
 					// Re-insert right branch
-					this.scanAndAdd(this.root, current.right)
+					addNode(prev, current.right)
 				}
 			} else {
 				prev.right = current.right
@@ -175,7 +228,7 @@ func (this *IntBTree) scanAndRemove(current, prev *IntBTNode, value int, right b
 
 			if current.right != nil {
 				// Re-insert right branch
-				this.scanAndAdd(this.root, current.right)
+				addNode(prev, current.right)
 			}
 		}
 	}
@@ -184,7 +237,7 @@ func (this *IntBTree) scanAndRemove(current, prev *IntBTNode, value int, right b
 }
 
 func (this *IntBTree) Scan(callback func(node *IntBTNode), reverse bool) {
-	if callback == nil {
+	if callback == nil || this.root == nil {
 		return
 	}
 
@@ -192,10 +245,6 @@ func (this *IntBTree) Scan(callback func(node *IntBTNode), reverse bool) {
 }
 
 func scanAndCall(current *IntBTNode, callback func(node *IntBTNode), reverse bool) {
-	if current == nil {
-		return
-	}
-
 	if reverse == false {
 		if current.left != nil {
 			scanAndCall(current.left, callback, reverse)
@@ -228,22 +277,19 @@ func (this *IntBTree) Min() (int, error) {
 		return 0, errors.New("Tree is empty")
 	}
 
-	if this.flags&MIN_DIRTY == 0 {
-		return this.min, nil
+	if this.flags&MIN_DIRTY != 0 {
+		// Dynamically scan tree to leftmost position
+		node := this.root
+
+		for node.left != nil {
+			node = node.left
+		}
+
+		this.min = node.value
+		this.flags &= ^MIN_DIRTY
 	}
 
-	// Dynamically scan tree to leftmost position
-	node := this.root
-	minimum := node.value
-
-	for node != nil {
-		minimum = node.value
-		node = node.left
-	}
-
-	this.min = minimum
-	this.flags &= ^MIN_DIRTY
-	return minimum, nil
+	return this.min, nil
 }
 
 func (this *IntBTree) Max() (int, error) {
@@ -251,20 +297,17 @@ func (this *IntBTree) Max() (int, error) {
 		return 0, errors.New("Tree is empty")
 	}
 
-	if this.flags&MAX_DIRTY == 0 {
-		return this.max, nil
+	if this.flags&MAX_DIRTY != 0 {
+		// Dynamically scan tree to rightmost position
+		node := this.root
+
+		for node.right != nil {
+			node = node.right
+		}
+
+		this.max = node.value
+		this.flags &= ^MAX_DIRTY
 	}
 
-	// Dynamically scan tree to rightmost position
-	node := this.root
-	maximum := node.value
-
-	for node != nil {
-		maximum = node.value
-		node = node.right
-	}
-
-	this.max = maximum
-	this.flags &= ^MAX_DIRTY
-	return maximum, nil
+	return this.max, nil
 }
