@@ -46,6 +46,9 @@ type IntBTree struct {
 	max   int
 }
 
+// Visitor pattern. Must return the node value
+type IntBTreeCallback func(node *IntBTNode) int
+
 func NewIntBTree() (*IntBTree, error) {
 	this := new(IntBTree)
 	this.flags = MIN_DIRTY | MAX_DIRTY
@@ -236,40 +239,46 @@ func (this *IntBTree) removeNode(value int) *IntBTNode {
 	return current
 }
 
-func (this *IntBTree) Scan(callback func(node *IntBTNode), reverse bool) {
+func (this *IntBTree) Scan(callback IntBTreeCallback, reverse bool) []int {
 	if callback == nil || this.root == nil {
-		return
+		return nil
 	}
 
-	scanAndCall(this.root, callback, reverse) // visitor pattern
+	res := make([]int, this.size)
+	scanAndCall(this.root, res, 0, callback, reverse) // visitor pattern
+	return res
 }
 
-func scanAndCall(current *IntBTNode, callback func(node *IntBTNode), reverse bool) {
+func scanAndCall(current *IntBTNode, array []int, index int, callback IntBTreeCallback, reverse bool) int {
 	if reverse == false {
 		if current.left != nil {
-			scanAndCall(current.left, callback, reverse)
+			index = scanAndCall(current.left, array, index, callback, false)
 		}
 
 		for i := current.count; i > 0; i-- {
-			callback(current)
+			array[index] = callback(current)
+			index++
 		}
 
 		if current.right != nil {
-			scanAndCall(current.right, callback, reverse)
+			index = scanAndCall(current.right, array, index, callback, false)
 		}
 	} else {
 		if current.right != nil {
-			scanAndCall(current.right, callback, reverse)
+			index = scanAndCall(current.right, array, index, callback, true)
 		}
 
 		for i := current.count; i > 0; i-- {
-			callback(current)
+			array[index] = callback(current)
+			index++
 		}
 
 		if current.left != nil {
-			scanAndCall(current.left, callback, reverse)
+			index = scanAndCall(current.left, array, index, callback, true)
 		}
 	}
+
+	return index
 }
 
 func (this *IntBTree) Min() (int, error) {
@@ -310,4 +319,18 @@ func (this *IntBTree) Max() (int, error) {
 	}
 
 	return this.max, nil
+}
+
+func (this *IntBTree) ToArray(array []int) []int {
+	if array == nil || len(array) < this.size {
+		array = make([]int, this.size)
+	}
+
+	res := array
+	scanAndCall(this.root, res, 0, emptyCallback, false)
+	return res
+}
+
+func emptyCallback(node *IntBTNode) int {
+	return node.value
 }

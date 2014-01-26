@@ -14,6 +14,7 @@
 */
 package kanzi.test;
 
+import java.util.Arrays;
 import java.util.Random;
 import kanzi.util.IntBTree;
 import kanzi.util.IntBTree.IntBTNode;
@@ -32,9 +33,10 @@ public class TestIntBTree
          IntBTree.Callback printNode = new IntBTree.Callback()
          {
             @Override
-            public void call(IntBTNode node) 
+            public int call(IntBTNode node) 
             {
                System.out.print(node.value()+", ");
+               return node.value();
             }        
          };
 
@@ -68,8 +70,12 @@ public class TestIntBTree
             }
 
             System.out.print("All nodes in reverse order: ");
-            tree.scan(printNode, true);            System.out.println("");
-
+            tree.scan(printNode, true);            
+            System.out.println("");
+            int[] res = tree.toArray(new int[tree.size()]);
+            System.out.print("All nodes in natural order: ");
+            System.out.println(Arrays.toString(res));
+            System.out.println("");
 
             while (tree.size() > 0)
             {

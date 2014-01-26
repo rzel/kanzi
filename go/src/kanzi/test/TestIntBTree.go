@@ -23,8 +23,9 @@ import (
 	"time"
 )
 
-func printNode(node *util.IntBTNode) {
+func printNode(node *util.IntBTNode) int {
 	fmt.Printf("%v, ", node.Value())
+	return node.Value()
 }
 
 func main() {
@@ -81,6 +82,14 @@ func main() {
 
 			fmt.Printf("All nodes in reverse order\n")
 			tree.Scan(printNode, true)
+			println()
+			fmt.Printf("All nodes in natural order\n")
+			array := tree.ToArray(make([]int, tree.Size()))
+			
+			for i := range array {
+				fmt.Printf("%v, ", array[i])
+			}
+			
 			println()
 			fmt.Printf("Size: %v\n", tree.Size())
 

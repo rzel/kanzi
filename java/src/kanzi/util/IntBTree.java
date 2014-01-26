@@ -245,39 +245,43 @@ public final class IntBTree
    }
 
    
-   public void scan(Callback cb, boolean reverse) 
+   public int[] scan(Callback cb, boolean reverse) 
    {
       if ((cb == null) || (this.root == null))
-         return;
+         return null;
 
-      scanAndCall(this.root, cb, reverse); // visitor pattern
+      int[] res = new int[this.size];
+      scanAndCall(this.root, res, 0, cb, reverse); // visitor pattern
+      return res;
    }
 
    
-   private static void scanAndCall(IntBTNode current, Callback cb, boolean reverse) 
+   private static int scanAndCall(IntBTNode current, int[] array, int index, Callback cb, boolean reverse)
    {
       if (reverse == false) 
       {
          if (current.left != null)
-            scanAndCall(current.left, cb, reverse);
+            index = scanAndCall(current.left, array, index, cb, false);
 
          for (int i=current.count; i>0; i--)
-            cb.call(current);
+            array[index++] = cb.call(current);
 
          if (current.right != null)
-            scanAndCall(current.right, cb, reverse);
+            index = scanAndCall(current.right, array, index, cb, false);
       } 
       else 
       {
          if (current.right != null)
-            scanAndCall(current.right, cb, reverse);
+            index = scanAndCall(current.right, array, index, cb, true);
 
          for (int i=current.count; i>0; i--)
-            cb.call(current);
+            array[index++] = cb.call(current);
 
          if (current.left != null)
-            scanAndCall(current.left, cb, reverse);
+            index = scanAndCall(current.left, array, index, cb, true);
       }
+      
+      return index;
    }
 
    
@@ -323,10 +327,31 @@ public final class IntBTree
    }
 
    
-   // Interface to implement visitor pattern
+   public int[] toArray(int[] array)
+   {
+      if ((array == null) || (array.length < this.size))
+         array = new int[this.size];
+   
+      final int[] res = array;
+      
+      Callback cb = new Callback()
+      {
+         @Override
+         public int call(IntBTNode node) 
+         {
+            return node.value();
+         }        
+      };   
+      
+      scanAndCall(this.root, res, 0, cb, false);
+      return res;
+   }
+   
+   
+   // Interface to implement visitor pattern. Must return the node value
    public interface Callback 
    {
-      public void call(IntBTNode node);
+      public int call(IntBTNode node);
    }
 
   
