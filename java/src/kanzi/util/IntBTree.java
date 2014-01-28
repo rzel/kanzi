@@ -32,7 +32,6 @@ public final class IntBTree
    
    public IntBTree() 
    {
-      this.flags = MIN_DIRTY | MAX_DIRTY;
    }
 
    
@@ -329,6 +328,9 @@ public final class IntBTree
    
    public int[] toArray(int[] array)
    {
+      if (this.root == null)
+         return new int[0];
+
       if ((array == null) || (array.length < this.size))
          array = new int[this.size];
    

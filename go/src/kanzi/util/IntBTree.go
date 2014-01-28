@@ -51,7 +51,6 @@ type IntBTreeCallback func(node *IntBTNode) int
 
 func NewIntBTree() (*IntBTree, error) {
 	this := new(IntBTree)
-	this.flags = MIN_DIRTY | MAX_DIRTY
 	return this, nil
 }
 
@@ -322,6 +321,10 @@ func (this *IntBTree) Max() (int, error) {
 }
 
 func (this *IntBTree) ToArray(array []int) []int {
+	if this.root == nil {
+		return make([]int, 0)
+	}
+
 	if array == nil || len(array) < this.size {
 		array = make([]int, this.size)
 	}
