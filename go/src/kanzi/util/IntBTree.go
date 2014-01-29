@@ -280,6 +280,11 @@ func scanAndCall(current *IntBTNode, array []int, index int, callback IntBTreeCa
 	return index
 }
 
+func (this *IntBTree) Clear() {
+	this.root = nil
+	this.size = 0
+}
+
 func (this *IntBTree) Min() (int, error) {
 	if this.root == nil {
 		return 0, errors.New("Tree is empty")

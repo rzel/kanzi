@@ -284,6 +284,13 @@ public final class IntBTree
    }
 
    
+   public void clear()
+   {
+      this.root = null;
+      this.size = 0;
+   }
+   
+   
    public int min()
    {
       if (this.root == null)
