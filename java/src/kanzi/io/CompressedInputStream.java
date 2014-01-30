@@ -451,7 +451,7 @@ public class CompressedInputStream extends InputStream
    // A task used to decode a block
    // Several tasks may run in parallel. The transforms can be computed concurrently
    // but the entropy decoding is sequential since all tasks share the same bitstream.
-   class DecodingTask implements Callable<Integer>
+   static class DecodingTask implements Callable<Integer>
    {
       private final IndexedByteArray data;
       private final IndexedByteArray buffer;
@@ -566,9 +566,14 @@ public class CompressedInputStream extends InputStream
 
             if (typeOfTransform == 'N')
                buffer.array = data.array; // share buffers if no transform
-            else if (buffer.array.length < this.blockSize)
-               buffer.array = new byte[this.blockSize];
+            else 
+            {
+               int bufferSize = (this.blockSize >= preTransformLength) ? this.blockSize : preTransformLength;
 
+               if (buffer.array.length < bufferSize)
+                  buffer.array = new byte[bufferSize];
+            }
+            
             final int savedIdx = data.index;
 
             // Block entropy decode
