@@ -46,6 +46,7 @@ public class CompressedInputStream extends InputStream
    private static final int COPY_LENGTH_MASK         = 0x0F;
    private static final int SMALL_BLOCK_MASK         = 0x80;
    private static final int SKIP_FUNCTION_MASK       = 0x40;
+   private static final int MIN_BLOCK_SIZE           = 1024;
    private static final int MAX_BLOCK_SIZE           = (32*1024*1024) - 4;
    private static final byte[] EMPTY_BYTE_ARRAY      = new byte[0];
    private static final int CANCEL_TASKS_ID          = -1;
@@ -143,7 +144,7 @@ public class CompressedInputStream extends InputStream
       // Read block size
       this.blockSize = (int) this.ibs.readBits(26);
 
-      if ((this.blockSize < 0) || (this.blockSize > MAX_BLOCK_SIZE))
+      if ((this.blockSize < MIN_BLOCK_SIZE) || (this.blockSize > MAX_BLOCK_SIZE))
          throw new kanzi.io.IOException("Invalid bitstream, incorrect block size: " + this.blockSize,
                  Error.ERR_BLOCK_SIZE);
 

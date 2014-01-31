@@ -721,7 +721,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 	// Read block size
 	this.blockSize = uint(header & 0x03FFFFFF)
 
-	if this.blockSize > MAX_BLOCK_SIZE {
+	if this.blockSize < MIN_BLOCK_SIZE || this.blockSize > MAX_BLOCK_SIZE {
 		errMsg := fmt.Sprintf("Invalid bitstream, incorrect block size: %d", this.blockSize)
 		return NewIOError(errMsg, ERR_BLOCK_SIZE)
 	}
