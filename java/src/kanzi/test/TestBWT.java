@@ -67,19 +67,20 @@ public class TestBWT
             IndexedByteArray iba2 = new IndexedByteArray(buf2, 0);
             IndexedByteArray iba3 = new IndexedByteArray(buf3, 0);
             BWT bwt = new BWT(size);
-            String str1 = new String(buf1);
+            String str1 = new String(buf1, start, buf1.length-start);
             System.out.println("Input:   "+str1);
             iba1.index = start;
+            iba2.index = 0;
             bwt.forward(iba1, iba2);
             int primaryIndex = bwt.getPrimaryIndex();
             String str2 = new String(buf2);
             System.out.print("Encoded: "+str2);
-            System.out.println("  (Primary index="+bwt.getPrimaryIndex()+")");
+            System.out.println("  (Primary index="+primaryIndex+")");
             bwt.setPrimaryIndex(primaryIndex);
-            bwt.inverse(iba2, iba3);
             iba2.index = 0;
             iba3.index = start;
-            String str3 = new String(buf3);
+            bwt.inverse(iba2, iba3);
+            String str3 = new String(buf3, start, buf3.length-start);
             System.out.println("Output:  "+str3);
 
             if (str1.equals(str3) == true)
