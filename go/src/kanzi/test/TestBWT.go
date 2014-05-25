@@ -97,8 +97,6 @@ func TestSpeed() {
 	fmt.Printf("\nSpeed test")
 	iter := 2000
 	size := 256 * 1024
-	delta1 := int64(0)
-	delta2 := int64(0)
 	buf1 := make([]byte, size)
 	buf2 := make([]byte, size)
 	buf3 := make([]byte, size)
@@ -107,6 +105,8 @@ func TestSpeed() {
 
 
 	for jj := 0; jj < 3; jj++ {
+		delta1 := int64(0)
+		delta2 := int64(0)
 		bwt, _ := transform.NewBWT(0)
 		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -136,10 +136,10 @@ func TestSpeed() {
 
 		println()
 		prod := int64(iter) * int64(size)
-		fmt.Printf("BWT Forward transform [ms]: %v\n", delta1/1000000)
-		fmt.Printf("Throughput [KB/s]         : %d\n", prod*1000000/delta1*1000/1024)
-		fmt.Printf("BWT Inverse transform [ms]: %v\n", delta2/1000000)
-		fmt.Printf("Throughput [KB/s]         : %d\n", prod*1000000/delta1*1000/1024)
+		fmt.Printf("Forward transform [ms] : %v\n", delta1/1000000)
+		fmt.Printf("Throughput [KB/s]      : %d\n", prod*1000000/delta1*1000/1024)
+		fmt.Printf("Inverse transform [ms] : %v\n", delta2/1000000)
+		fmt.Printf("Throughput [KB/s]      : %d\n", prod*1000000/delta1*1000/1024)
 		println()
 	}
 }

@@ -17,7 +17,9 @@ package kanzi.test;
 
 import java.util.Random;
 import kanzi.IndexedByteArray;
+import kanzi.IndexedIntArray;
 import kanzi.transform.BWT;
+import kanzi.transform.DivSufSort;
 
 
 public class TestBWT
@@ -99,8 +101,6 @@ public class TestBWT
          System.out.println("\nSpeed test");
          int iter = 2000;
          int size = 256*1024;
-         long delta1 = 0;
-         long delta2 = 0;
          byte[] buf1 = new byte[size];
          byte[] buf2 = new byte[size];
          byte[] buf3 = new byte[size];
@@ -112,6 +112,8 @@ public class TestBWT
 
          for (int jj = 0; jj < 3; jj++)
          {
+             long delta1 = 0;
+             long delta2 = 0;
              BWT bwt = new BWT(size);
              java.util.Random random = new java.util.Random();
              long before, after;
@@ -150,12 +152,12 @@ public class TestBWT
                if (idx >= 0)
                   System.out.println("Failure at index "+idx+" ("+buf1[idx]+"<->"+buf3[idx]+")");             
              }
-         }
 
-         final long prod = (long) iter * (long) size;
-         System.out.println("Forward transform [ms] : " + delta1 / 1000000);
-         System.out.println("Throughput [KB/s]      : " + prod * 1000000L / delta1 * 1000L / 1024);
-         System.out.println("Inverse transform [ms] : " + delta2 / 1000000);
-         System.out.println("Throughput [KB/s]      : " + prod * 1000000L / delta2 * 1000L / 1024);
+            final long prod = (long) iter * (long) size;
+            System.out.println("Forward transform [ms] : " + delta1 / 1000000);
+            System.out.println("Throughput [KB/s]      : " + prod * 1000000L / delta1 * 1000L / 1024);
+            System.out.println("Inverse transform [ms] : " + delta2 / 1000000);
+            System.out.println("Throughput [KB/s]      : " + prod * 1000000L / delta2 * 1000L / 1024);
+         }
     }
 }
