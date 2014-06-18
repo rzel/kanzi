@@ -79,7 +79,7 @@ public final class IntBTree
                parent.left = node;
                return;
             }
-            
+
             parent = parent.left;
          } 
          else
@@ -88,16 +88,16 @@ public final class IntBTree
             {
                parent.right = node;
                return;
-            }
+            } 
             
             parent = parent.right;
-         }
+         } 
       }
-
+            
       parent.count++;
    }
 
-   
+
    // Return the number of matches
    public int contains(int value)
    {
@@ -114,19 +114,12 @@ public final class IntBTree
       while (value != current.value)
       {
          if (value < current.value) 
-         {
-            if (current.left == null)
-               return null;
-
             current = current.left;
-         } 
-         else
-         {
-            if (current.right == null)
-               return null;
-
+         else 
             current = current.right;
-         }
+         
+         if (current == null)
+            return null;
       }
       
       return current;
@@ -138,9 +131,7 @@ public final class IntBTree
       if (this.root == null)
          return false;
 
-      IntBTNode res = this.removeNode(value);
-
-      if (res == null)
+      if (this.removeNode(value) == null)
          return false;
 
       this.size--;

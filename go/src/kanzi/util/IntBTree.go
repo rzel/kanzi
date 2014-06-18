@@ -122,17 +122,13 @@ func findNode(current *IntBTNode, value int) *IntBTNode {
 
 	for value != current.value {
 		if value < current.value {
-			if current.left == nil {
-				return nil
-			}
-
 			current = current.left
 		} else {
-			if current.right == nil {
-				return nil
-			}
-
 			current = current.right
+		}
+		
+		if current == nil {
+		   break
 		}
 	}
 
