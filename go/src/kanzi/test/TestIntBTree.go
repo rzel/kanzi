@@ -105,7 +105,7 @@ func main() {
 
 				tree.Remove(tMin)
 				tree.Remove(tMax)
-				fmt.Printf("Remove: %v %v ", tMin, tMax)
+				fmt.Printf("Remove: %v %v\n", tMin, tMax)
 				array = tree.ToArray(make([]int, tree.Size()))
 
 				for i := range array {

@@ -291,7 +291,7 @@ public final class IntBTree
          if (current.left != null)
             index = scanAndCall(current.left, array, index, cb, false);
 
-         index = cb.call(current, array, index);
+         index = cb.call(current, array, index, reverse);
 
          if (current.right != null)
             index = scanAndCall(current.right, array, index, cb, false);
@@ -301,7 +301,7 @@ public final class IntBTree
          if (current.right != null)
             index = scanAndCall(current.right, array, index, cb, true);
 
-         index = cb.call(current, array, index);
+         index = cb.call(current, array, index, reverse);
 
          if (current.left != null)
             index = scanAndCall(current.left, array, index, cb, true);
@@ -389,9 +389,9 @@ public final class IntBTree
       Callback cb = new Callback()
       {
          @Override
-         public int call(IntBTNode node, int[] values, int idx)
+         public int call(IntBTNode node, int[] values, int idx, boolean reverse)
          {
-            return node.values(values, idx);
+            return node.values(values, idx, reverse);
          }
       };
 
@@ -403,7 +403,7 @@ public final class IntBTree
    // Interface to implement visitor pattern. Must return the node value
    public interface Callback
    {
-      public int call(IntBTNode node, int[] values, int idx);
+      public int call(IntBTNode node, int[] values, int idx, boolean reverse);
    }
 
 
@@ -422,14 +422,24 @@ public final class IntBTree
          this.counts[val&MASK_NODE_BUFFER]++;
       }
 
-      public int values(int[] values, int idx)
+      public int values(int[] values, int idx, boolean reverse)
       {
-         for (int i=NODE_BUFFER_SIZE-1; i>=0; i--)
+         if (reverse == true)
          {
-            for (int j=this.counts[i]-1; j>=0; j--)
-               values[idx++] = this.base + i;
+            for (int i=NODE_BUFFER_SIZE-1; i>=0; i--)
+            {
+               for (int j=this.counts[i]; j>0; j--)
+                  values[idx++] = this.base + i;
+            }
          }
-
+         else
+         {
+            for (int i=0; i<NODE_BUFFER_SIZE-1; i++)
+            {
+               for (int j=this.counts[i]; j>0; j--)
+                  values[idx++] = this.base + i;
+            }
+         }
          return idx;
       }
    }

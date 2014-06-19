@@ -37,11 +37,20 @@ type IntBTNode struct {
 	right  *IntBTNode
 }
 
-func (this *IntBTNode) Values(values []int, idx int) int {
-	for i := range this.counts {
-		for j := this.counts[i]; j>0; j-- {
-			values[idx] = this.base + i
-			idx++
+func (this *IntBTNode) Values(values []int, idx int, reverse bool) int {
+	if reverse == true {
+		for i := len(this.counts) - 1; i >= 0; i-- {
+			for j := this.counts[i]; j > 0; j-- {
+				values[idx] = this.base + i
+				idx++
+			}
+		}
+	} else {
+		for i := range this.counts {
+			for j := this.counts[i]; j > 0; j-- {
+				values[idx] = this.base + i
+				idx++
+			}
 		}
 	}
 
@@ -65,7 +74,7 @@ type IntBTree struct {
 }
 
 // Visitor pattern. Must return the node value
-type IntBTreeCallback func(node *IntBTNode, values []int, idx int) int
+type IntBTreeCallback func(node *IntBTNode, values []int, idx int, reverse bool) int
 
 func NewIntBTree() (*IntBTree, error) {
 	this := new(IntBTree)
@@ -296,7 +305,7 @@ func scanAndCall(current *IntBTNode, array []int, index int, callback IntBTreeCa
 			index = scanAndCall(current.left, array, index, callback, false)
 		}
 
-		index = callback(current, array, index)
+		index = callback(current, array, index, reverse)
 
 		if current.right != nil {
 			index = scanAndCall(current.right, array, index, callback, false)
@@ -306,7 +315,7 @@ func scanAndCall(current *IntBTNode, array []int, index int, callback IntBTreeCa
 			index = scanAndCall(current.right, array, index, callback, true)
 		}
 
-		index = callback(current, array, index)
+		index = callback(current, array, index, reverse)
 
 		if current.left != nil {
 			index = scanAndCall(current.left, array, index, callback, true)
@@ -387,6 +396,6 @@ func (this *IntBTree) ToArray(array []int) []int {
 	return res
 }
 
-func defaultCallback(node *IntBTNode, values []int, index int) int {
-	return node.Values(values, index)
+func defaultCallback(node *IntBTNode, values []int, index int, reverse bool) int {
+	return node.Values(values, index, reverse)
 }
