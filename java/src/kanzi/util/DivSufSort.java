@@ -24,7 +24,6 @@ package kanzi.util;
 
 public final class DivSufSort
 {
-    private static final int ALPHABET_SIZE = 256;
     private final static int SS_INSERTIONSORT_THRESHOLD = 8;
     private final static int SS_BLOCKSIZE = 1024;
     private final static int SS_MISORT_STACKSIZE = 16;
@@ -53,7 +52,7 @@ public final class DivSufSort
         251, 252, 252, 253, 253, 254, 254, 255
     };
 
-    private final static int [] LOG_TABLE =
+    private final static int[] LOG_TABLE =
     {
         -1, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
         4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
@@ -72,22 +71,37 @@ public final class DivSufSort
     private final int[] bucketA;
     private final int[] bucketB;
     private int start;
-    private final StackElement[] ssStack;
-    private final StackElement[] trStack;
-    private final StackElement[] mergeStack;
+    private final Stack ssStack;
+    private final Stack trStack;
+    private final Stack mergeStack;
 
 
     public DivSufSort()
     {
-        this.bucketA = new int[ALPHABET_SIZE];
-        this.bucketB = new int[ALPHABET_SIZE*ALPHABET_SIZE];     
-        this.sa = new int[0]; 
-        this.ssStack = new StackElement[SS_MISORT_STACKSIZE];
-        this.trStack = new StackElement[TR_STACKSIZE];
-        this.mergeStack = new StackElement[SS_SMERGE_STACKSIZE];
+        this.bucketA = new int[256];
+        this.bucketB = new int[65536];
+        this.sa = new int[0];
+        this.ssStack = new Stack(SS_MISORT_STACKSIZE);
+        this.trStack = new Stack(TR_STACKSIZE);
+        this.mergeStack = new Stack(SS_SMERGE_STACKSIZE);
+    }
+
+
+    public void reset()
+    {
+       this.ssStack.index = 0;
+       this.trStack.index = 0;
+       this.mergeStack.index = 0;
+       
+       for (int i=this.bucketA.length-1; i>=0; i--)
+          this.bucketA[i] = 0;
+
+       for (int i=this.bucketB.length-1; i>=0; i--)
+          this.bucketB[i] = 0;
     }
     
     
+
     // Not thread safe
     public int[] computeSuffixArray(int[] input, int start, int length)
     {
@@ -105,38 +119,38 @@ public final class DivSufSort
     private void constructSuffixArray(int [] bucket_A, int [] bucket_B, int n, int m)
     {
         int c0;
-        
+
         if (m > 0)
         {
-            for (int c1=ALPHABET_SIZE-2; c1>=0; c1--)
+            for (int c1=254; c1>=0; c1--)
             {
-                final int idx = c1 * ALPHABET_SIZE;
+                final int idx = c1 << 8;
                 final int i = bucket_B[idx+c1+1];
                 int k = 0;
                 int c2 = -1;
-                
+
                 for (int j=bucket_A[c1+1]-1; j >= i; j--)
                 {
                     int s = this.sa[j];
                     this.sa[j] = ~s;
-                   
+
                     if (s > 0)
                     {
                         s--;
                         c0 = this.buffer[this.start+s];
-                        
+
                         if ((s > 0) && (this.buffer[this.start+s-1] > c0))
                             s = ~s;
-                        
+
                         if (c0 != c2)
                         {
                             if (c2 >= 0)
                                 bucket_B[idx+c2] = k;
-                            
+
                             c2 = c0;
                             k = bucket_B[idx+c2];
                         }
-                        
+
                         this.sa[k--] = s;
                     }
                 }
@@ -146,17 +160,17 @@ public final class DivSufSort
         int c2 = this.buffer[this.start+n-1];
         int k = bucket_A[c2];
         this.sa[k++] = (this.buffer[this.start+n-2] < c2) ? ~(n-1) : (n-1);
-        
-        // Scan the suffix array from left to right. 
+
+        // Scan the suffix array from left to right.
         for (int i=0, j=n; i < j; i++)
         {
             int s = this.sa[i];
-            
+
             if (s > 0)
             {
                 s--;
                 c0 = this.buffer[this.start+s];
-                
+
                 if ((s == 0) || (this.buffer[this.start+s-1] < c0))
                     s = ~s;
 
@@ -166,7 +180,7 @@ public final class DivSufSort
                     c2 = c0;
                     k = bucket_A[c2];
                 }
-                
+
                 this.sa[k++] = s;
             }
             else
@@ -192,39 +206,41 @@ public final class DivSufSort
             }
             while ((i >= 0) && ((c0=this.buffer[this.start+i]) >= c1));
 
-            if (i >= 0)
+            if (i < 0)
+               break;
+            
+            bucket_B[(c0<<8)+c1]++;
+            m--;
+            arr[m] = i;
+            i--;
+            c1 = c0;
+
+            while ((i >= 0) && ((c0=this.buffer[this.start+i]) <= c1))
             {
-                bucket_B[c0*ALPHABET_SIZE+c1]++;
-                m--;
-                arr[m] = i;
-                i--;
-                c1 = c0;
-      
-                for ( ; (i >= 0) && ((c0=this.buffer[this.start+i]) <= c1); i--)
-                {
-                   bucket_B[c1*ALPHABET_SIZE+c0]++;
-                   c1 = c0;
-                }
+               bucket_B[(c1<<8)+c0]++;
+               c1 = c0;
+               i--;
             }
         }
-        
+
         m = n - m;
         c0 = 0;
 
-        // Calculate the index of this.start/end point of each bucket.
-        for (int i=0, j=0; c0 < ALPHABET_SIZE; c0++)
+        // Calculate the index of start/end point of each bucket.
+        for (int i=0, j=0; c0 < 256; c0++)
         {
             final int t = i + bucket_A[c0];
-            bucket_A[c0] = i + j; // start point 
-            final int idx = c0 * ALPHABET_SIZE;
+            bucket_A[c0] = i + j; // start point
+            final int idx = c0 << 8;
             i = t + bucket_B[idx+c0];
             c1 = c0 + 1;
-            
-            for ( ; c1 < ALPHABET_SIZE; c1++)
+
+            while (c1 < 256)
             {
                 j += bucket_B[idx+c1];
                 bucket_B[idx+c1] = j; // end point
-                i += bucket_B[c1*ALPHABET_SIZE+c0];
+                i += bucket_B[(c1<<8)+c0];
+                c1++;
             }
         }
 
@@ -233,36 +249,35 @@ public final class DivSufSort
             // Sort the type B* suffixes by their first two characters.
             final int pab = n - m;
             final int isab = m;
-            
+   
             for (int i=m-2; i >= 0; i--)
             {
-                final int t = arr[pab + i];
-                c0 = this.buffer[this.start+t];
-                c1 = this.buffer[this.start+t+1];
-                bucket_B[c0*ALPHABET_SIZE+c1]--;
-                arr[bucket_B[c0*ALPHABET_SIZE+c1]] = i;
+                final int t = this.start + arr[pab+i];
+                final int idx = (this.buffer[t] << 8) + this.buffer[t+1];
+                bucket_B[idx]--;
+                arr[bucket_B[idx]] = i;
             }
-            
-            int t = arr[pab+m-1];
-            c0 = this.buffer[this.start + t];
-            c1 = this.buffer[this.start + t + 1];
-            bucket_B[c0*ALPHABET_SIZE+c1]--;
-            arr[bucket_B[c0*ALPHABET_SIZE+c1]] = m - 1;
+
+            final int t = this.start + arr[pab+m-1];
+            c0 = this.buffer[t];
+            c1 = this.buffer[t+1];
+            bucket_B[(c0<<8)+c1]--;
+            arr[bucket_B[(c0<<8)+c1]] = m - 1;
 
             // Sort the type B* substrings using sssort.
             int buf = m;
             int bufSize = n - m - m;
-            c0 = ALPHABET_SIZE - 2;
+            c0 = 254;
 
             for (int j=m; j > 0; c0--)
             {
-                for (c1=ALPHABET_SIZE-1; c1 > c0; c1--)
+                for (c1=255; c1 > c0; c1--)
                 {
-                    final int i = bucket_B[c0*ALPHABET_SIZE+c1];
-                    
-                    if (j - i > 1)
+                    final int i = bucket_B[(c0<<8)+c1];
+
+                    if (j - i > 1) 
                         ssSort(pab, i, j, buf, bufSize, 2, n, arr[i] == m - 1);
-                    
+
                     j = i;
                 }
             }
@@ -272,91 +287,91 @@ public final class DivSufSort
             {
                 if (arr[i] >= 0)
                 {
-                    final int j = i;
-                    
+                    final int i0 = i;
+
                     do
                     {
                         arr[isab+arr[i]] = i;
                         i--;
                     }
                     while ((i >= 0) && (arr[i] >= 0));
-                    
-                    arr[i+1] = i - j;
-                    
+
+                    arr[i+1] = i - i0;
+
                     if (i <= 0)
                         break;
                 }
-                
-                int j = i;
-                
+
+                final int i0 = i;
+
                 do
                 {
                     arr[i] = ~arr[i];
-                    arr[isab+arr[i]] = j;
+                    arr[isab+arr[i]] = i0;
                     i--;
                 }
                 while (arr[i] < 0);
-                
-                arr[isab+arr[i]] = j;
+
+                arr[isab+arr[i]] = i0;
             }
-            
+
             // Construct the inverse suffix array of type B* suffixes using trsort.
-            trSort(isab, m, 1);
-            
+            this.trSort(isab, m, 1);
+
             // Set the sorted order of type B* suffixes.
             c0 = this.buffer[this.start+n-1];
-            
-            for (int i=n-1, j= m; i >= 0; )
+
+            for (int i=n-1, j=m; i >= 0; )
             {
                 i--;
                 c1 = c0;
-                
+
                 for ( ; (i >= 0) && ((c0=this.buffer[this.start+i]) >= c1); i--)
                 {
                    c1 = c0;
                 }
-                
+
                 if (i >= 0)
                 {
-                    t = i;
+                    final int tt = i;
                     i--;
                     c1 = c0;
-                    
+
                     for (; (i >= 0) && ((c0=this.buffer[this.start+i]) <= c1); i--)
                     {
                        c1 = c0;
                     }
-                    
+
                     j--;
-                    arr[arr[isab+j]] = ((t == 0) || ((t-i) > 1)) ? t : ~t;
+                    arr[arr[isab+j]] = ((tt == 0) || (tt-i > 1)) ? tt : ~tt;
                 }
             }
 
             // Calculate the index of start/end point of each bucket.
-            bucket_B[(ALPHABET_SIZE-1)*ALPHABET_SIZE+(ALPHABET_SIZE-1)] = n; // end
-            
-            c0 = ALPHABET_SIZE - 2;
-            
+            bucket_B[bucket_B.length-1] = n; // end
+            c0 = 254;
+
             for (int k=m-1; c0 >= 0; c0--)
             {
                 int i = bucket_A[c0+1] - 1;
-                
-                for (c1=ALPHABET_SIZE-1; c0 < c1; c1--)
-                {
-                    t = i - bucket_B[c1*ALPHABET_SIZE+c0];
-                    bucket_B[c1*ALPHABET_SIZE+c0] = i; // end point
-                    i = t;
 
+                for (c1=255; c1 > c0; c1--)
+                {
+                    final int tt = i - bucket_B[(c1<<8)+c0];
+                    bucket_B[(c1<<8)+c0] = i; // end point
+                    i = tt;
+                 
                     // Move all type B* suffixes to the correct position.
-                    for (int j=bucket_B[c0*ALPHABET_SIZE+c1]; j <= k; i--, k--)
+                    // Typically very small number of copies, no need for arraycopy
+                    for (int j=bucket_B[(c0<<8)+c1]; j <= k; i--, k--)
                         arr[i] = arr[k];
                 }
-                
-                bucket_B[c0*ALPHABET_SIZE+c0+1] = i - bucket_B[c0*ALPHABET_SIZE+c0] + 1;
-                bucket_B[c0*ALPHABET_SIZE+c0] = i; // end point
+
+                bucket_B[(c0<<8)+c0+1] = i - bucket_B[(c0<<8)+c0] + 1;
+                bucket_B[(c0<<8)+c0] = i; // end point
             }
         }
-
+        
         return m;
     }
 
@@ -373,7 +388,7 @@ public final class DivSufSort
         if ((bufSize < SS_BLOCKSIZE) && (bufSize < last-first))
         {
            limit = ssIsqrt(last-first);
-            
+
            if (bufSize < limit)
            {
                if (limit > SS_BLOCKSIZE)
@@ -383,6 +398,8 @@ public final class DivSufSort
                buf = middle;
                bufSize = limit;
            }
+           else
+              limit = 0;
         }
 
         int a;
@@ -390,7 +407,7 @@ public final class DivSufSort
 
         for (a=first ; middle-a > SS_BLOCKSIZE; a+=SS_BLOCKSIZE, i++)
         {
-            ssMintroSort(pa, a, a + SS_BLOCKSIZE, depth);
+            this.ssMultiKeyIntroSort(pa, a, a+SS_BLOCKSIZE, depth);
             int curBufSize = last - (a + SS_BLOCKSIZE);
             int curBuf = a + SS_BLOCKSIZE;
             int k = SS_BLOCKSIZE;
@@ -403,24 +420,24 @@ public final class DivSufSort
             }
 
             for (int j=i; (j&1) != 0; b-=k, k<<=1, j>>=1)
-                ssSwapMerge(pa, b-k, b, b+k, curBuf, curBufSize, depth);
+               this.ssSwapMerge(pa, b-k, b, b+k, curBuf, curBufSize, depth);
         }
 
-        ssMintroSort(pa, a, middle, depth);
+        this.ssMultiKeyIntroSort(pa, a, middle, depth);
 
         for (int k=SS_BLOCKSIZE; i != 0; k<<=1, i>>=1)
         {
             if ((i & 1) == 0)
                continue;
-            
-            ssSwapMerge(pa, a-k, a, middle, buf, bufSize, depth);
+
+            this.ssSwapMerge(pa, a-k, a, middle, buf, bufSize, depth);
             a -= k;
         }
 
         if (limit != 0)
         {
-            ssMintroSort(pa, middle, last, depth);
-            ssInplaceMerge(pa, first, middle, last, depth);
+            this.ssMultiKeyIntroSort(pa, middle, last, depth);
+            this.ssInplaceMerge(pa, first, middle, last, depth);
         }
 
         if (lastSuffix == true)
@@ -428,7 +445,7 @@ public final class DivSufSort
             i = this.sa[first-1];
             final int p1 = this.sa[pa+i];
             final int p11 = n - 2;
-            
+
             for (a=first; (a<last) && ((this.sa[a]<0) || (ssCompare(p1, p11, pa+this.sa[a], depth)>0)); a++)
                 this.sa[a-1] = this.sa[a];
 
@@ -492,11 +509,11 @@ public final class DivSufSort
         return (u1 < u1n) ? ((u2 < u2n) ? this.buffer[u1] - this.buffer[u2] : 1) : ((u2 < u2n) ? -1 : 0);
     }
 
-    
+
     private void ssInplaceMerge(int pa, int first, int middle, int last, int depth)
     {
        final int[] arr = this.sa;
-       
+
         while (true)
         {
             int p, x;
@@ -547,7 +564,7 @@ public final class DivSufSort
             if (x != 0)
             {
                 last--;
-                
+
                 while (arr[last] < 0)
                 {
                    last--;
@@ -566,7 +583,7 @@ public final class DivSufSort
         int r = last - middle;
         final int[] arr = this.sa;
 
-        while ((l>0) & (r>0))
+        while ((l > 0) && (r > 0))
         {
             if (l == r)
             {
@@ -643,7 +660,7 @@ public final class DivSufSort
         }
     }
 
-    
+
     private static int getIndex(int a)
     {
         return (a >= 0) ? a : ~a;
@@ -655,32 +672,31 @@ public final class DivSufSort
     {
         final int[] arr = this.sa;
         int check = 0;
-        int ssize = 0;
 
         while (true)
         {
             if (last - middle <= bufSize)
             {
                 if ((first < middle) && (middle < last))
-                    ssMergeBackward(pa, first, middle, last, buf, depth);
+                    this.ssMergeBackward(pa, first, middle, last, buf, depth);
 
                 if (((check & 1) != 0)
-                     || (((check & 2) != 0) && (ssCompare(pa+getIndex(this.sa[first-1]),
+                     || (((check & 2) != 0) && (this.ssCompare(pa+getIndex(this.sa[first-1]),
                        pa+arr[first], depth) == 0)))
                 {
                     arr[first] = ~arr[first];
                 }
 
                 if (((check & 4) != 0)
-                    && ((ssCompare(pa+getIndex(arr[last-1]), pa+arr[last], depth) == 0)))
+                    && ((this.ssCompare(pa+getIndex(arr[last-1]), pa+arr[last], depth) == 0)))
                 {
                     arr[last] = ~arr[last];
                 }
 
-                if (ssize <= 0)
+                if (this.mergeStack.size() <= 0)
                    return;
 
-                StackElement se = this.mergeStack[--ssize];
+                StackElement se = this.mergeStack.pop();
                 first = se.a;
                 middle = se.b;
                 last = se.c;
@@ -691,7 +707,7 @@ public final class DivSufSort
             if (middle - first <= bufSize)
             {
                 if (first < middle)
-                    ssMergeForward(pa, first, middle, last, buf, depth);
+                    this.ssMergeForward(pa, first, middle, last, buf, depth);
 
                 if (((check & 1) != 0)
                     || (((check & 2) != 0) && (ssCompare(pa+getIndex(arr[first-1]),
@@ -706,10 +722,10 @@ public final class DivSufSort
                     arr[last] = ~arr[last];
                 }
 
-                if (ssize <= 0)
+                if (this.mergeStack.size() <= 0)
                    return;
 
-                StackElement se = this.mergeStack[--ssize];
+                StackElement se = this.mergeStack.pop();
                 first = se.a;
                 middle = se.b;
                 last = se.c;
@@ -767,7 +783,7 @@ public final class DivSufSort
 
                 if (l - first <= last - r)
                 {
-                    this.mergeStack[ssize++] = new StackElement(r, rm, last, (next & 3) | (check & 4));
+                    this.mergeStack.push(r, rm, last, (next & 3) | (check & 4));
                     middle = lm;
                     last = l;
                     check = (check & 3) | (next & 4);
@@ -777,7 +793,7 @@ public final class DivSufSort
                     if ((r == middle) && ((next & 2) != 0))
                         next ^= 6;
 
-                    this.mergeStack[ssize++] = new StackElement(first, lm, l, (check & 3) | (next & 4));
+                    this.mergeStack.push(first, lm, l, (check & 3) | (next & 4));
                     first = r;
                     middle = rm;
                     check = (next & 3) | (check & 4);
@@ -785,28 +801,28 @@ public final class DivSufSort
             }
             else
             {
-                if (ssCompare(pa+getIndex(arr[middle-1]), pa + arr[middle], depth) == 0)
+                if (this.ssCompare(pa+getIndex(arr[middle-1]), pa + arr[middle], depth) == 0)
                 {
                     arr[middle] = ~arr[middle];
                 }
 
                 if (((check & 1) != 0)
-                    || (((check & 2) != 0) && (ssCompare(pa+getIndex(this.sa[first-1]),
+                    || (((check & 2) != 0) && (this.ssCompare(pa+getIndex(this.sa[first-1]),
                         pa+arr[first], depth) == 0)))
                 {
                     arr[first] = ~arr[first];
                 }
 
                 if (((check & 4) != 0)
-                    && ((ssCompare(pa+getIndex(arr[last-1]), pa+arr[last], depth) == 0)))
+                    && ((this.ssCompare(pa+getIndex(arr[last-1]), pa+arr[last], depth) == 0)))
                 {
                     arr[last] = ~arr[last];
                 }
 
-                if (ssize <= 0)
+                if (this.mergeStack.size() <= 0)
                    return;
 
-                StackElement se = this.mergeStack[--ssize];
+                StackElement se = this.mergeStack.pop();
                 first = se.a;
                 middle = se.b;
                 last = se.c;
@@ -815,7 +831,7 @@ public final class DivSufSort
         }
     }
 
- 
+
     private  void ssMergeForward(int pa, int first, int middle, int last, int buf,
         int depth)
     {
@@ -987,7 +1003,7 @@ public final class DivSufSort
                         arr[c--] = arr[a];
                     }
                     while (arr[c] < 0);
-                    
+
                     x ^= 2;
                 }
 
@@ -1047,7 +1063,7 @@ public final class DivSufSort
                         arr[c--] = arr[a];
                     }
                     while (arr[c] < 0);
-                    
+
                     x ^= 2;
                 }
 
@@ -1086,11 +1102,11 @@ public final class DivSufSort
         }
     }
 
-    
+
     private void ssInsertionSort(int pa, int first, int last, int depth)
     {
-       final int[] arr = this.sa;
-       
+        final int[] arr = this.sa;
+
         for (int i=last-2; first<=i; i--)
         {
             int t = arr[i];
@@ -1148,16 +1164,15 @@ public final class DivSufSort
             y = (SQQ_TABLE[x >> ((e - 6) - (e & 1))] >> (7 - (e >> 1))) + 1;
         }
 
-        return (x < (y * y)) ? y - 1 : y;
+        return (x < y * y) ? y - 1 : y;
     }
 
 
-    private void ssMintroSort(int pa, int first, int last, int depth)
+    private void ssMultiKeyIntroSort(int pa, int first, int last, int depth)
     {
-        int ssize = 0;
         int limit = ssIlg(last-first);
         int v, x = 0;
-        
+
         while (true)
         {
             if (last - first <= SS_INSERTIONSORT_THRESHOLD)
@@ -1165,11 +1180,10 @@ public final class DivSufSort
                 if (last - first > 1)
                     ssInsertionSort(pa, first, last, depth);
 
-                if (ssize <= 0)
+                if (this.ssStack.size() <= 0)
                    return;
 
-                ssize--;
-                StackElement se = this.ssStack[ssize];
+                StackElement se = this.ssStack.pop();
                 first = se.a;
                 last = se.b;
                 depth = se.c;
@@ -1179,17 +1193,20 @@ public final class DivSufSort
 
             final int Td = depth;
             final int idx = this.start + Td;
+            int a;
 
             if (limit-- == 0)
                 ssHeapSort(idx, pa, first, last - first);
 
-            int a, b;
-
             if (limit < 0)
             {
-                for (a=first+1, v = this.buffer[idx+this.sa[pa+this.sa[first]]]; a < last; a++)
+                v = this.buffer[idx+this.sa[pa+this.sa[first]]];
+
+                for (a=first+1; a < last; a++)
                 {
-                    if ((x = this.buffer[idx+this.sa[pa+this.sa[a]]]) != v)
+                    x = this.buffer[idx+this.sa[pa+this.sa[a]]];
+
+                    if (x != v)
                     {
                         if (a - first > 1)
                             break;
@@ -1206,7 +1223,7 @@ public final class DivSufSort
                 {
                     if (a - first > 1)
                     {
-                        this.ssStack[ssize++] = new StackElement(a, last, depth, -1);
+                        this.ssStack.push(a, last, depth, -1);
                         last = a;
                         depth++;
                         limit = ssIlg(a-first);
@@ -1221,7 +1238,7 @@ public final class DivSufSort
                 {
                     if (last - a > 1)
                     {
-                        this.ssStack[ssize++] = new StackElement(first, a, depth+1, ssIlg(a-first));
+                        this.ssStack.push(first, a, depth+1, ssIlg(a-first));
                         first = a;
                         limit = -1;
                     }
@@ -1240,9 +1257,10 @@ public final class DivSufSort
             a = ssPivot(Td, pa, first, last);
             v = this.buffer[idx+this.sa[pa+this.sa[a]]];
             swapInSA(first, a);
+            int b = first;
 
             // partition
-            for (b=first; (++b < last) && ((x=this.buffer[idx+this.sa[pa+this.sa[b]]]) == v);)
+            while ((++b < last) && ((x=this.buffer[idx+this.sa[pa+this.sa[b]]]) == v))
             {
             }
 
@@ -1250,7 +1268,7 @@ public final class DivSufSort
 
             if ((a < last) && (x < v))
             {
-                for (; (++b < last) && ((x=this.buffer[idx+this.sa[pa+this.sa[b]]]) <= v);)
+                while ((++b < last) && ((x=this.buffer[idx+this.sa[pa+this.sa[b]]]) <= v))
                 {
                     if (x == v)
                     {
@@ -1262,7 +1280,7 @@ public final class DivSufSort
 
             int c = last;
 
-            while ((b < --c) && ((x=this.buffer[idx+this.sa[pa+this.sa[c]]]) == v))
+            while ((--c > b) && ((x=this.buffer[idx+this.sa[pa+this.sa[c]]]) == v))
             {
             }
 
@@ -1270,7 +1288,7 @@ public final class DivSufSort
 
             if ((b < d) && (x > v))
             {
-                while ((b < --c) && ((x=this.buffer[idx+this.sa[pa+this.sa[c]]]) >= v))
+                while ((--c > b) && ((x=this.buffer[idx+this.sa[pa+this.sa[c]]]) >= v))
                 {
                     if (x == v)
                     {
@@ -1293,7 +1311,7 @@ public final class DivSufSort
                     }
                 }
 
-                while ((b < --c) && ((x=this.buffer[idx+this.sa[pa+this.sa[c]]]) >= v))
+                while ((--c > b) && ((x=this.buffer[idx+this.sa[pa+this.sa[c]]]) >= v))
                 {
                     if (x == v)
                     {
@@ -1332,20 +1350,20 @@ public final class DivSufSort
                 {
                     if (last - c <= c - b)
                     {
-                        this.ssStack[ssize++] = new StackElement(b, c, depth + 1, ssIlg(c-b));
-                        this.ssStack[ssize++] = new StackElement(c, last, depth, limit);
+                        this.ssStack.push(b, c, depth+1, ssIlg(c-b));
+                        this.ssStack.push(c, last, depth, limit);
                         last = a;
                     }
                     else if (a - first <= c - b)
                     {
-                        this.ssStack[ssize++] = new StackElement(c, last, depth, limit);
-                        this.ssStack[ssize++] = new StackElement(b, c, depth + 1, ssIlg(c-b));
+                        this.ssStack.push(c, last, depth, limit);
+                        this.ssStack.push(b, c, depth+1, ssIlg(c-b));
                         last = a;
                     }
                     else
                     {
-                        this.ssStack[ssize++] = new StackElement(c, last, depth, limit);
-                        this.ssStack[ssize++] = new StackElement(first, a, depth, limit);
+                        this.ssStack.push(c, last, depth, limit);
+                        this.ssStack.push(first, a, depth, limit);
                         first = b;
                         last = c;
                         depth++;
@@ -1356,36 +1374,36 @@ public final class DivSufSort
                 {
                     if (a - first <= c - b)
                     {
-                        this.ssStack[ssize++] = new StackElement(b, c, depth + 1, ssIlg(c - b));
-                        this.ssStack[ssize++] = new StackElement(first, a, depth, limit);
+                        this.ssStack.push(b, c, depth+1, ssIlg(c-b));
+                        this.ssStack.push(first, a, depth, limit);
                         first = c;
                     }
                     else if (last - c <= c - b)
                     {
-                        this.ssStack[ssize++] = new StackElement(first, a, depth, limit);
-                        this.ssStack[ssize++] = new StackElement(b, c, depth + 1, ssIlg(c - b));
+                        this.ssStack.push(first, a, depth, limit);
+                        this.ssStack.push(b, c, depth + 1, ssIlg(c-b));
                         first = c;
                     }
                     else
                     {
-                        this.ssStack[ssize++] = new StackElement(first, a, depth, limit);
-                        this.ssStack[ssize++] = new StackElement(c, last, depth, limit);
+                        this.ssStack.push(first, a, depth, limit);
+                        this.ssStack.push(c, last, depth, limit);
                         first = b;
                         last = c;
                         depth++;
-                        limit = ssIlg(c - b);
+                        limit = ssIlg(c-b);
                     }
                 }
             }
             else
             {
-                limit++;
-
                 if (this.buffer[idx+this.sa[pa+this.sa[first]]-1] < v)
                 {
                     first = ssPartition(pa, first, last, depth);
                     limit = ssIlg(last-first);
                 }
+                else
+                   limit++;
 
                 depth++;
             }
@@ -1421,7 +1439,6 @@ public final class DivSufSort
             final int t = v2;
             v2 = v3;
             v3 = t;
-
         }
 
         if (this.buffer[idx+this.sa[pa+this.sa[v4]]] > this.buffer[idx+this.sa[pa+this.sa[v5]]])
@@ -1490,7 +1507,7 @@ public final class DivSufSort
 
     private int ssPartition(int pa, int first, int last, int depth)
     {
-       final int[] arr = this.sa;
+        final int[] arr = this.sa;
         int a = first - 1;
         int b = last;
 
@@ -1548,13 +1565,12 @@ public final class DivSufSort
             ssFixDown(idx, pa, saIdx, 0, i);
             this.sa[saIdx+i] = t;
         }
-
     }
 
 
     private void ssFixDown(int idx, int pa, int saIdx, int i, int size)
     {
-       final int[] arr = this.sa;
+        final int[] arr = this.sa;
         final int v = arr[saIdx+i];
         final int c = this.buffer[idx+arr[pa+v]];
         int j;
@@ -1584,8 +1600,8 @@ public final class DivSufSort
 
     private static int ssIlg(int n)
     {
-        return ((n & 0xFF00) != 0) ? 8 + LOG_TABLE[(n >> 8) & 0xFF]
-            : 0 + LOG_TABLE[n & 0xFF];
+        return ((n & 0xFF00) != 0) ? 8 + LOG_TABLE[(n>>8) & 0xFF]
+            : LOG_TABLE[n & 0xFF];
     }
 
 
@@ -1627,10 +1643,10 @@ public final class DivSufSort
 
                     final int last = arr[isa+t] + 1;
 
-                    if (1 < (last - first))
+                    if (last - first > 1)
                     {
                         budget.count = 0;
-                        trIntroSort(isa, isad, first, last, budget);
+                        this.trIntroSort(isa, isad, first, last, budget);
 
                         if (budget.count != 0)
                             unsorted += budget.count;
@@ -1748,15 +1764,14 @@ public final class DivSufSort
          return res;
     }
 
-    
+
     private void trIntroSort(int isa, int isad, int first, int last, TRBudget budget)
     {
         final int incr = isad - isa;
         final int[] arr = this.sa;
         int limit = trIlg(last - first);
         int trlink = -1;
-        int ssize = 0;
-        
+
         while (true)
         {
             if (limit < 0)
@@ -1764,7 +1779,7 @@ public final class DivSufSort
                 if (limit == -1)
                 {
                     // tandem repeat partition
-                    long res = trPartition(isad-incr, first, first, last, last-1);
+                    long res = this.trPartition(isad-incr, first, first, last, last-1);
                     final int a = (int) (res >> 32);
                     final int b = (int) (res & 0xFFFFFFFFL);
 
@@ -1781,19 +1796,19 @@ public final class DivSufSort
                             arr[isa+arr[c]] = v;
                     }
 
-                    // push 
+                    // push
                     if (b - a > 1)
                     {
-                        this.trStack[ssize++] = new StackElement(0, a, b, 0, 0);
-                        this.trStack[ssize++] = new StackElement(isad-incr, first, last, -2, trlink);
-                        trlink = ssize - 2;
+                        this.trStack.push(0, a, b, 0, 0);
+                        this.trStack.push(isad-incr, first, last, -2, trlink);
+                        trlink = this.trStack.size() - 2;
                     }
 
                     if (a - first <= last - b)
                     {
                         if (a - first > 1)
                         {
-                            this.trStack[ssize++] = new StackElement(isad, b, last, trIlg(last-b), trlink);
+                            this.trStack.push(isad, b, last, trIlg(last-b), trlink);
                             last = a;
                             limit = trIlg(a - first);
                         }
@@ -1804,10 +1819,10 @@ public final class DivSufSort
                         }
                         else
                         {
-                            if (ssize <= 0)
+                            if (this.trStack.size() <= 0)
                                return;
 
-                            StackElement se = this.trStack[--ssize];
+                            StackElement se = this.trStack.pop();
                             isad = se.a;
                             first = se.b;
                             last = se.c;
@@ -1819,7 +1834,7 @@ public final class DivSufSort
                     {
                         if (last - b > 1)
                         {
-                            this.trStack[ssize++] = new StackElement(isad, first, a, trIlg(a - first), trlink);
+                            this.trStack.push(isad, first, a, trIlg(a - first), trlink);
                             first = b;
                             limit = trIlg(last - b);
                         }
@@ -1830,10 +1845,10 @@ public final class DivSufSort
                         }
                         else
                         {
-                            if (ssize <= 0)
+                            if (this.trStack.size() <= 0)
                                return;
 
-                            StackElement se = this.trStack[--ssize];
+                            StackElement se = this.trStack.pop();
                             isad = se.a;
                             first = se.b;
                             last = se.c;
@@ -1845,26 +1860,26 @@ public final class DivSufSort
                 else if (limit == -2)
                 {
                     // tandem repeat copy
-                    StackElement se = this.trStack[--ssize];
+                    StackElement se = this.trStack.pop();
                     int a = se.b;
                     int b = se.c;
 
-                    if (this.trStack[ssize].d == 0)
+                    if (se.d == 0)
                     {
-                       trCopy(isa, first, a, b, last, isad - isa);
+                       this.trCopy(isa, first, a, b, last, isad - isa);
                     }
                     else
                     {
                        if (trlink >= 0)
-                           this.trStack[trlink].d = -1;
+                           se.d = -1;
 
-                       trPartialCopy(isa, first, a, b, last, isad - isa);
+                       this.trPartialCopy(isa, first, a, b, last, isad - isa);
                     }
 
-                    if (ssize <= 0)
+                    if (this.trStack.size() <= 0)
                       return;
 
-                    se = this.trStack[--ssize];
+                    se = this.trStack.pop();
                     isad = se.a;
                     first = se.b;
                     last = se.c;
@@ -1887,7 +1902,7 @@ public final class DivSufSort
 
                         first = a;
                     }
-                    
+
                     if (first < last)
                     {
                         int a = first;
@@ -1910,12 +1925,12 @@ public final class DivSufSort
                                 arr[isa+arr[b]] = v;
                         }
 
-                        // push 
+                        // push
                         if (budget.check(a - first) == true)
                         {
                             if (a - first <= last - a)
                             {
-                                this.trStack[ssize++] = new StackElement(isad, a, last, -3, trlink);
+                                this.trStack.push(isad, a, last, -3, trlink);
                                 isad += incr;
                                 last = a;
                                 limit = next;
@@ -1924,7 +1939,7 @@ public final class DivSufSort
                             {
                                 if (last - a > 1)
                                 {
-                                    this.trStack[ssize++] = new StackElement(isad+incr, first, a, next, trlink);
+                                    this.trStack.push(isad+incr, first, a, next, trlink);
                                     first = a;
                                     limit = -3;
                                 }
@@ -1939,7 +1954,7 @@ public final class DivSufSort
                         else
                         {
                             if (trlink >= 0)
-                                this.trStack[trlink].d = -1;
+                                this.trStack.get(trlink).d = -1;
 
                             if (last - a > 1)
                             {
@@ -1948,10 +1963,10 @@ public final class DivSufSort
                             }
                             else
                             {
-                                if (ssize <= 0)
+                                if (this.trStack.size() <= 0)
                                    return;
 
-                                StackElement se = this.trStack[--ssize];
+                                StackElement se = this.trStack.pop();
                                 isad = se.a;
                                 first = se.b;
                                 last = se.c;
@@ -1962,10 +1977,10 @@ public final class DivSufSort
                     }
                     else
                     {
-                        if (ssize <= 0)
+                        if (this.trStack.size() <= 0)
                            return;
 
-                        StackElement se = this.trStack[--ssize];
+                        StackElement se = this.trStack.pop();
                         isad = se.a;
                         first = se.b;
                         last = se.c;
@@ -1973,20 +1988,20 @@ public final class DivSufSort
                         trlink = se.e;
                     }
                 }
-                
+
                 continue;
             }
 
             if (last - first <= TR_INSERTIONSORT_THRESHOLD)
             {
-                trInsertionSort(isad, first, last);
+                this.trInsertionSort(isad, first, last);
                 limit = -3;
                 continue;
             }
 
             if (limit-- == 0)
             {
-                trHeapSort(isad, first, last - first);
+                this.trHeapSort(isad, first, last - first);
                 int a = last - 1;
 
                 while (first < a)
@@ -1995,26 +2010,26 @@ public final class DivSufSort
 
                     for (int x=arr[isad+arr[a]]; (first<=b) && (arr[isad+arr[b]] == x); b--)
                        arr[b] = ~arr[b];
-                    
+
                     a = b;
                 }
 
                 limit = -3;
                 continue;
             }
-            
+
             // choose pivot
-            swapInSA(first, trPivot(sa, isad, first, last));
+            swapInSA(first, trPivot(this.sa, isad, first, last));
             int v = arr[isad + arr[first]];
 
             // partition
-            long res = trPartition(isad, first, first+1, last, v);
+            long res = this.trPartition(isad, first, first+1, last, v);
             final int a = (int) (res >> 32);
             final int b = (int) (res & 0xFFFFFFFFL);
 
             if (last - first != b - a)
             {
-                int next = (arr[isa+arr[a]] != v) ? trIlg(b-a) : -1;
+                final int next = (arr[isa+arr[a]] != v) ? trIlg(b-a) : -1;
                 v = a - 1;
 
                 // update ranks
@@ -2030,7 +2045,7 @@ public final class DivSufSort
                 }
 
                 // push
-                if ((b - a > 1) && ((budget.check(b-a))))
+                if ((b - a > 1) && (budget.check(b-a) == true))
                 {
                     if (a - first <= last - b)
                     {
@@ -2038,13 +2053,13 @@ public final class DivSufSort
                         {
                             if (a - first > 1)
                             {
-                                this.trStack[ssize++] = new StackElement(isad+incr, a, b, next, trlink);
-                                this.trStack[ssize++] = new StackElement(isad, b, last, limit, trlink);
+                                this.trStack.push(isad+incr, a, b, next, trlink);
+                                this.trStack.push(isad, b, last, limit, trlink);
                                 last = a;
                             }
                             else if (last - b > 1)
                             {
-                                this.trStack[ssize++] = new StackElement(isad+incr, a, b, next, trlink);
+                                this.trStack.push(isad+incr, a, b, next, trlink);
                                 first = b;
                             }
                             else
@@ -2059,13 +2074,13 @@ public final class DivSufSort
                         {
                             if (a - first > 1)
                             {
-                                this.trStack[ssize++] = new StackElement(isad, b, last, limit, trlink);
-                                this.trStack[ssize++] = new StackElement(isad+incr, a, b, next, trlink);
+                                this.trStack.push(isad, b, last, limit, trlink);
+                                this.trStack.push(isad+incr, a, b, next, trlink);
                                 last = a;
                             }
                             else
                             {
-                                this.trStack[ssize++] = new StackElement(isad, b, last, limit, trlink);
+                                this.trStack.push(isad, b, last, limit, trlink);
                                 isad += incr;
                                 first = a;
                                 last = b;
@@ -2074,8 +2089,8 @@ public final class DivSufSort
                         }
                         else
                         {
-                            this.trStack[ssize++] = new StackElement(isad, b, last, limit, trlink);
-                            this.trStack[ssize++] = new StackElement(isad, first, a, limit, trlink);
+                            this.trStack.push(isad, b, last, limit, trlink);
+                            this.trStack.push(isad, first, a, limit, trlink);
                             isad += incr;
                             first = a;
                             last = b;
@@ -2088,13 +2103,13 @@ public final class DivSufSort
                         {
                             if (last - b > 1)
                             {
-                                this.trStack[ssize++] = new StackElement(isad+incr, a, b, next, trlink);
-                                this.trStack[ssize++] = new StackElement(isad, first, a, limit, trlink);
+                                this.trStack.push(isad+incr, a, b, next, trlink);
+                                this.trStack.push(isad, first, a, limit, trlink);
                                 first = b;
                             }
-                            else if (1 < (a - first))
+                            else if (a - first > 1)
                             {
-                                this.trStack[ssize++] = new StackElement(isad+incr, a, b, next, trlink);
+                                this.trStack.push(isad+incr, a, b, next, trlink);
                                 last = a;
                             }
                             else
@@ -2109,13 +2124,13 @@ public final class DivSufSort
                         {
                             if (last - b > 1)
                             {
-                                this.trStack[ssize++] = new StackElement(isad, first, a, limit, trlink);
-                                this.trStack[ssize++] = new StackElement(isad+incr, a, b, next, trlink);
+                                this.trStack.push(isad, first, a, limit, trlink);
+                                this.trStack.push(isad+incr, a, b, next, trlink);
                                 first = b;
                             }
                             else
                             {
-                                this.trStack[ssize++] = new StackElement(isad, first, a, limit, trlink);
+                                this.trStack.push(isad, first, a, limit, trlink);
                                 isad += incr;
                                 first = a;
                                 last = b;
@@ -2124,8 +2139,8 @@ public final class DivSufSort
                         }
                         else
                         {
-                            this.trStack[ssize++] = new StackElement(isad, first, a, limit, trlink);
-                            this.trStack[ssize++] = new StackElement(isad, b, last, limit, trlink);
+                            this.trStack.push(isad, first, a, limit, trlink);
+                            this.trStack.push(isad, b, last, limit, trlink);
                             isad += incr;
                             first = a;
                             last = b;
@@ -2136,13 +2151,13 @@ public final class DivSufSort
                 else
                 {
                     if ((b - a > 1) && (trlink >= 0))
-                        this.trStack[trlink].d = -1;
+                        this.trStack.get(trlink).d = -1;
 
                     if (a - first <= last - b)
                     {
                         if (a - first > 1)
                         {
-                            this.trStack[ssize++] = new StackElement(isad, b, last, limit, trlink);
+                            this.trStack.push(isad, b, last, limit, trlink);
                             last = a;
                         }
                         else if (last - b > 1)
@@ -2151,10 +2166,10 @@ public final class DivSufSort
                         }
                         else
                         {
-                           if (ssize <= 0)
+                           if (this.trStack.size() <= 0)
                               return;
 
-                           StackElement se = this.trStack[--ssize];
+                           StackElement se = this.trStack.pop();
                            isad = se.a;
                            first = se.b;
                            last = se.c;
@@ -2166,7 +2181,7 @@ public final class DivSufSort
                     {
                         if (last - b > 1)
                         {
-                            this.trStack[ssize++] = new StackElement(isad, first, a, limit, trlink);
+                            this.trStack.push(isad, first, a, limit, trlink);
                             first = b;
                         }
                         else if (a - first > 1)
@@ -2175,10 +2190,10 @@ public final class DivSufSort
                         }
                         else
                         {
-                            if (ssize <= 0)
+                            if (this.trStack.size() <= 0)
                                return;
 
-                            StackElement se = this.trStack[--ssize];
+                            StackElement se = this.trStack.pop();
                             isad = se.a;
                             first = se.b;
                             last = se.c;
@@ -2198,12 +2213,12 @@ public final class DivSufSort
                 else
                 {
                     if (trlink >= 0)
-                        this.trStack[trlink].d = -1;
+                        this.trStack.get(trlink).d = -1;
 
-                    if (ssize <= 0)
+                    if (this.trStack.size() <= 0)
                        return;
 
-                    StackElement se = this.trStack[--ssize];
+                    StackElement se = this.trStack.pop();
                     isad = se.a;
                     first = se.b;
                     last = se.c;
@@ -2213,7 +2228,7 @@ public final class DivSufSort
             }
         }
     }
-    
+
 
     private static int trPivot(int[] arr, int isad, int first, int last)
     {
@@ -2236,7 +2251,7 @@ public final class DivSufSort
         return trMedian3(arr, isad, first, middle, last);
     }
 
-    
+
     private static int trMedian5(int[] arr, int isad, int v1, int v2, int v3, int v4, int v5)
     {
         if (arr[isad+arr[v2]] > arr[isad+arr[v3]])
@@ -2248,7 +2263,7 @@ public final class DivSufSort
 
         if (arr[isad+arr[v4]] > arr[isad+arr[v5]])
         {
-            int t = v4;
+            final int t = v4;
             v4 = v5;
             v5 = t;
         }
@@ -2265,7 +2280,7 @@ public final class DivSufSort
 
         if (arr[isad+arr[v1]] > arr[isad+arr[v3]])
         {
-            int t = v1;
+            final int t = v1;
             v1 = v3;
             v3 = t;
         }
@@ -2295,7 +2310,7 @@ public final class DivSufSort
             v1 = v2;
             v2 = t;
         }
-        
+
         if (arr[isad+arr[v2]] > arr[isad+arr[v3]])
         {
             if (arr[isad+arr[v1]] > arr[isad+arr[v3]])
@@ -2303,7 +2318,7 @@ public final class DivSufSort
 
             return v3;
         }
-        
+
         return v2;
     }
 
@@ -2322,24 +2337,24 @@ public final class DivSufSort
         }
 
         for (int i=(m>>1)-1; i>=0; i--)
-            trFixDown(isad, saIdx, i, m);
+            this.trFixDown(isad, saIdx, i, m);
 
         if ((size & 1) == 0)
         {
             swapInSA(saIdx, saIdx+m);
-            trFixDown(isad, saIdx, 0, m);
+            this.trFixDown(isad, saIdx, 0, m);
         }
 
         for (int i=m-1; i>0; i--)
         {
-            int t = arr[saIdx];
+            final int t = arr[saIdx];
             arr[saIdx] = arr[saIdx+i];
-            trFixDown(isad, saIdx, 0, i);
+            this.trFixDown(isad, saIdx, 0, i);
             arr[saIdx+i] = t;
         }
     }
 
-    
+
     private void trFixDown(int isad, int saIdx, int i, int size)
     {
         final int[] arr = this.sa;
@@ -2366,11 +2381,11 @@ public final class DivSufSort
         arr[saIdx+i] = v;
     }
 
- 
+
     private void trInsertionSort(int isad, int first, int last)
     {
         final int[] arr = this.sa;
-        
+
         for (int a=first+1; a<last; a++)
         {
             int b = a - 1;
@@ -2452,8 +2467,8 @@ public final class DivSufSort
         for (int c=last-1, e=d+1; e<d; c--)
         {
             final int s = arr[c] - depth;
-            
-            if ((s >=0 ) && (arr[isa+s] == v))
+
+            if ((s >= 0) && (arr[isa+s] == v))
             {
                 d--;
                 arr[d] = s;
@@ -2511,16 +2526,15 @@ public final class DivSufSort
         return ((n & 0xFFFF0000) != 0) ? (((n & 0xFF000000) != 0) ? 24 + LOG_TABLE[(n>>24) & 0xFF]
             : 16 + LOG_TABLE[(n>>16) & 0xFF])
             : (((n & 0x0000FF00) != 0) ? 8 + LOG_TABLE[(n>>8) & 0xFF]
-                : 0 + LOG_TABLE[n & 0xFF]);
+                : LOG_TABLE[n & 0xFF]);
     }
-    
-    
-    
-    
+
+
+
+
     private static class StackElement
     {
-        final int a, b, c, e;
-        int d;
+        int a, b, c, d, e;
 
         StackElement(int a, int b, int c, int d, int e)
         {
@@ -2538,7 +2552,58 @@ public final class DivSufSort
     }
 
 
-    
+    // A stack of pre-allocated elements
+    private static class Stack
+    {
+       private final StackElement[] array;
+       private int index;
+
+       Stack(int size)
+       {
+          this.array = new StackElement[size];
+
+          for (int i=0; i<size; i++)
+             this.array[i] = new StackElement(0, 0, 0, 0);
+       }
+
+       StackElement get(int idx)
+       {
+          return this.array[idx];
+       }
+
+       int size()
+       {
+          return this.index;
+       }
+
+       void push(int a, int b, int c, int d)
+       {
+          StackElement elt = this.array[this.index];
+          elt.a = a;
+          elt.b = b;
+          elt.c = c;
+          elt.d = d;
+          this.index++;
+       }
+
+       void push(int a, int b, int c, int d, int e)
+       {
+          StackElement elt = this.array[this.index];
+          elt.a = a;
+          elt.b = b;
+          elt.c = c;
+          elt.d = d;
+          elt.e = e;
+          this.index++;
+       }
+
+       StackElement pop()
+       {
+          return this.array[--this.index];
+       }
+    }
+
+
     private static class TRBudget
     {
         int chance;
@@ -2560,17 +2625,17 @@ public final class DivSufSort
                 this.remain -= size;
                 return true;
             }
-            
+
             if (this.chance == 0)
             {
                 this.count += size;
                 return false;
             }
-            
+
             this.remain += (this.incVal - size);
             this.chance--;
             return true;
         }
     }
-    
+
 }
