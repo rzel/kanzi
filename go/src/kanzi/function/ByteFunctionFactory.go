@@ -35,7 +35,7 @@ const (
 func NewByteFunction(size uint, functionType byte) (kanzi.ByteFunction, error) {
 	switch functionType {
 	case BLOCK_TYPE:
-		return NewBlockCodec(size, true) // BWT+MTFT+ZLT
+		return NewBlockCodec(MODE_MTF, size) // BWT+GST+ZLT
 
 	case SNAPPY_TYPE:
 		return NewSnappyCodec(size)
@@ -48,9 +48,9 @@ func NewByteFunction(size uint, functionType byte) (kanzi.ByteFunction, error) {
 
 	case ZLT_TYPE:
 		return NewZLT(size)
-		
+
 	case BWT_TYPE:
-		return NewBlockCodec(size, false) // raw BWT
+		return NewBlockCodec(MODE_RAW_BWT, size) // raw BWT
 
 	case NONE_TYPE:
 		return NewNullFunction(size)
@@ -91,7 +91,7 @@ func GetByteFunctionName(functionType byte) (string, error) {
 func GetByteFunctionType(functionName string) (byte, error) {
 	switch strings.ToUpper(functionName) {
 	case "BLOCK":
-		return BLOCK_TYPE, nil
+		return BLOCK_TYPE, nil // BWT+GST+ZLT
 
 	case "SNAPPY":
 		return SNAPPY_TYPE, nil
@@ -106,7 +106,7 @@ func GetByteFunctionType(functionName string) (byte, error) {
 		return ZLT_TYPE, nil
 
 	case "BWT":
-		return BWT_TYPE, nil
+		return BWT_TYPE, nil  // raw BWT
 
 	case "NONE":
 		return NONE_TYPE, nil

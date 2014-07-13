@@ -34,7 +34,7 @@ public class FunctionFactory
       switch (name.toUpperCase())
       {
          case "BLOCK":
-            return BLOCK_TYPE; // BWT+MTFT+ZLT
+            return BLOCK_TYPE; // BWT+GST+ZLT
          case "SNAPPY":
             return SNAPPY_TYPE;
          case "LZ4":
@@ -58,7 +58,7 @@ public class FunctionFactory
       switch (type)
       {
          case BLOCK_TYPE:
-            return new BlockCodec(size, true); // BWT+MTFT+ZLT
+            return new BlockCodec(BlockCodec.MODE_MTF, size); // BWT+GST+ZLT
          case SNAPPY_TYPE:
             return new SnappyCodec(size);
          case LZ4_TYPE:
@@ -70,7 +70,7 @@ public class FunctionFactory
          case NONE_TYPE:
             return new NullFunction(size);
          case BWT_TYPE:
-            return new BlockCodec(size, false); // raw BWT
+            return new BlockCodec(BlockCodec.MODE_RAW_BWT, size); // raw BWT
          default:
             throw new IllegalArgumentException("Unknown transform type: " + (char) type);
       }
