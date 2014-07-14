@@ -56,13 +56,17 @@ public final class DefaultOutputBitStream implements OutputBitStream
       if (this.isClosed() == true)
          throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
 
-      this.current |= ((long) (bit & 1) << this.bitIndex);
-
       if (this.bitIndex == 0)
+      {
+         this.current |= (bit & 1);
          this.pushCurrent();
+      }
       else
+      {
+         this.current |= ((long) (bit & 1) << this.bitIndex);
          this.bitIndex--;
-
+      }
+      
       return true;
    }
 

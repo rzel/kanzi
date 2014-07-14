@@ -162,6 +162,7 @@ func (this *DefaultInputBitStream) pullCurrent() error {
 		val |= (uint64(this.buffer[this.position+5]) << 16)
 		val |= (uint64(this.buffer[this.position+6]) << 8)
 		val |= uint64(this.buffer[this.position+7])
+
 		this.bitIndex = 63
 		this.position += 8
 	}

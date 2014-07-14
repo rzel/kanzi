@@ -57,11 +57,11 @@ func (this *DefaultOutputBitStream) WriteBit(bit int) error {
 		return errors.New("Stream closed")
 	}
 
-	this.current |= (uint64(bit&1) << this.bitIndex)
-
 	if this.bitIndex == 0 {
+		this.current |= uint64(bit&1)
 		this.pushCurrent()
 	} else {
+		this.current |= (uint64(bit&1) << this.bitIndex)
 		this.bitIndex--
 	}
 
@@ -110,6 +110,7 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, count uint) (uint, e
 
 // Push 64 bits of current value into buffer.
 func (this *DefaultOutputBitStream) pushCurrent() {
+ 
 	this.buffer[this.position] = byte(this.current >> 56)
 	this.buffer[this.position+1] = byte(this.current >> 48)
 	this.buffer[this.position+2] = byte(this.current >> 40)
