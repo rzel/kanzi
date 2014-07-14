@@ -88,13 +88,13 @@ func (this *SBRT) Forward(src, dst []byte) (uint, uint, error) {
 		mask1 = -1
 	}
 
-	if this.mode == MODE_RANK {
+	if this.mode == MODE_MTF {
 		mask2 = 0
 	} else {
 		mask2 = -1
 	}
 
-	if this.mode == MODE_MTF {
+	if this.mode == MODE_RANK {
 		shift = 1
 	} else {
 		shift = 0
@@ -150,13 +150,13 @@ func (this *SBRT) Inverse(src, dst []byte) (uint, uint, error) {
 		mask1 = -1
 	}
 
-	if this.mode == MODE_RANK {
+	if this.mode == MODE_MTF {
 		mask2 = 0
 	} else {
 		mask2 = -1
 	}
 
-	if this.mode == MODE_MTF {
+	if this.mode == MODE_RANK {
 		shift = 1
 	} else {
 		shift = 0

@@ -43,7 +43,7 @@ public class SBRT implements ByteTransform
    {
      if ((mode != MODE_MTF) && (mode != MODE_RANK) && (mode != MODE_TIMESTAMP))
         throw new IllegalArgumentException("Invalid mode parameter");
-     
+    
      this.size = size;
      this.prev = new int[256];
      this.curr = new int[256];
@@ -68,8 +68,8 @@ public class SBRT implements ByteTransform
 
       final int count = (this.size == 0) ? src.length - srcIdx : this.size;
       final int mask1 = (this.mode == MODE_TIMESTAMP) ? 0 : -1;
-      final int mask2 = (this.mode == MODE_RANK) ? 0 : -1;
-      final int shift = (this.mode == MODE_MTF) ? 1 : 0;
+      final int mask2 = (this.mode == MODE_MTF) ? 0 : -1;
+      final int shift = (this.mode == MODE_RANK) ? 1 : 0;
 
       for (int i=0; i<256; i++) 
       { 
@@ -119,8 +119,8 @@ public class SBRT implements ByteTransform
       final int[] r2s = this.ranks;
 
       final int count = (this.size == 0) ? src.length - srcIdx : this.size;
-      final int mask1 = (this.mode == MODE_MTF) ? -1 : 0;
-      final int mask2 = (this.mode == MODE_TIMESTAMP) ? -1 : 0;
+      final int mask1 = (this.mode == MODE_TIMESTAMP) ? 0 : -1;
+      final int mask2 = (this.mode == MODE_MTF) ? 0 : -1;
       final int shift = (this.mode == MODE_RANK) ? 1 : 0;
 
       for (int i=0; i < 256; i++) 
