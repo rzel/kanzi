@@ -89,27 +89,22 @@ public final class DefaultOutputBitStream implements OutputBitStream
       value &= (-1L >>> (64 - count));
       final int remaining = this.bitIndex + 1 - count;
 
-      if (remaining >= 0)
+      if (remaining > 0)
       {
          // Enough spots available in 'current'
-         if (remaining == 0)
-         {
-            this.current |= value;
-            this.pushCurrent();
-         }
-         else
-         {
-            this.current |= (value << remaining);
-            this.bitIndex -= count;        
-         }
+         this.current |= (value << remaining);
+         this.bitIndex -= count;                 
       }
       else
       {
-         // Not enough spots available in 'current'
          this.current |= (value >>> -remaining);
          this.pushCurrent();
-         this.current |= (value << (64 + remaining));
-         this.bitIndex += remaining;
+         
+         if (remaining != 0) 
+         {
+            this.current |= (value << remaining);
+            this.bitIndex += remaining;
+         }
       }
 
       return count;

@@ -80,9 +80,8 @@ func (this *DefaultInputBitStream) ReadBits(count uint) (uint64, error) {
 			shift += (this.bitIndex - 63) // adjust if bitIndex != 63 (end of stream)
 		}
 
-		res = this.current >> shift
-		res &= (0xFFFFFFFFFFFFFFFF >> (64 - count))
-		this.bitIndex = (this.bitIndex + 64 - count) & 63
+		res = (this.current >> shift) & (0xFFFFFFFFFFFFFFFF >> (64 - count))
+		this.bitIndex = (this.bitIndex - count) & 63
 	} else {
 		// Not enough spots available in 'current'
 		remaining := count - this.bitIndex - 1
