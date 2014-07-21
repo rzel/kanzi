@@ -55,8 +55,8 @@ public final class DefaultInputBitStream implements InputBitStream
    @Override
    public int readBit() throws BitStreamException
    {
-      if (this.bitIndex == 63)
-         this.pullCurrent();
+      if (this.bitIndex == 63) 
+         this.pullCurrent(); // Triggers an exception if stream is closed
 
       final int bit = (int) ((this.current >> this.bitIndex) & 1);
       this.bitIndex = (this.bitIndex + 63) & 63;
@@ -66,6 +66,9 @@ public final class DefaultInputBitStream implements InputBitStream
 
    private int readFromInputStream(int count) throws BitStreamException
    {
+      if (this.isClosed() == true)
+         throw new BitStreamException("Stream closed", BitStreamException.STREAM_CLOSED);
+
       int size = -1;
       
       try
@@ -115,7 +118,7 @@ public final class DefaultInputBitStream implements InputBitStream
          }
          
          res = (this.current >>> shift) & (-1L >>> -count);
-         this.bitIndex = (this.bitIndex - count) & 63;
+         this.bitIndex = (this.bitIndex + 64 - count) & 63;
       }
       else
       {

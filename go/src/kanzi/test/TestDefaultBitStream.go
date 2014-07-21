@@ -28,7 +28,7 @@ import (
 func main() {
 	testCorrectnessAligned()
 	testCorrectnessMisaligned()
-	testSpeed()
+	testSpeed() // Writes big output.bin file to local dir !!!
 }
 
 func testCorrectnessAligned() {
@@ -144,6 +144,13 @@ func testCorrectnessMisaligned() {
 		// Close first to force flush()
 		dbs.Close()
 
+		fmt.Printf("\nTrying to write to closed stream\n")
+		errWClosed := dbs.WriteBit(1)
+		
+		if errWClosed != nil { 
+		   fmt.Printf("Error: %v\n", errWClosed.Error())
+		}
+		
 		is_, _ := util.NewByteArrayInputStream(buffer, false)
 		ibs, _ := bitstream.NewDefaultInputBitStream(is_, 16384)
 		fmt.Printf("\nRead:\n")
@@ -166,6 +173,14 @@ func testCorrectnessMisaligned() {
 		}
 
 		ibs.Close()
+		
+		fmt.Printf("\nTrying to read from closed stream\n")
+		_, errRClosed := ibs.ReadBit()
+		
+		if errRClosed != nil { 
+		   fmt.Printf("Error: %v\n", errRClosed.Error())
+		}
+		
 		println()
 		println()
 		fmt.Printf("Bits written: %v\n", dbs.Written())

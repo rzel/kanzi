@@ -25,6 +25,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Random;
+import kanzi.BitStreamException;
 import kanzi.InputBitStream;
 import kanzi.OutputBitStream;
 import kanzi.bitstream.DebugOutputBitStream;
@@ -38,7 +39,7 @@ public class TestDefaultBitStream
     {
  	testCorrectnessAligned();
 	testCorrectnessMisaligned();
-	testSpeed(args);
+	testSpeed(args); // Writes big output.bin file to local dir (or specified file name) !!!
     }
     
     
@@ -151,6 +152,19 @@ public class TestDefaultBitStream
 
                // Close first to force flush()
                dbs.close();
+               
+               System.out.println();
+               System.out.println("Trying to write to closed stream");
+               
+               try
+               {
+                  dbs.writeBit(1);
+               }
+               catch (BitStreamException e)
+               {
+                  System.out.println("Exception: " + e.getMessage());
+               }
+               
                byte[] output = baos.toByteArray();
                ByteArrayInputStream bais = new ByteArrayInputStream(output);
                InputStream is = new BufferedInputStream(bais);
@@ -177,6 +191,16 @@ public class TestDefaultBitStream
                System.out.println("\n"+((ok)?"Success":"Failure"));
                System.out.println();
                System.out.println();
+               System.out.println("Trying to read from closed stream");
+               
+               try
+               {
+                  ibs.readBits(1);
+               }
+               catch (BitStreamException e)
+               {
+                  System.out.println("Exception: " + e.getMessage());
+               }
             }
         }
         catch (Exception e)

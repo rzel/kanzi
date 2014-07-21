@@ -56,7 +56,9 @@ func NewDefaultInputBitStream(stream kanzi.InputStream, bufferSize uint) (*Defau
 // Return 1 or 0. Return error if stream is closed
 func (this *DefaultInputBitStream) ReadBit() (int, error) {
 	if this.bitIndex == 63 {
-		this.pullCurrent()
+		if err := this.pullCurrent(); err != nil { // Triggers an error if stream is closed
+			return 0, err
+		}
 	}
 
 	bit := int(this.current>>this.bitIndex) & 1
@@ -96,6 +98,10 @@ func (this *DefaultInputBitStream) ReadBits(count uint) (uint64, error) {
 }
 
 func (this *DefaultInputBitStream) readFromInputStream(count int) (int, error) {
+	if this.Closed() {
+		return 0, errors.New("Stream closed")
+	}
+
 	this.read += uint64((this.maxPosition + 1) << 3)
 	size, err := this.is.Read(this.buffer[0:count])
 	this.position = 0
@@ -179,7 +185,7 @@ func (this *DefaultInputBitStream) Close() (bool, error) {
 	this.read += uint64(63)
 
 	// Reset fields to force a readFromInputStream() and trigger an error
-	// on readBit() or readBits()
+	// on ReadBit() or ReadBits()
 	this.bitIndex = 63
 	this.maxPosition = -1
 	return true, this.is.Close()

@@ -174,8 +174,8 @@ func main() {
 		}
 	}()
 
-	bc.listeners.Init()
 	code, _ := bc.call()
+	bc.listeners.Init()
 	os.Exit(code)
 }
 
