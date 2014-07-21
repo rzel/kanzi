@@ -47,7 +47,7 @@ public class BlockCodec implements ByteFunction
    public static final int MODE_TIMESTAMP = 3;
    
    private static final int MAX_HEADER_SIZE  = 4;
-   private static final int MAX_BLOCK_SIZE   = (32*1024*1024) - MAX_HEADER_SIZE;
+   private static final int MAX_BLOCK_SIZE   = (64*1024*1024) - MAX_HEADER_SIZE;
 
    private final int mode;
    private final BWT bwt;

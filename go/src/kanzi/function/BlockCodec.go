@@ -44,7 +44,7 @@ const (
 	MODE_RANK             = 2
 	MODE_TIMESTAMP        = 3
 	MAX_BLOCK_HEADER_SIZE = 4
-	MAX_BLOCK_SIZE        = 32*1024*1024 - MAX_BLOCK_HEADER_SIZE
+	MAX_BLOCK_SIZE        = 64*1024*1024 - MAX_BLOCK_HEADER_SIZE
 )
 
 type BlockCodec struct {
@@ -62,7 +62,7 @@ func NewBlockCodec(mode int, size uint) (*BlockCodec, error) {
 	}
 
 	if size > MAX_BLOCK_SIZE {
-		errMsg := fmt.Sprintf("The block size must be at most %d\n", MAX_BLOCK_SIZE)
+		errMsg := fmt.Sprintf("The block size must be at most %d", MAX_BLOCK_SIZE)
 		return nil, errors.New(errMsg)
 	}
 
