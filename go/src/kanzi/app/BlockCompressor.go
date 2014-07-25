@@ -56,7 +56,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
 	var inputName = flag.String("input", "", "mandatory name of the input file to encode")
 	var outputName = flag.String("output", "", "optional name of the output file (defaults to <input.knz>)")
-	var blockSize = flag.String("block", "1048576", "size of the input blocks (max 32MB - 4 / min 1KB / default 1MB)")
+	var blockSize = flag.String("block", "1048576", "size of the input blocks (max 64MB - 4 / min 1KB / default 1MB)")
 	var entropy = flag.String("entropy", "Huffman", "entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]")
 	var function = flag.String("transform", "Block", "transform to use [None|Block*|Snappy|BWT|LZ4|RLT]")
 	var cksum = flag.Bool("checksum", false, "enable block checksum")
@@ -244,8 +244,15 @@ func (this *BlockCompressor) call() (int, uint64) {
 		verboseWriter = nil
 	}
 
+	bos, err := io.NewBufferedOutputStream(output)
+
+	if err != nil {
+		fmt.Printf("Cannot create compressed stream: %s\n", err.Error())
+		return io.ERR_CREATE_COMPRESSOR, written
+	}
+
 	cos, err := io.NewCompressedOutputStream(this.entropyCodec, this.transform,
-		output, this.blockSize, this.checksum, verboseWriter, this.jobs)
+		bos, this.blockSize, this.checksum, verboseWriter, this.jobs)
 
 	if err != nil {
 		if ioerr, isIOErr := err.(io.IOError); isIOErr == true {

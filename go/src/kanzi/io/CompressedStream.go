@@ -291,12 +291,6 @@ func (this *CompressedOutputStream) Write(array []byte) (int, error) {
 }
 
 // Implement the kanzi.OutputStream interface
-func (this *CompressedOutputStream) Sync() error {
-	// Let the embedded bitstream take care of the flushing
-	return nil
-}
-
-// Implement the kanzi.OutputStream interface
 func (this *CompressedOutputStream) Close() error {
 	if this.closed == true {
 		return nil

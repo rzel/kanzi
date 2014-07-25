@@ -215,6 +215,8 @@ public class TestDefaultBitStream
         // Test speed
         System.out.println("\nSpeed Test");
         String fileName = (args.length > 0) ? args[0] : "output.bin";
+        File file = new File(fileName);
+        file.deleteOnExit();
         int[] values = new int[] { 3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3,
                                    31, 14, 41, 15, 59, 92, 26, 65, 53, 35, 58, 89, 97, 79, 93, 32 };
 
@@ -229,7 +231,7 @@ public class TestDefaultBitStream
             
             for (int test=0; test<iter; test++)
             {
-               FileOutputStream os = new FileOutputStream(new File(fileName));
+               FileOutputStream os = new FileOutputStream(file);
                OutputBitStream obs = new DefaultOutputBitStream(os, 1024*1024);
                before = System.nanoTime();
 

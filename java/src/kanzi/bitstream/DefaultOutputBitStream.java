@@ -127,7 +127,6 @@ public final class DefaultOutputBitStream implements OutputBitStream
       }
       catch (BitStreamException e)
       {
-         this.position -= 8;
          throw e;
       }
    }
@@ -199,6 +198,7 @@ public final class DefaultOutputBitStream implements OutputBitStream
       // on writeBit() or writeBits()
       this.bitIndex = -1;
       this.buffer = new byte[8];
+      this.written -= 64; // adjust for method written()
    }
 
 

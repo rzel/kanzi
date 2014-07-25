@@ -72,13 +72,14 @@ func (this *DefaultInputBitStream) ReadBits(count uint) (uint64, error) {
 	}
 
 	var res uint64
+	var err error
 
 	if count <= this.bitIndex+1 {
 		// Enough spots available in 'current'
 		shift := this.bitIndex + 1 - count
 
 		if this.bitIndex == 63 {
-			this.pullCurrent()
+			err = this.pullCurrent()
 			shift += (this.bitIndex - 63) // adjust if bitIndex != 63 (end of stream)
 		}
 
@@ -88,13 +89,13 @@ func (this *DefaultInputBitStream) ReadBits(count uint) (uint64, error) {
 		// Not enough spots available in 'current'
 		remaining := count - this.bitIndex - 1
 		res = this.current & (0xFFFFFFFFFFFFFFFF >> (63 - this.bitIndex))
-		this.pullCurrent()
+		err = this.pullCurrent()
 		res <<= remaining
 		this.bitIndex -= remaining
 		res |= (this.current >> (this.bitIndex + 1))
 	}
 
-	return res, nil
+	return res, err
 }
 
 func (this *DefaultInputBitStream) readFromInputStream(count int) (int, error) {

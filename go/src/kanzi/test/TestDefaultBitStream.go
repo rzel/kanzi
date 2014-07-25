@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"kanzi/bitstream"
+	"kanzi/io"
 	"kanzi/util"
 	"math/rand"
 	"os"
@@ -210,6 +211,7 @@ func testSpeed() {
 	delta1 := int64(0)
 	delta2 := int64(0)
 	nn := 100000 * len(values)
+	defer os.Remove(*filename)
 
 	for test := 0; test < iter; test++ {
 		file1, err := os.Create(*filename)
@@ -220,7 +222,8 @@ func testSpeed() {
 			return
 		}
 
-		obs, _ := bitstream.NewDefaultOutputBitStream(file1, 1024*1024)
+		bos, _ := io.NewBufferedOutputStream(file1)
+		obs, _ := bitstream.NewDefaultOutputBitStream(bos, 16*1024)
 		before := time.Now()
 		for i := 0; i < nn; i++ {
 			obs.WriteBits(values[i%len(values)], 1+uint(i&63))
@@ -240,7 +243,8 @@ func testSpeed() {
 			return
 		}
 
-		ibs, _ := bitstream.NewDefaultInputBitStream(file2, 1024*1024)
+		bis, _ := io.NewBufferedInputStream(file2)
+		ibs, _ := bitstream.NewDefaultInputBitStream(bis, 1024*1024)
 		before = time.Now()
 
 		for i := 0; i < nn; i++ {

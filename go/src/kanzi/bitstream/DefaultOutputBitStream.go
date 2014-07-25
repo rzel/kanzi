@@ -118,7 +118,6 @@ func (this *DefaultOutputBitStream) pushCurrent() error {
 
 	if this.position >= len(this.buffer) {
 		if err := this.flush(); err != nil {
-			this.position -= 8
 			return err
 		}
 	}
@@ -166,10 +165,6 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 		return false, err
 	}
 
-	if err := this.os.Sync(); err != nil {
-		return false, err
-	}
-
 	if err := this.os.Close(); err != nil {
 		return false, err
 	}
@@ -181,6 +176,7 @@ func (this *DefaultOutputBitStream) Close() (bool, error) {
 	// on WriteBit() or WriteBits()
 	this.bitIndex = -1
 	this.buffer = make([]byte, 8)
+	this.written -= 64 // adjust for method Written()
 	return true, nil
 }
 
