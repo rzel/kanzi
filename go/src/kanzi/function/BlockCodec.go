@@ -55,7 +55,7 @@ type BlockCodec struct {
 }
 
 // Based on the mode, the forward BWT is followed by a Global Structure
-// Transform and ZLT, else a raw BWT is performed.
+// Transform and ZRLT, else a raw BWT is performed.
 func NewBlockCodec(mode int, size uint) (*BlockCodec, error) {
 	if mode != MODE_RAW_BWT && mode != MODE_MTF && mode != MODE_RANK && mode != MODE_TIMESTAMP {
 		return nil, errors.New("Invalid mode parameter")
@@ -151,9 +151,9 @@ func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 
 		gst.Forward(dst, src)
 
-		if zlt, err := NewZLT(blockSize); err == nil {
+		if ZRLT, err := NewZRLT(blockSize); err == nil {
 			// Apply Zero Length Encoding
-			iIdx, oIdx, err = zlt.Forward(src, dst[headerSizeBytes:])
+			iIdx, oIdx, err = ZRLT.Forward(src, dst[headerSizeBytes:])
 		}
 
 		if err != nil {
@@ -220,13 +220,13 @@ func (this *BlockCodec) Inverse(src, dst []byte) (uint, uint, error) {
 
 	if this.mode != MODE_RAW_BWT {
 		// Apply Zero Length Decoding
-		zlt, err := NewZLT(compressedLength)
+		ZRLT, err := NewZRLT(compressedLength)
 
 		if err != nil {
 			return 0, 0, err
 		}
 
-		iIdx, oIdx, err := zlt.Inverse(src[srcIdx:], dst)
+		iIdx, oIdx, err := ZRLT.Inverse(src[srcIdx:], dst)
 		iIdx += headerSizeBytes
 
 		if err != nil {

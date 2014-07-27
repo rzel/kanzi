@@ -67,7 +67,7 @@ public class BlockCodec implements ByteFunction
 
    
    // Base on the mode, the forward BWT is followed by a Global Structure 
-   // Transform and ZLT, else a raw BWT is performed.
+   // Transform and ZRLT, else a raw BWT is performed.
    public BlockCodec(int mode, int blockSize, boolean postProcessing)
    {
      if ((mode != MODE_RAW_BWT) && (mode != MODE_MTF) && (mode != MODE_RANK) && (mode != MODE_TIMESTAMP))
@@ -155,10 +155,10 @@ public class BlockCodec implements ByteFunction
 
          input.index = savedIIdx;
          output.index = savedOIdx + headerSizeBytes;
-         ZLT zlt = new ZLT(blockSize);
+         ZRLT zrlt = new ZRLT(blockSize);
 
          // Apply Zero Length Encoding (changes the index of input & output)
-         if (zlt.forward(input, output) == false)
+         if (zrlt.forward(input, output) == false)
          {
             // Compression failed, recover source data
             input.index = savedIIdx;
@@ -228,10 +228,10 @@ public class BlockCodec implements ByteFunction
       if (this.mode != MODE_RAW_BWT)
       {
          final int savedOIdx = output.index;
-         ZLT zlt = new ZLT(compressedLength);
+         ZRLT zrlt = new ZRLT(compressedLength);
 
          // Apply Zero Length Decoding (changes the index of input & output)
-         if (zlt.inverse(input, output) == false)
+         if (zrlt.inverse(input, output) == false)
             return false;
 
          blockSize = output.index - savedOIdx;
