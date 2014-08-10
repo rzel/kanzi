@@ -48,7 +48,8 @@ import kanzi.IndexedByteArray;
 //         ppi\0  8  -> 6      sissippi\0
 //          pi\0  9  -> 5        ssippi\0
 //           i\0  10 -> 0     ssissippi\0
-// Suffix array        10 7 4 1 0 9 8 6 3 5 2 => ipss\0mpissii (+ primary index 4) 
+// Suffix array SA : 10 7 4 1 0 9 8 6 3 5 2 
+// BWT[i] = SA[input[i]-1] => BWT(input) = ipss\0mpissii (+ primary index 4) 
 // The suffix array and permutation vector are equal when the input is 0 terminated
 // In this example, for a non \0 terminated string the output is pssmipissii.
 // The insertion of a guard is done internally and is entirely transparent.
@@ -216,7 +217,7 @@ public class BWT implements ByteTransform
        final int[] buckets_ = this.buckets;
        final int[] data = this.buffer1;
        
-       // Create histogram
+       // Initialize histogram
        for (int i=0; i<256; i++)
           buckets_[i] = 0;
 
@@ -284,7 +285,7 @@ public class BWT implements ByteTransform
        final int[] data1 = this.buffer1;
        final int[] data2 = this.buffer2;
        
-       // Create histogram
+       // Initialize histogram
        for (int i=0; i<256; i++)
           buckets_[i] = 0;
 

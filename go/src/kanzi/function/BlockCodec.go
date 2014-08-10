@@ -152,7 +152,7 @@ func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 		gst.Forward(dst, src)
 
 		if ZRLT, err := NewZRLT(blockSize); err == nil {
-			// Apply Zero Length Encoding
+			// Apply Zero Run Length Encoding
 			iIdx, oIdx, err = ZRLT.Forward(src, dst[headerSizeBytes:])
 		}
 
@@ -219,7 +219,7 @@ func (this *BlockCodec) Inverse(src, dst []byte) (uint, uint, error) {
 	}
 
 	if this.mode != MODE_RAW_BWT {
-		// Apply Zero Length Decoding
+		// Apply Zero Run Length Decoding
 		ZRLT, err := NewZRLT(compressedLength)
 
 		if err != nil {

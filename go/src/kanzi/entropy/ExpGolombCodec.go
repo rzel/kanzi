@@ -65,8 +65,8 @@ func (this *ExpGolombEncoder) EncodeByte(val byte) error {
 		// shortcut when abs(val) = 1 or 2
 		n = 3
 	} else {
-		//  Count the bits (log2), subtract one, and write that number of zeros
-		//  preceding the previous bit string to get the encoded value
+		// Count the bits (log2), subtract one, and write that number of zeros
+		// preceding the previous bit string to get the encoded value
 		log2 := uint(2)
 		val2 := emit
 
@@ -75,20 +75,21 @@ func (this *ExpGolombEncoder) EncodeByte(val byte) error {
 			val2 >>= 1
 		}
 
-		// Add log2 zeros and 1 one (unary coding), then remainder
-		// 0 => 1 => 1
-		// 1 => 10 => 010
-		// 2 => 11 => 011
-		// 3 => 100 => 00100
-		// 4 => 101 => 00101
-		// 5 => 110 => 00110
-		// 6 => 111 => 00111
+		//  val   val+1    exp-golomb
+		//   0 =>  1    =>  1
+		//   1 =>  10   =>  010
+		//   2 =>  11   =>  011
+		//   3 =>  100  =>  00100
+		//   4 =>  101  =>  00101
+		//   5 =>  110  =>  00110
+		//   6 =>  111  =>  00111
+		//   7 =>  1000 =>  0001000
+		//   8 =>  1001 =>  0001001
 		n = log2 + (log2 - 1)
 	}
 
 	if this.signed == true {
-		// Add 0 for positive and 1 for negative sign (considering
-		// msb as byte 'sign')
+		// Add 0 for positive and 1 for negative sign
 		n++
 		emit = (emit << 1) | uint64((val>>7)&1)
 	}

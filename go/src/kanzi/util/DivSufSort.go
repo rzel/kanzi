@@ -154,28 +154,29 @@ func (this *DivSufSort) constructSuffixArray(bucket_A, bucket_B []int, n, m int)
 	k++
 
 	// Scan the suffix array from left to right.
-	for i, j := 0, n; i < j; i++ {
+	for i := 0; i < n; i++ {
 		s := this.sa[i]
 
-		if s > 0 {
-			s--
-			c0 = this.buffer[s]
-
-			if s == 0 || this.buffer[s-1] < c0 {
-				s = ^s
-			}
-
-			if c0 != c2 {
-				bucket_A[c2] = k
-				c2 = c0
-				k = bucket_A[c2]
-			}
-
-			this.sa[k] = s
-			k++
-		} else {
+		if s <= 0 {
 			this.sa[i] = ^s
+			continue;
 		}
+		
+		s--
+		c0 = this.buffer[s]
+
+		if s == 0 || this.buffer[s-1] < c0 {
+			s = ^s
+		}
+
+		if c0 != c2 {
+			bucket_A[c2] = k
+			c2 = c0
+			k = bucket_A[c2]
+		}
+		
+		this.sa[k] = s
+		k++
 	}
 }
 

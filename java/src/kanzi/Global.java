@@ -293,10 +293,10 @@ public class Global
         x |= (x >> 4);
         x |= (x >> 8);
         x |= (x >> 16);
-        return(x & ~(x >> 1));
+        return x & ~(x >> 1);
     }
 
-  
+
     public static int roundUpPowerOfTwo(int x)
     {
         x--;
@@ -307,8 +307,8 @@ public class Global
         x |= (x >> 16);
         return x + 1;
     }
-    
-
+       
+       
     private static final int[] SQRT = new int[]
     {
         0,  16,  23,  28,  32,  36,  39,  42,  45,  48,  51,  53,  55,  58,  60,  62,

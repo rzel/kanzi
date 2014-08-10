@@ -116,7 +116,7 @@ public final class DivSufSort
     }
 
 
-    private void constructSuffixArray(int [] bucket_A, int [] bucket_B, int n, int m)
+    private void constructSuffixArray(int[] bucket_A, int[] bucket_B, int n, int m)
     {
         int c0;
 
@@ -162,29 +162,30 @@ public final class DivSufSort
         this.sa[k++] = (this.buffer[this.start+n-2] < c2) ? ~(n-1) : (n-1);
 
         // Scan the suffix array from left to right.
-        for (int i=0, j=n; i < j; i++)
+        for (int i=0; i < n; i++)
         {
             int s = this.sa[i];
 
-            if (s > 0)
+            if (s <= 0)
             {
-                s--;
-                c0 = this.buffer[this.start+s];
-
-                if ((s == 0) || (this.buffer[this.start+s-1] < c0))
-                    s = ~s;
-
-                if (c0 != c2)
-                {
-                    bucket_A[c2] = k;
-                    c2 = c0;
-                    k = bucket_A[c2];
-                }
-
-                this.sa[k++] = s;
+               this.sa[i] = ~s;
+               continue;
             }
-            else
-                this.sa[i] = ~s;
+             
+            s--;
+            c0 = this.buffer[this.start+s];
+
+            if ((s == 0) || (this.buffer[this.start+s-1] < c0))
+                s = ~s;
+
+            if (c0 != c2)
+            {
+                bucket_A[c2] = k;
+                c2 = c0;
+                k = bucket_A[c2];
+            }
+
+            this.sa[k++] = s;
         }
     }
 
@@ -1331,20 +1332,12 @@ public final class DivSufSort
             if (a <= d)
             {
                 c = b - 1;
-                int s = a - first;
-                int t = b - a;
-
-                if (s > t)
-                    s = t;
+                int s = (a - first > b - a) ? b - a : a - first;
 
                 for (int e=first, f=b-s; s>0; s--, e++, f++)
                     this.swapInSA(e, f);
 
-                s = d - c;
-                t = last - d - 1;
-
-                if (s > t)
-                    s = t;
+                s = (d - c > last - d - 1) ? last - d - 1 : d - c;
 
                 for (int e=b, f=last-s; s>0; s--, e++, f++)
                     this.swapInSA(e, f);

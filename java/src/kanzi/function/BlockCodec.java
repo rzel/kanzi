@@ -157,7 +157,7 @@ public class BlockCodec implements ByteFunction
          output.index = savedOIdx + headerSizeBytes;
          ZRLT zrlt = new ZRLT(blockSize);
 
-         // Apply Zero Length Encoding (changes the index of input & output)
+         // Apply Zero Run Length Encoding (changes the index of input & output)
          if (zrlt.forward(input, output) == false)
          {
             // Compression failed, recover source data
@@ -230,7 +230,7 @@ public class BlockCodec implements ByteFunction
          final int savedOIdx = output.index;
          ZRLT zrlt = new ZRLT(compressedLength);
 
-         // Apply Zero Length Decoding (changes the index of input & output)
+         // Apply Zero Run Length Decoding (changes the index of input & output)
          if (zrlt.inverse(input, output) == false)
             return false;
 
