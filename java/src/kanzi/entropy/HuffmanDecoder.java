@@ -82,23 +82,24 @@ public class HuffmanDecoder extends AbstractDecoder
 
     public int readLengths() throws BitStreamException
     {
+        int count = EntropyUtils.decodeAlphabet(this.bitstream, this.ranks);
         ExpGolombDecoder egdec = new ExpGolombDecoder(this.bitstream, true);
         int currSize ;
         this.minCodeLen = 24; // max code length
         int prevSize = 2;
-        int count = 0;
-
+        
         // Read lengths
-        for (int i=0; i<256; i++)
+        for (int i=0; i<count; i++)
         {
-           this.codes[i] = 0;
+           final int r = this.ranks[i];
+           this.codes[r] = 0;
            int delta = egdec.decodeByte();
            currSize = prevSize + delta;
 
            if (currSize < 0)
            {
               throw new BitStreamException("Invalid bitstream: incorrect size " + currSize +
-                      " for Huffman symbol " + i, BitStreamException.INVALID_STREAM);
+                      " for Huffman symbol " + r, BitStreamException.INVALID_STREAM);
            }
            
            if (currSize != 0)
@@ -106,19 +107,17 @@ public class HuffmanDecoder extends AbstractDecoder
               if (currSize > 24)
               {
                  throw new BitStreamException("Invalid bitstream: incorrect max size " + currSize +
-                    " for Huffman symbol " + i, BitStreamException.INVALID_STREAM);
+                    " for Huffman symbol " + r, BitStreamException.INVALID_STREAM);
               }
 
               if (this.minCodeLen > currSize)
                  this.minCodeLen = currSize;
-
-              this.ranks[count++] = i;
            }
            
-           this.sizes[i] = (short) currSize;
+           this.sizes[r] = (short) currSize;
            prevSize = currSize;
         }
-
+ 
         if (count == 0)
            return 0;
 
@@ -132,10 +131,8 @@ public class HuffmanDecoder extends AbstractDecoder
 
 
     // Build decoding tables
-    // The slow decoding table is divided into 24 sections (one per code length).
-    // It contains the codes in natural order.
-    // The fast decoding table is divided contains all the prefixes with
-    // DECODING_BATCH_SIZE bits.
+    // The slow decoding table contains the codes in natural order.
+    // The fast decoding table contains all the prefixes with DECODING_BATCH_SIZE bits.
     private void buildDecodingTables(int count)
     {
         for (int i=this.fdTable.length-1; i>=0; i--)
@@ -203,7 +200,7 @@ public class HuffmanDecoder extends AbstractDecoder
        int endChunk = (startChunk + sz < end) ? startChunk + sz : end;
 
        while (startChunk < end)
-       {
+       { 
           // Reinitialize the Huffman tables
           if (this.readLengths() == 0)
              return startChunk - blkptr;
@@ -249,7 +246,7 @@ public class HuffmanDecoder extends AbstractDecoder
 
 
     private byte slowDecodeByte(int code, int codeLen)
-    {
+    { 
        while (codeLen < 23)
        {
           codeLen++;
@@ -273,7 +270,6 @@ public class HuffmanDecoder extends AbstractDecoder
              return (byte) (this.sdTable[idx+code] >>> 8);
        }
 
-
        throw new BitStreamException("Invalid bitstream: incorrect Huffman code",
           BitStreamException.INVALID_STREAM);
     }
@@ -281,7 +277,7 @@ public class HuffmanDecoder extends AbstractDecoder
 
     // 64 bits must be available in the bitstream
     private byte fastDecodeByte()
-    {
+    { 
        if (this.bits < DECODING_BATCH_SIZE)
        {
           // Fetch more bits from bitstream
@@ -302,7 +298,7 @@ public class HuffmanDecoder extends AbstractDecoder
        }
 
        this.bits -= (val & 0xFF);
-       return (byte) (val >>> 8);
+       return (byte) (val >>> 8);      
     }
 
 

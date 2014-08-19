@@ -206,7 +206,7 @@ func createTreeFromFrequencies(frequencies []uint, sizes_ []uint8, ranks []uint8
 	queue := make(PriorityQueue, 0)
 
 	for i := range ranks {
-		heap.Push(&queue, &HuffmanNode{symbol: uint8(ranks[i]), weight: frequencies[ranks[i]]})
+		heap.Push(&queue, &HuffmanNode{symbol: ranks[i], weight: frequencies[ranks[i]]})
 	}
 
 	for queue.Len() > 1 {
@@ -260,7 +260,7 @@ func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 
 	count := 0
 
-	for i := range this.ranks {
+	for i := range this.sizes {
 		this.sizes[i] = 0
 		this.codes[i] = 0
 
@@ -277,25 +277,31 @@ func (this *HuffmanEncoder) UpdateFrequencies(frequencies []uint) error {
 		return err
 	}
 
-	// Create canonical codes
-	generateCanonicalCodes(this.sizes, this.codes, this.ranks[0:count])
+	EncodeAlphabet(this.bitstream, this.ranks[0:count])
+
+	// Transmit code lengths only, frequencies and codes do not matter
+	// Unary encode the length difference
 	egenc, err := NewExpGolombEncoder(this.bitstream, true)
 
 	if err != nil {
 		return err
 	}
 
-	// Transmit code lengths only, frequencies and codes do not matter
-	// Unary encode the length difference
 	prevSize := uint8(2)
 
-	for i := 0; i < 256; i++ {
-		currSize := this.sizes[i]
+	for i := 0; i < count; i++ {
+		currSize := this.sizes[this.ranks[i]]
 		egenc.EncodeByte(currSize - prevSize)
 		prevSize = currSize
+	}
 
-		// Pack size and code (size <= 24 bits)
-		this.codes[i] = (uint(currSize) << 24) | this.codes[i]
+	// Create canonical codes (reorders ranks)
+	generateCanonicalCodes(this.sizes, this.codes, this.ranks[0:count])
+
+	// Pack size and code (size <= 24 bits)
+	for i := 0; i < count; i++ {
+		r := this.ranks[i]
+		this.codes[r] = (uint(this.sizes[r]) << 24) | this.codes[r]
 	}
 
 	return nil
@@ -435,6 +441,12 @@ func NewHuffmanDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*HuffmanDec
 }
 
 func (this *HuffmanDecoder) ReadLengths() (int, error) {
+	count, err := DecodeAlphabet(this.bitstream, this.ranks)
+
+	if err != nil {
+		return 0, err
+	}
+
 	egdec, err := NewExpGolombDecoder(this.bitstream, true)
 
 	if err != nil {
@@ -444,11 +456,11 @@ func (this *HuffmanDecoder) ReadLengths() (int, error) {
 	var currSize int8
 	this.minCodeLen = 24 // max code length
 	prevSize := int8(2)
-	count := 0
 
 	// Read lengths
-	for i := 0; i < 256; i++ {
-		this.codes[i] = 0
+	for i := 0; i < count; i++ {
+		r := this.ranks[i]
+		this.codes[r] = 0
 		var delta byte
 
 		if delta, err = egdec.DecodeByte(); err != nil {
@@ -469,13 +481,10 @@ func (this *HuffmanDecoder) ReadLengths() (int, error) {
 			if this.minCodeLen > currSize {
 				this.minCodeLen = currSize
 			}
-
-			this.ranks[count] = uint8(i)
-			count++
 		}
 
-		this.sizes[i] = uint8(currSize)
-		prevSize = currSize		
+		this.sizes[r] = uint8(currSize)
+		prevSize = currSize
 	}
 
 	if count == 0 {
@@ -491,10 +500,8 @@ func (this *HuffmanDecoder) ReadLengths() (int, error) {
 }
 
 // Build decoding tables
-// The slow decoding table is divided into 24 sections (one per code length).
-// It contains the codes in natural order.
-// The fast decoding table is divided contains all the prefixes with
-// DECODING_BATCH_SIZE bits.
+// The slow decoding table contains the codes in natural order.
+// The fast decoding table contains all the prefixes with DECODING_BATCH_SIZE bits.
 func (this *HuffmanDecoder) buildDecodingTables(count int) {
 	for i := range this.fdTable {
 		this.fdTable[i] = 0

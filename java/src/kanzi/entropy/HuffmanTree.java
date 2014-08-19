@@ -25,7 +25,7 @@ public final class HuffmanTree
     // Return the number of codes generated
     public static int generateCanonicalCodes(short[] sizes, int[] codes, int[] ranks, int count)
     {
-       // Sort by icreasing size (first key) and increasing value (second key)
+       // Sort by increasing size (first key) and increasing value (second key)
        if (count > 1)
        {
           QuickSort sorter = new QuickSort(new HuffmanArrayComparator(sizes));

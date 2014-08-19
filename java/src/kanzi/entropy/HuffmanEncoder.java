@@ -19,6 +19,7 @@ import java.util.PriorityQueue;
 import kanzi.OutputBitStream;
 import kanzi.BitStreamException;
 import kanzi.entropy.HuffmanTree.Node;
+import kanzi.io.CompressedOutputStream;
 
 
 public class HuffmanEncoder extends AbstractEncoder
@@ -99,23 +100,29 @@ public class HuffmanEncoder extends AbstractEncoder
            throw new BitStreamException(e.getMessage(), BitStreamException.INVALID_STREAM);
         }
 
-        // Create canonical codes
-        if (HuffmanTree.generateCanonicalCodes(this.sizes, this.codes, this.ranks, count) < 0)
-           return false;
+        EntropyUtils.encodeAlphabet(this.bitstream, count, this.ranks);
 
         // Transmit code lengths only, frequencies and codes do not matter
         // Unary encode the length difference
         ExpGolombEncoder egenc = new ExpGolombEncoder(this.bitstream, true);
         int prevSize = 2;
 
-        for (int i=0; i<256; i++)
+        for (int i=0; i<count; i++)
         {
-           final int currSize = this.sizes[i];
+           final int currSize = this.sizes[this.ranks[i]];
            egenc.encodeByte((byte) (currSize - prevSize));
            prevSize = currSize;
+        }
 
-           // Pack size and code (size <= 24 bits)
-           this.codes[i] = (currSize << 24) | this.codes[i];
+        // Create canonical codes (reorders ranks)
+        if (HuffmanTree.generateCanonicalCodes(this.sizes, this.codes, this.ranks, count) < 0)
+           return false;
+
+        // Pack size and code (size <= 24 bits)
+        for (int i=0; i<count; i++)
+        {
+           final int r = this.ranks[i];
+           this.codes[r] = (this.sizes[r] << 24) | this.codes[r];
         }
 
         return true;

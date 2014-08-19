@@ -36,7 +36,7 @@ import (
 
 const (
 	BITSTREAM_TYPE             = 0x4B414E5A // "KANZ"
-	BITSTREAM_FORMAT_VERSION   = 6
+	BITSTREAM_FORMAT_VERSION   = 7
 	STREAM_DEFAULT_BUFFER_SIZE = 1024 * 1024
 	COPY_LENGTH_MASK           = 0x0F
 	SMALL_BLOCK_MASK           = 0x80
@@ -805,36 +805,6 @@ func (this *CompressedInputStream) Read(array []byte) (int, error) {
 	remaining := len(array)
 
 	for remaining > 0 {
-		if this.curIdx >= this.maxIdx {
-			// Initially this.maxIdx = 0
-			// If this.maxIdx < len(array), the end of stream has been
-			// reached in the previous call
-			if this.maxIdx > 0 && this.maxIdx < len(array) {
-				if len(array) == remaining {
-					// EOF and we did not read any bytes in this call
-					return -1, nil
-				} else {
-					return len(array) - remaining, nil
-				}
-			}
-
-			var err error
-
-			// Buffer empty, time to decode
-			if this.maxIdx, err = this.processBlock(); err != nil {
-				return len(array) - remaining, err
-			}
-
-			if this.maxIdx == 0 {
-				if len(array) == remaining {
-					// EOF and we did not read any bytes in this call
-					return -1, nil
-				} else {
-					return len(array) - remaining, nil
-				}
-			}
-		}
-
 		lenChunk := len(array) - startChunk
 
 		if lenChunk+this.curIdx >= this.maxIdx {
@@ -842,11 +812,37 @@ func (this *CompressedInputStream) Read(array []byte) (int, error) {
 			lenChunk = this.maxIdx - this.curIdx
 		}
 
-		// Process a chunk of in-buffer data. No access to bitstream required
-		copy(array[startChunk:], this.data[this.curIdx:this.curIdx+lenChunk])
-		remaining -= lenChunk
-		this.curIdx += lenChunk
-		startChunk += lenChunk
+		if lenChunk > 0 {
+			// Process a chunk of in-buffer data. No access to bitstream required
+			copy(array[startChunk:], this.data[this.curIdx:this.curIdx+lenChunk])
+			this.curIdx += lenChunk
+			startChunk += lenChunk
+			remaining -= lenChunk
+
+			if remaining == 0 {
+				break
+			}
+		}
+
+		// Buffer empty, time to decode
+		if this.curIdx >= this.maxIdx {
+			var err error
+
+			if this.maxIdx, err = this.processBlock(); err != nil {
+				return len(array) - remaining, err
+			}
+
+			if this.maxIdx == 0 {
+				// Reached end of stream
+				if len(array) == remaining {
+					// EOF and we did not read any bytes in this call
+					return -1, nil
+				}
+
+				break
+			}
+		}
+
 	}
 
 	return len(array) - remaining, nil
@@ -859,13 +855,6 @@ func (this *CompressedInputStream) processBlock() (int, error) {
 		}
 
 		this.initialized = true
-	}
-
-	// Initially this.maxIdx = 0
-	// If this.maxIdx < len(this.data), the end of stream has been
-	// reached in the previous call
-	if this.maxIdx > 0 && this.maxIdx < len(this.data) {
-		return 0, nil
 	}
 
 	if len(this.data) < int(this.blockSize)*this.jobs {
