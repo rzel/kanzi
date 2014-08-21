@@ -220,15 +220,12 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 		return nil
 	}
 
-	var err error
-
-	if _, err = this.obs.WriteBits(BITSTREAM_TYPE, 32); err != nil {
-		return NewIOError("Cannot write bitstream type to header", ERR_WRITE_FILE)
-	}
-
-	if _, err = this.obs.WriteBits(BITSTREAM_FORMAT_VERSION, 7); err != nil {
-		return NewIOError("Cannot write bitstream version to header", ERR_WRITE_FILE)
-	}
+	defer func() {
+		if r := recover(); r != nil {
+			msg := "Cannot write bitstream header: " + r.(error).Error()
+			panic(NewIOError(msg, ERR_WRITE_FILE))
+		}
+	}()
 
 	cksum := 0
 
@@ -236,22 +233,12 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 		cksum = 1
 	}
 
-	if err = this.obs.WriteBit(cksum); err != nil {
-		return NewIOError("Cannot write checksum to header", ERR_WRITE_FILE)
-	}
-
-	if _, err = this.obs.WriteBits(uint64(this.entropyType&0x7F), 7); err != nil {
-		return NewIOError("Cannot write entropy type to header", ERR_WRITE_FILE)
-	}
-
-	if _, err = this.obs.WriteBits(uint64(this.transformType&0x7F), 7); err != nil {
-		return NewIOError("Cannot write transform type to header", ERR_WRITE_FILE)
-	}
-
-	if _, err = this.obs.WriteBits(uint64(this.blockSize), 26); err != nil {
-		return NewIOError("Cannot write block size to header", ERR_WRITE_FILE)
-	}
-
+	this.obs.WriteBits(BITSTREAM_TYPE, 32)
+	this.obs.WriteBits(BITSTREAM_FORMAT_VERSION, 7)
+	this.obs.WriteBit(cksum)
+	this.obs.WriteBits(uint64(this.entropyType&0x7F), 7)
+	this.obs.WriteBits(uint64(this.transformType&0x7F), 7)
+	this.obs.WriteBits(uint64(this.blockSize), 26)
 	return nil
 }
 
@@ -305,9 +292,7 @@ func (this *CompressedOutputStream) Close() error {
 	}
 
 	// Write end block of size 0
-	if _, err := this.obs.WriteBits(SMALL_BLOCK_MASK, 8); err != nil {
-		return err
-	}
+	this.obs.WriteBits(SMALL_BLOCK_MASK, 8)
 
 	if _, err := this.obs.Close(); err != nil {
 		return err
@@ -524,18 +509,12 @@ func (this *CompressedOutputStream) encode(data, buf []byte, blockLength uint,
 	this.obs.WriteBits(uint64(mode), 8)
 
 	if dataSize > 0 {
-		if _, err = this.obs.WriteBits(uint64(postTransformLength), 8*dataSize); err != nil {
-			output <- NewIOError(err.Error(), ERR_WRITE_FILE)
-			return
-		}
+		this.obs.WriteBits(uint64(postTransformLength), 8*dataSize)
 	}
 
 	// Write checksum
 	if this.hasher != nil {
-		if _, err = this.obs.WriteBits(uint64(checksum), 32); err != nil {
-			output <- NewIOError(err.Error(), ERR_WRITE_FILE)
-			return
-		}
+		this.obs.WriteBits(uint64(checksum), 32)
 	}
 
 	if len(listeners_) > 0 {
@@ -679,14 +658,14 @@ func (this *CompressedInputStream) ReadHeader() error {
 		return nil
 	}
 
-	fileType := uint64(0)
-	var err error
+	defer func() {
+		if r := recover(); r != nil {
+			panic(NewIOError("Cannot read bitstream header: "+r.(error).Error(), ERR_WRITE_FILE))
+		}
+	}()
 
 	// Read stream type
-	if fileType, err = this.ibs.ReadBits(32); err != nil {
-		errMsg := fmt.Sprintf("Error reading stream type in header from input file: %v", err)
-		return NewIOError(errMsg, ERR_READ_FILE)
-	}
+	fileType := this.ibs.ReadBits(32)
 
 	// Sanity check
 	if fileType != BITSTREAM_TYPE {
@@ -694,13 +673,7 @@ func (this *CompressedInputStream) ReadHeader() error {
 		return NewIOError(errMsg, ERR_INVALID_FILE)
 	}
 
-	header := uint64(0)
-
-	if header, err = this.ibs.ReadBits(48); err != nil {
-		errMsg := fmt.Sprintf("Invalid bitstream, cannot read header: %v", err)
-		return NewIOError(errMsg, ERR_READ_FILE)
-	}
-
+	header := this.ibs.ReadBits(48)
 	version := int(header>>41) & 0x7F
 
 	// Sanity check
@@ -713,7 +686,10 @@ func (this *CompressedInputStream) ReadHeader() error {
 	checksum := (header >> 40) & 1
 
 	if checksum == 1 {
-		if this.hasher, err = util.NewXXHash(BITSTREAM_TYPE); err != nil {
+		var err error
+		this.hasher, err = util.NewXXHash(BITSTREAM_TYPE)
+
+		if err != nil {
 			return err
 		}
 	}
@@ -972,18 +948,17 @@ func (this *CompressedInputStream) decode(data, buf []byte,
 		}
 	}
 
+	defer func() {
+		if r := recover(); r != nil {
+			// Error => cancel concurrent decoding tasks
+			res.err = NewIOError(r.(error).Error(), ERR_READ_FILE)
+			notify(output, result, false, res)
+		}
+	}()
+
 	// Extract header directly from bitstream
 	read := this.ibs.Read()
-	r, err := this.ibs.ReadBits(8)
-
-	if err != nil {
-		// Error => cancel concurrent decoding tasks
-		res.err = NewIOError(err.Error(), ERR_READ_FILE)
-		notify(output, result, false, res)
-		return
-	}
-
-	mode := byte(r)
+	mode := byte(this.ibs.ReadBits(8))
 	var preTransformLength uint
 	checksum1 := uint32(0)
 
@@ -993,15 +968,7 @@ func (this *CompressedInputStream) decode(data, buf []byte,
 		dataSize := uint(1 + (mode & 0x03))
 		length := dataSize << 3
 		mask := uint64(1<<length) - 1
-
-		if r, err = this.ibs.ReadBits(length); err != nil {
-			// Error => cancel concurrent decoding tasks
-			res.err = NewIOError(err.Error(), ERR_READ_FILE)
-			notify(output, result, false, res)
-			return
-		}
-
-		preTransformLength = uint(r & mask)
+		preTransformLength = uint(this.ibs.ReadBits(length) & mask)
 	}
 
 	if preTransformLength == 0 {
@@ -1021,14 +988,7 @@ func (this *CompressedInputStream) decode(data, buf []byte,
 
 	// Extract checksum from bit stream (if any)
 	if this.hasher != nil {
-		if r, err = this.ibs.ReadBits(32); err != nil {
-			// Error => cancel concurrent decoding tasks
-			res.err = NewIOError(err.Error(), ERR_READ_FILE)
-			notify(output, result, false, res)
-			return
-		}
-
-		checksum1 = uint32(r)
+		checksum1 = uint32(this.ibs.ReadBits(32))
 	}
 
 	if len(listeners_) > 0 {

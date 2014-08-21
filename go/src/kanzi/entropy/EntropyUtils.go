@@ -31,28 +31,16 @@ const (
 )
 
 func EntropyEncodeArray(ee kanzi.EntropyEncoder, block []byte) (int, error) {
-	err := error(nil)
-
 	for i := range block {
-		err = ee.EncodeByte(block[i])
-
-		if err != nil {
-			return i, err
-		}
+		ee.EncodeByte(block[i])
 	}
 
 	return len(block), nil
 }
 
 func EntropyDecodeArray(ed kanzi.EntropyDecoder, block []byte) (int, error) {
-	err := error(nil)
-
 	for i := range block {
-		block[i], err = ed.DecodeByte()
-
-		if err != nil {
-			return i, err
-		}
+		block[i] = ed.DecodeByte()
 	}
 
 	return len(block), nil
@@ -171,10 +159,10 @@ func EncodeAlphabet(obs kanzi.OutputBitStream, alphabet []uint8) int {
 
 func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
 	// Read encoding mode from bitstream
-	aphabetType, _ := ibs.ReadBit()
+	aphabetType := ibs.ReadBit()
 
 	if aphabetType == FULL_ALPHABET {
-		mode, _ := ibs.ReadBit()
+		mode := ibs.ReadBit()
 		var alphabetSize int
 
 		if mode == EIGHT_BIT_ALPHABET {
@@ -192,12 +180,12 @@ func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
 	}
 
 	alphabetSize := 0
-	mode, _ := ibs.ReadBit()
+	mode := ibs.ReadBit()
 
 	if mode == BIT_ENCODED_ALPHABET {
 		// Decode presence flags
 		for i := 0; i < 256; i += 64 {
-			val, _ := ibs.ReadBits(64)
+			val := ibs.ReadBits(64)
 
 			for j := 0; j < 64; j++ {
 				if val&(uint64(1)<<uint(j)) != 0 {
@@ -207,18 +195,15 @@ func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
 			}
 		}
 	} else { // DELTA_ENCODED_ALPHABET
-		r, _ := ibs.ReadBits(6)
-		val := int(r)
-		r, _ = ibs.ReadBits(3)
-		log := uint(1 + r) // log(max(diff))
+		val := int(ibs.ReadBits(6))
+		log := uint(1 + ibs.ReadBits(3)) // log(max(diff))
 		alphabetSize = val >> 1
 		n := 0
 		symbol := uint8(0)
 
 		if val&1 == ABSENT_SYMBOLS_MASK {
 			for i := 0; i < alphabetSize; i++ {
-				r, _ := ibs.ReadBits(log)
-				next := symbol + uint8(r)
+				next := symbol + uint8(ibs.ReadBits(log))
 
 				for symbol < next {
 					alphabet[n] = symbol
@@ -239,8 +224,7 @@ func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
 
 		} else {
 			for i := 0; i < alphabetSize; i++ {
-				r, _ := ibs.ReadBits(log)
-				symbol += uint8(r)
+				symbol += uint8(ibs.ReadBits(log))
 				alphabet[i] = symbol
 				symbol++
 			}

@@ -160,19 +160,19 @@ type HuffmanEncoder struct {
 // Since the number of args is variable, this function can be called like this:
 // NewHuffmanEncoder(bs) or NewHuffmanEncoder(bs, 16384)
 // The default chunk size is 65536 bytes.
-func NewHuffmanEncoder(bs kanzi.OutputBitStream, chunkSizes ...uint) (*HuffmanEncoder, error) {
+func NewHuffmanEncoder(bs kanzi.OutputBitStream, args ...uint) (*HuffmanEncoder, error) {
 	if bs == nil {
 		return nil, errors.New("Invalid null bitstream parameter")
 	}
 
-	if len(chunkSizes) > 1 {
+	if len(args) > 1 {
 		return nil, errors.New("At most one chunk size can be provided")
 	}
 
 	chkSize := DEFAULT_HUFFMAN_CHUNK_SIZE
 
-	if len(chunkSizes) == 1 {
-		chkSize = chunkSizes[0]
+	if len(args) == 1 {
+		chkSize = args[0]
 	}
 
 	if chkSize != 0 && chkSize < 1024 {
@@ -345,9 +345,7 @@ func (this *HuffmanEncoder) Encode(block []byte) (int, error) {
 		this.UpdateFrequencies(buf)
 
 		for i := startChunk; i < endChunk; i++ {
-			if err := this.EncodeByte(block[i]); err != nil {
-				return i, err
-			}
+			this.EncodeByte(block[i])
 		}
 
 		startChunk = endChunk
@@ -363,9 +361,8 @@ func (this *HuffmanEncoder) Encode(block []byte) (int, error) {
 }
 
 // Frequencies of the data block must have been previously set
-func (this *HuffmanEncoder) EncodeByte(val byte) error {
-	_, err := this.bitstream.WriteBits(uint64(this.codes[val]), this.codes[val]>>24)
-	return err
+func (this *HuffmanEncoder) EncodeByte(val byte) {
+	this.bitstream.WriteBits(uint64(this.codes[val]), this.codes[val]>>24)
 }
 
 func (this *HuffmanEncoder) Dispose() {
@@ -397,19 +394,19 @@ type HuffmanDecoder struct {
 // Since the number of args is variable, this function can be called like this:
 // NewHuffmanDecoder(bs) or NewHuffmanDecoder(bs, 16384)
 // The default chunk size is 65536 bytes.
-func NewHuffmanDecoder(bs kanzi.InputBitStream, chunkSizes ...uint) (*HuffmanDecoder, error) {
+func NewHuffmanDecoder(bs kanzi.InputBitStream, args ...uint) (*HuffmanDecoder, error) {
 	if bs == nil {
 		return nil, errors.New("Invalid null bitstream parameter")
 	}
 
-	if len(chunkSizes) > 1 {
+	if len(args) > 1 {
 		return nil, errors.New("At most one chunk size can be provided")
 	}
 
 	chkSize := DEFAULT_HUFFMAN_CHUNK_SIZE
 
-	if len(chunkSizes) == 1 {
-		chkSize = chunkSizes[0]
+	if len(args) == 1 {
+		chkSize = args[0]
 	}
 
 	if chkSize != 0 && chkSize < 1024 {
@@ -461,13 +458,7 @@ func (this *HuffmanDecoder) ReadLengths() (int, error) {
 	for i := 0; i < count; i++ {
 		r := this.ranks[i]
 		this.codes[r] = 0
-		var delta byte
-
-		if delta, err = egdec.DecodeByte(); err != nil {
-			return 0, err
-		}
-
-		currSize = int8(delta) + prevSize
+		currSize = int8(egdec.DecodeByte()) + prevSize
 
 		if currSize < 0 {
 			return 0, fmt.Errorf("Invalid bitstream: incorrect size %v for Huffman symbol %v", currSize, i)
@@ -590,23 +581,16 @@ func (this *HuffmanDecoder) Decode(block []byte) (int, error) {
 
 		endChunk1 := endChunk - endPaddingSize
 		i := startChunk
-		var err error
 
 		for i < endChunk1 {
 			// Fast decoding (read DECODING_BATCH_SIZE bits at a time)
-			if block[i], err = this.fastDecodeByte(); err != nil {
-				return i, err
-			}
-
+			block[i] = this.fastDecodeByte()
 			i++
 		}
 
 		for i < endChunk {
 			// Fallback to regular decoding (read one bit at a time)
-			if block[i], err = this.DecodeByte(); err != nil {
-				return i, err
-			}
-
+			block[i] = this.DecodeByte()
 			i++
 		}
 
@@ -622,23 +606,17 @@ func (this *HuffmanDecoder) Decode(block []byte) (int, error) {
 	return len(block), nil
 }
 
-func (this *HuffmanDecoder) DecodeByte() (byte, error) {
+func (this *HuffmanDecoder) DecodeByte() byte {
 	return this.slowDecodeByte(0, 0)
 }
 
-func (this *HuffmanDecoder) slowDecodeByte(code int, codeLen uint) (byte, error) {
+func (this *HuffmanDecoder) slowDecodeByte(code int, codeLen uint) byte {
 	for codeLen < 23 {
 		codeLen++
 		code <<= 1
 
 		if this.bits == 0 {
-			r, err := this.bitstream.ReadBit()
-
-			if err != nil {
-				return 0, err
-			}
-
-			code |= r
+			code |= this.bitstream.ReadBit()
 		} else {
 			// Consume remaining bits in 'state'
 			this.bits--
@@ -652,23 +630,18 @@ func (this *HuffmanDecoder) slowDecodeByte(code int, codeLen uint) (byte, error)
 		}
 
 		if this.sdTable[idx+code]&0xFF == codeLen {
-			return byte(this.sdTable[idx+code] >> 8), nil
+			return byte(this.sdTable[idx+code] >> 8)
 		}
 	}
 
-	return 0, errors.New("Invalid bitstream: incorrect Huffman code")
+	panic(errors.New("Invalid bitstream: incorrect Huffman code"))
 }
 
 // 64 bits must be available in the bitstream
-func (this *HuffmanDecoder) fastDecodeByte() (byte, error) {
+func (this *HuffmanDecoder) fastDecodeByte() byte {
 	if this.bits < DECODING_BATCH_SIZE {
 		// Fetch more bits from bitstream
-		read, err := this.bitstream.ReadBits(64 - this.bits)
-
-		if err != nil {
-			return 0, err
-		}
-
+		read := this.bitstream.ReadBits(64 - this.bits)
 		mask := uint64((1 << this.bits) - 1)
 		this.state = ((this.state & mask) << (64 - this.bits)) | read
 		this.bits = 64
@@ -684,7 +657,7 @@ func (this *HuffmanDecoder) fastDecodeByte() (byte, error) {
 	}
 
 	this.bits -= (val & 0xFF)
-	return byte(val >> 8), nil
+	return byte(val >> 8)
 }
 
 func (this *HuffmanDecoder) BitStream() kanzi.InputBitStream {

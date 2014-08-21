@@ -55,7 +55,7 @@ func TestCorrectness() {
 			values = make([]byte, 32)
 
 			for i := range values {
-				values[i] = byte(2+(i&1)) // 2 symbols
+				values[i] = byte(2 + (i & 1)) // 2 symbols
 			}
 		} else {
 			values = make([]byte, 32)

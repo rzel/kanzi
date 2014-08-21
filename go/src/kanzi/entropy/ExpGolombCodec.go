@@ -46,9 +46,10 @@ func (this *ExpGolombEncoder) Signed() bool {
 func (this *ExpGolombEncoder) Dispose() {
 }
 
-func (this *ExpGolombEncoder) EncodeByte(val byte) error {
+func (this *ExpGolombEncoder) EncodeByte(val byte) {
 	if val == 0 {
-		return this.bitstream.WriteBit(1)
+		this.bitstream.WriteBit(1)
+		return
 	}
 
 	var emit uint64
@@ -94,8 +95,7 @@ func (this *ExpGolombEncoder) EncodeByte(val byte) error {
 		emit = (emit << 1) | uint64((val>>7)&1)
 	}
 
-	_, err := this.bitstream.WriteBits(emit, n)
-	return err
+	this.bitstream.WriteBits(emit, n)
 }
 
 func (this *ExpGolombEncoder) BitStream() kanzi.OutputBitStream {
@@ -131,28 +131,16 @@ func (this *ExpGolombDecoder) Dispose() {
 }
 
 // If the decoder is signed, the returned value is a byte encoded int8
-func (this *ExpGolombDecoder) DecodeByte() (byte, error) {
-	r, err := this.bitstream.ReadBit()
-
-	if err != nil {
-		return 0, err
-	}
-
-	if r == 1 {
-		return 0, nil
+func (this *ExpGolombDecoder) DecodeByte() byte {
+	if this.bitstream.ReadBit() == 1 {
+		return 0
 	}
 
 	// Decode unsigned
 	log2 := uint(1)
 
 	for {
-		r, err := this.bitstream.ReadBit()
-
-		if err != nil {
-			return 0, err
-		}
-
-		if r == 1 {
+		if this.bitstream.ReadBit() == 1 {
 			break
 		}
 
@@ -161,19 +149,19 @@ func (this *ExpGolombDecoder) DecodeByte() (byte, error) {
 
 	if this.signed == true {
 		// Decode signed: read value + sign
-		val, err := this.bitstream.ReadBits(log2 + 1)
+		val := this.bitstream.ReadBits(log2 + 1)
 		res := val>>1 + 1<<log2 - 1
 
 		if val&1 == 1 {
-			return byte(^res + 1), err
+			return byte(^res + 1)
 		}
 
-		return byte(res), err
+		return byte(res)
 	}
 
 	// Decode unsigned
-	val, err := this.bitstream.ReadBits(log2)
-	return byte((1 << log2) - 1 + val), err
+	val := this.bitstream.ReadBits(log2)
+	return byte((1 << log2) - 1 + val)
 }
 
 func (this *ExpGolombDecoder) BitStream() kanzi.InputBitStream {
