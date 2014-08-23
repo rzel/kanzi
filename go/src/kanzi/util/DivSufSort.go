@@ -1223,6 +1223,8 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 
 		td := depth
 		idx := td
+		buf1 := this.buffer[idx:]
+		buf2 := this.sa[pa:]
 
 		if limit == 0 {
 			this.ssHeapSort(idx, pa, first, last-first)
@@ -1232,10 +1234,10 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 		var a int
 
 		if limit < 0 {
-			v = this.buffer[idx+this.sa[pa+this.sa[first]]]
+			v = buf1[buf2[this.sa[first]]]
 
 			for a = first + 1; a < last; a++ {
-				x = this.buffer[idx+this.sa[pa+this.sa[a]]]
+				x = buf1[buf2[this.sa[a]]]
 
 				if x != v {
 					if a-first > 1 {
@@ -1247,7 +1249,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 				}
 			}
 
-			if this.buffer[idx+this.sa[pa+this.sa[first]]-1] < v {
+			if buf1[buf2[this.sa[first]]-1] < v {
 				first = this.ssPartition(pa, first, a, depth)
 			}
 
@@ -1278,13 +1280,13 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 
 		// choose pivot
 		a = this.ssPivot(td, pa, first, last)
-		v = this.buffer[idx+this.sa[pa+this.sa[a]]]
+		v = buf1[buf2[this.sa[a]]]
 		this.swapInSA(first, a)
 		b := first + 1
 
 		// partition
 		for b < last {
-			x = this.buffer[idx+this.sa[pa+this.sa[b]]]
+			x = buf1[buf2[this.sa[b]]]
 
 			if x != v {
 				break
@@ -1299,7 +1301,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 			b++
 
 			for b < last {
-				x = this.buffer[idx+this.sa[pa+this.sa[b]]]
+				x = buf1[buf2[this.sa[b]]]
 
 				if x > v {
 					break
@@ -1317,7 +1319,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 		c := last - 1
 
 		for c > b {
-			x = this.buffer[idx+this.sa[pa+this.sa[c]]]
+			x = buf1[buf2[this.sa[c]]]
 
 			if x != v {
 				break
@@ -1332,7 +1334,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 			c--
 
 			for c > b {
-				x = this.buffer[idx+this.sa[pa+this.sa[c]]]
+				x = buf1[buf2[this.sa[c]]]
 
 				if x < v {
 					break
@@ -1352,7 +1354,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 			b++
 
 			for b < c {
-				x = this.buffer[idx+this.sa[pa+this.sa[b]]]
+				x = buf1[buf2[this.sa[b]]]
 
 				if x > v {
 					break
@@ -1369,7 +1371,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 			c--
 
 			for c > b {
-				x = this.buffer[idx+this.sa[pa+this.sa[c]]]
+				x = buf1[buf2[this.sa[c]]]
 
 				if x < v {
 					break
@@ -1415,7 +1417,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 			a = first + (b - a)
 			c = last - (d - c)
 
-			if v <= this.buffer[idx+this.sa[pa+this.sa[a]]-1] {
+			if v <= this.buffer[idx+buf2[this.sa[a]]-1] {
 				b = a
 			} else {
 				b = this.ssPartition(pa, a, c, depth)
@@ -1457,7 +1459,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 				}
 			}
 		} else {
-			if this.buffer[idx+this.sa[pa+this.sa[first]]-1] < v {
+			if buf1[buf2[this.sa[first]]-1] < v {
 				first = this.ssPartition(pa, first, last, depth)
 				limit = ssIlg(last - first)
 			} else {
@@ -1551,21 +1553,22 @@ func (this *DivSufSort) ssMedian3(idx, pa, v1, v2, v3 int) int {
 }
 
 func (this *DivSufSort) ssPartition(pa, first, last, depth int) int {
-	arr := this.sa
+	sa_ := this.sa
+	buf := this.sa[pa:]
 	a := first - 1
 	b := last
 
 	for true {
 		a++
 
-		for a < b && arr[pa+arr[a]]+depth >= arr[pa+arr[a]+1]+1 {
-			arr[a] = ^arr[a]
+		for a < b && buf[sa_[a]]+depth >= buf[sa_[a]+1]+1 {
+			sa_[a] = ^sa_[a]
 			a++
 		}
 
 		b--
 
-		for b > a && arr[pa+arr[b]]+depth < arr[pa+arr[b]+1]+1 {
+		for b > a && buf[sa_[b]]+depth < buf[sa_[b]+1]+1 {
 			b--
 		}
 
@@ -1573,13 +1576,13 @@ func (this *DivSufSort) ssPartition(pa, first, last, depth int) int {
 			break
 		}
 
-		t := ^arr[b]
-		arr[b] = arr[a]
-		arr[a] = t
+		t := ^sa_[b]
+		sa_[b] = sa_[a]
+		sa_[a] = t
 	}
 
 	if first < a {
-		arr[first] = ^arr[first]
+		sa_[first] = ^sa_[first]
 	}
 	
 	return a
@@ -1614,16 +1617,18 @@ func (this *DivSufSort) ssHeapSort(idx, pa, saIdx, size int) {
 }
 
 func (this *DivSufSort) ssFixDown(idx, pa, saIdx, i, size int) {
-	arr := this.sa
-	v := arr[saIdx+i]
-	c := this.buffer[idx+arr[pa+v]]
+	sa_ := this.sa
+	buf1 := this.buffer[idx:]
+	buf2 := this.sa[pa:]
+	v := sa_[saIdx+i]
+	c := buf1[sa_[pa+v]]
 	j := (i << 1) + 1
 
 	for j < size {
 		k := j
 		j++
-		d := this.buffer[idx+arr[pa+arr[saIdx+k]]]
-		e := this.buffer[idx+arr[pa+arr[saIdx+j]]]
+		d := buf1[buf2[sa_[saIdx+k]]]
+		e := buf1[buf2[sa_[saIdx+j]]]
 
 		if d < e {
 			k = j
@@ -1634,12 +1639,12 @@ func (this *DivSufSort) ssFixDown(idx, pa, saIdx, i, size int) {
 			break
 		}
 
-		arr[saIdx+i] = arr[saIdx+k]
+		sa_[saIdx+i] = sa_[saIdx+k]
 		i = k
 		j = (i << 1) + 1
 	}
 
-	arr[i+saIdx] = v
+	sa_[i+saIdx] = v
 }
 
 func ssIlg(n int) int {

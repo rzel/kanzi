@@ -1173,7 +1173,7 @@ public final class DivSufSort
     }
 
 
-    private void ssMultiKeyIntroSort(int pa, int first, int last, int depth)
+    private void ssMultiKeyIntroSort(final int pa, int first, int last, int depth)
     {
         int limit = ssIlg(last-first);
         int v, x = 0;
@@ -1403,7 +1403,7 @@ public final class DivSufSort
                     limit = ssIlg(last-first);
                 }
                 else
-                   limit++;
+                    limit++;
 
                 depth++;
             }

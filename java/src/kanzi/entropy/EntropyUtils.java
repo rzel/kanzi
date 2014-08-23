@@ -15,15 +15,9 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import kanzi.BitStreamException;
 import kanzi.InputBitStream;
 import kanzi.OutputBitStream;
-import kanzi.bitstream.DebugOutputBitStream;
-import kanzi.bitstream.DefaultInputBitStream;
-import kanzi.bitstream.DefaultOutputBitStream;
 import kanzi.util.sort.DefaultArrayComparator;
 import kanzi.util.sort.QuickSort;
 
