@@ -1459,7 +1459,7 @@ func (this *DivSufSort) ssMultiKeyIntroSort(pa, first, last, depth int) {
 				}
 			}
 		} else {
-			if buf1[buf2[this.sa[first]]-1] < v {
+			if this.buffer[idx+this.sa[pa+this.sa[first]]-1] < v {
 				first = this.ssPartition(pa, first, last, depth)
 				limit = ssIlg(last - first)
 			} else {
