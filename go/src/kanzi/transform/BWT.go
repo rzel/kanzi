@@ -89,8 +89,9 @@ func (this *BWT) Size() uint {
 	return this.size
 }
 
-func (this *BWT) SetSize(sz uint) {
+func (this *BWT) SetSize(sz uint) bool {
 	this.size = sz
+	return true
 }
 
 func (this *BWT) Forward(src, dst []byte) (uint, uint, error) {
@@ -108,14 +109,6 @@ func (this *BWT) Forward(src, dst []byte) (uint, uint, error) {
 		return uint(count), uint(count), nil
 	}
 
-	// Lazy dynamic memory allocation (SA algo requires count+1 bytes)
-	if len(this.buffer1) < count+1 {
-		this.buffer1 = make([]int, count+1)
-	}
-
-	// Aliasing
-	data := this.buffer1
-
 	if this.saAlgo == nil {
 		var err error
 
@@ -126,15 +119,9 @@ func (this *BWT) Forward(src, dst []byte) (uint, uint, error) {
 		this.saAlgo.Reset()
 	}
 
-	for i := 0; i < count; i++ {
-		data[i] = int(src[i])
-	}
-
-	data[count] = data[0]
-
 	// Compute suffix array
-	sa := this.saAlgo.ComputeSuffixArray(data[0:count])
-	dst[0] = byte(data[count-1])
+	sa := this.saAlgo.ComputeSuffixArray(src[0:count])
+	dst[0] = src[count-1]
 	i := 0
 
 	for i < count {
