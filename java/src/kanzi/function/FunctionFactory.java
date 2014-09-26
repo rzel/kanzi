@@ -16,6 +16,8 @@ limitations under the License.
 package kanzi.function;
 
 import kanzi.ByteFunction;
+import kanzi.transform.BWT;
+import kanzi.transform.BWTS;
 
 
 public class FunctionFactory
@@ -27,6 +29,7 @@ public class FunctionFactory
    public static final byte LZ4_TYPE     = 76; // 'L'
    public static final byte NONE_TYPE    = 78; // 'N'
    public static final byte BWT_TYPE     = 87; // 'W'
+   public static final byte BWTS_TYPE    = 74; // 'J'
 
 
    public byte getType(String name)
@@ -45,6 +48,8 @@ public class FunctionFactory
             return ZRLT_TYPE;
          case "BWT":
             return BWT_TYPE; // raw BWT
+         case "BWTS":
+            return BWTS_TYPE; // raw BWTS
          case "NONE":
             return NONE_TYPE;
          default:
@@ -58,7 +63,7 @@ public class FunctionFactory
       switch (type)
       {
          case BLOCK_TYPE:
-            return new BlockCodec(BlockCodec.MODE_MTF, size); // BWT+GST+ZRLT
+            return new BlockCodec(new BWT(), BlockCodec.MODE_MTF, size); // BWT+GST+ZRLT
          case SNAPPY_TYPE:
             return new SnappyCodec(size);
          case LZ4_TYPE:
@@ -70,7 +75,9 @@ public class FunctionFactory
          case NONE_TYPE:
             return new NullFunction(size);
          case BWT_TYPE:
-            return new BlockCodec(BlockCodec.MODE_RAW_BWT, size); // raw BWT
+            return new BlockCodec(new BWT(), BlockCodec.MODE_RAW, size); 
+          case BWTS_TYPE:
+            return new BlockCodec(new BWTS(), BlockCodec.MODE_RAW, size); 
          default:
             throw new IllegalArgumentException("Unknown transform type: " + (char) type);
       }
@@ -93,6 +100,8 @@ public class FunctionFactory
             return "ZRLT";
          case BWT_TYPE:
             return "BWT";
+         case BWTS_TYPE:
+            return "BWTS";
          case NONE_TYPE:
             return "NONE";
          default:

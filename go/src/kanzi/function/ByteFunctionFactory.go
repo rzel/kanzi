@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"kanzi"
+	"kanzi/transform"
 	"strings"
 )
 
@@ -30,12 +31,19 @@ const (
 	LZ4_TYPE    = byte(76) // 'L'
 	NONE_TYPE   = byte(78) // 'N'
 	BWT_TYPE    = byte(87) // 'W'
+	BWTS_TYPE   = byte(74) // 'J'
 )
 
 func NewByteFunction(size uint, functionType byte) (kanzi.ByteFunction, error) {
 	switch functionType {
 	case BLOCK_TYPE:
-		return NewBlockCodec(MODE_MTF, size) // BWT+GST+ZRLT
+		bwt, err := transform.NewBWT(size)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return NewBlockCodec(bwt, MODE_MTF, size) // BWT+GST+ZRLT
 
 	case SNAPPY_TYPE:
 		return NewSnappyCodec(size)
@@ -50,7 +58,22 @@ func NewByteFunction(size uint, functionType byte) (kanzi.ByteFunction, error) {
 		return NewZRLT(size)
 
 	case BWT_TYPE:
-		return NewBlockCodec(MODE_RAW_BWT, size) // raw BWT
+		bwt, err := transform.NewBWT(size)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return NewBlockCodec(bwt, MODE_RAW, size) // raw BWT
+
+	case BWTS_TYPE:
+		bwts, err := transform.NewBWTS(size)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return NewBlockCodec(bwts, MODE_RAW, size) // raw BWTS
 
 	case NONE_TYPE:
 		return NewNullFunction(size)
@@ -80,6 +103,9 @@ func GetByteFunctionName(functionType byte) (string, error) {
 	case BWT_TYPE:
 		return "BWT", nil
 
+	case BWTS_TYPE:
+		return "BWTS", nil
+
 	case NONE_TYPE:
 		return "NONE", nil
 	}
@@ -107,6 +133,9 @@ func GetByteFunctionType(functionName string) (byte, error) {
 
 	case "BWT":
 		return BWT_TYPE, nil // raw BWT
+
+	case "BWTS":
+		return BWTS_TYPE, nil // raw BWTS
 
 	case "NONE":
 		return NONE_TYPE, nil
