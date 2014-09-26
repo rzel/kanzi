@@ -60,7 +60,7 @@ import kanzi.Sizeable;
 public class BWT implements ByteTransform, Sizeable
 {
     private int size;
-    private int[] buffer1;
+    private int[] buffer1;  // Only used in inverse
     private int[] buffer2;  // Only used for big blocks (size >= 1<<24)
     private int[] buckets;
     private int primaryIndex;
@@ -80,7 +80,7 @@ public class BWT implements ByteTransform, Sizeable
           throw new IllegalArgumentException("Invalid size parameter (must be at least 0)");
 
        this.size = size;
-       this.buffer1 = new int[0]; // Only used in inverse
+       this.buffer1 = new int[0]; // Allocate empty: only used in inverse
        this.buffer2 = new int[0]; // Allocate empty: only used for big blocks (size >= 1<<24)
        this.buckets = new int[256];
     }

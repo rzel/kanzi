@@ -66,8 +66,8 @@ type BWT struct {
 func NewBWT(sz uint) (*BWT, error) {
 	this := new(BWT)
 	this.size = sz
-	this.buffer1 = make([]int, sz+1) // (SA algo requires sz+1 bytes)
-	this.buffer1 = make([]int, 0)    // Allocate empty: only used for big blocks (size >= 1<<24)
+	this.buffer1 = make([]int, 0)    // Allocate empty: only used in inverse
+	this.buffer2 = make([]int, 0)    // Allocate empty: only used for big blocks (size >= 1<<24)
 	this.buckets = make([]int, 256)
 	return this, nil
 }
