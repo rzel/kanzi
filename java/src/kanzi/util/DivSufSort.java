@@ -67,7 +67,7 @@ public final class DivSufSort
     };
 
     private int[] sa;
-    private int[] buffer;
+    private short[] buffer;
     private final int[] bucketA;
     private final int[] bucketB;
     private final Stack ssStack;
@@ -80,7 +80,7 @@ public final class DivSufSort
         this.bucketA = new int[256];
         this.bucketB = new int[65536];
         this.sa = new int[0];
-        this.buffer = new int[0];
+        this.buffer = new short[0];
         this.ssStack = new Stack(SS_MISORT_STACKSIZE);
         this.trStack = new Stack(TR_STACKSIZE);
         this.mergeStack = new Stack(SS_SMERGE_STACKSIZE);
@@ -110,10 +110,10 @@ public final class DivSufSort
            this.sa = new int[length];
 
         if (this.buffer.length < length+1)
-           this.buffer = new int[length+1];
+           this.buffer = new short[length+1];
 
         for (int i=0; i<length; i++)
-           this.buffer[i] = input[start+i] & 0xFF;
+           this.buffer[i] = (short) (input[start+i] & 0xFF);
 
         this.buffer[length] = input[start];
         int m = this.sortTypeBstar(this.bucketA, this.bucketB, length);

@@ -115,7 +115,7 @@ public class BWTS implements ByteTransform, Sizeable
             if (isa[i] >= min) 
                continue;
             
-            int headRank = this.moveLyndonWordHead(sa, input, count, srcIdx+idxMin, i-idxMin, min);
+            int headRank = this.moveLyndonWordHead(sa, input, count, srcIdx, idxMin, i-idxMin, min);
             int refRank = headRank;
 
             for (int j=i-1; j>idxMin; j--) 
@@ -168,15 +168,16 @@ public class BWTS implements ByteTransform, Sizeable
    
         output[dstIdx] = input[srcIdx2+count];
         src.index += count;
-        dst.index += count;
+        dst.index += count; 
         return true;
     }
 
     
-    private int moveLyndonWordHead(int[] sa, byte[] data, int count, int start, int size, int rank)
+    private int moveLyndonWordHead(int[] sa, byte[] data, int count, int srcIdx, int start, int size, int rank)
     {
        final int[] isa = this.buffer;
        final int end = start + size;
+       final int startIdx = srcIdx + start;
 
        while (rank+1 < count)
        {
@@ -188,7 +189,7 @@ public class BWTS implements ByteTransform, Sizeable
           int nextStart = nextStart0;
           int k = 0;
 
-          while ((k < size) && (nextStart < count) && (data[start+k] == data[nextStart]))
+          while ((k < size) && (nextStart < count) && (data[startIdx+k] == data[srcIdx+nextStart]))
           {
               k++;
               nextStart++;
@@ -197,7 +198,7 @@ public class BWTS implements ByteTransform, Sizeable
           if ((k == size) && (rank < isa[nextStart]))
              break;
 
-          if ((k < size) && (nextStart < count) && ((data[start+k] & 0xFF) < (data[nextStart] & 0xFF)))
+          if ((k < size) && (nextStart < count) && ((data[startIdx+k] & 0xFF) < (data[srcIdx+nextStart] & 0xFF)))
              break;         
 
           sa[rank] = nextStart0;

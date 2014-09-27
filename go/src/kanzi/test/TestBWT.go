@@ -92,6 +92,7 @@ func TestCorrectness(isBWT bool) {
 		} else {
 			println()
 		}
+		
 		_, _, err2 := bwt.Inverse(buf2, buf3)
 
 		if err2 != nil {
