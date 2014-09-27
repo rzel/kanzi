@@ -40,10 +40,10 @@ import (
 // Bijective BWT stream format: Data (n bytes)
 
 const (
-	MODE_RAW            = 0
-	MODE_MTF            = 1
-	MODE_RANK           = 2
-	MODE_TIMESTAMP      = 3
+	GST_MODE_RAW        = 0
+	GST_MODE_MTF        = 1
+	GST_MODE_RANK       = 2
+	GST_MODE_TIMESTAMP  = 3
 	BWT_MAX_HEADER_SIZE = 4
 	MAX_BLOCK_SIZE      = 64 * 1024 * 1024
 )
@@ -70,7 +70,7 @@ func NewBlockCodec(tr interface{}, mode int, blockSize uint) (*BlockCodec, error
 		return nil, errors.New("The transform must implement the Sizeable interface")
 	}
 
-	if mode != MODE_RAW && mode != MODE_MTF && mode != MODE_RANK && mode != MODE_TIMESTAMP {
+	if mode != GST_MODE_RAW && mode != GST_MODE_MTF && mode != GST_MODE_RANK && mode != GST_MODE_TIMESTAMP {
 		return nil, errors.New("Invalid GST mode parameter")
 	}
 
@@ -92,11 +92,11 @@ func NewBlockCodec(tr interface{}, mode int, blockSize uint) (*BlockCodec, error
 
 func (this *BlockCodec) createGST(blockSize uint) (kanzi.ByteTransform, error) {
 	// SBRT can perform MTFT but the dedicated class is faster
-	if this.mode == MODE_RAW {
+	if this.mode == GST_MODE_RAW {
 		return nil, nil
 	}
 
-	if this.mode == MODE_MTF {
+	if this.mode == GST_MODE_MTF {
 		return transform.NewMTFT(blockSize)
 	}
 
@@ -175,7 +175,7 @@ func (this *BlockCodec) Forward(src, dst []byte) (uint, uint, error) {
 		headerSizeBytes = (2 + pIndexSizeBits + 7) >> 3
 	}
 
-	if this.mode != MODE_RAW {
+	if this.mode != GST_MODE_RAW {
 		// Apply Post Transform
 		gst, err := this.createGST(blockSize)
 
@@ -266,7 +266,7 @@ func (this *BlockCodec) Inverse(src, dst []byte) (uint, uint, error) {
 		return 0, 0, errors.New(errMsg)
 	}
 
-	if this.mode != MODE_RAW {
+	if this.mode != GST_MODE_RAW {
 		// Apply Zero Run Length Decoding
 		ZRLT, err := NewZRLT(compressedLength)
 
