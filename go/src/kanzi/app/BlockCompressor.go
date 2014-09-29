@@ -60,7 +60,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	var entropy = flag.String("entropy", "Huffman", "entropy codec to use [None|Huffman*|Range|PAQ|FPAQ]")
 	var function = flag.String("transform", "BWT+MTF", "transform to use [None|BWT|BWTS|Snappy|LZ4|RLT]")
 	var cksum = flag.Bool("checksum", false, "enable block checksum")
-	var tasks = flag.Int("jobs", 1, "number of parallel jobs")
+	var tasks = flag.Int("jobs", 1, "number of concurrent jobs")
 
 	// Parse
 	flag.Parse()
@@ -77,7 +77,7 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 		printOut("                       for BWT(S), an optional GST can be provided: [MTF|RANK|TIMESTAMP]", true)
 		printOut("                       EG: BWT+RANK or BWTS+MTF (default is BWT+MTF)", true)
 		printOut("-checksum            : enable block checksum", true)
-		printOut("-jobs=<jobs>         : number of parallel jobs", true)
+		printOut("-jobs=<jobs>         : number of concurrent jobs", true)
 		printOut("", true)
 		printOut("EG. java -cp kanzi.jar kanzi.app.BlockCompressor -input=foo.txt -output=foo.knz -overwrite -transform=BWT+MTF -block=4m -entropy=FPAQ -verbose -jobs=4", true)
 		os.Exit(0)

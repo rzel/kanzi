@@ -157,10 +157,7 @@ public class HuffmanEncoder extends AbstractEncoder
           this.updateFrequencies(frequencies);
 
           for (int i=startChunk; i<endChunk; i++)
-          {
-             if (this.encodeByte(array[i]) == false)
-                return i - blkptr;
-          }
+             this.encodeByte(array[i]);
 
           startChunk = endChunk;
           sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
@@ -173,10 +170,9 @@ public class HuffmanEncoder extends AbstractEncoder
 
     // Frequencies of the data block must have been previously set
     @Override
-    public boolean encodeByte(byte val)
+    public void encodeByte(byte val)
     {
-       final int len = this.codes[val&0xFF] >>> 24;
-       return this.bitstream.writeBits(this.codes[val&0xFF], len) == len;
+       this.bitstream.writeBits(this.codes[val&0xFF], this.codes[val&0xFF] >>> 24);
     }
 
 

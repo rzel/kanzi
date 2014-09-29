@@ -320,7 +320,7 @@ public class BlockCompressor implements Runnable, Callable<Integer>
                printOut("                       for BWT(S), an optional GST can be provided: [MTF|RANK|TIMESTAMP]", true);
                printOut("                       EG: BWT+RANK or BWTS+MTF (default is BWT+MTF)", true);
                printOut("-checksum            : enable block checksum", true);
-               printOut("-jobs=<jobs>         : number of parallel jobs", true);
+               printOut("-jobs=<jobs>         : number of concurrent jobs", true);
                printOut("", true);
                printOut("EG. java -cp kanzi.jar kanzi.app.BlockCompressor -input=foo.txt -output=foo.knz -overwrite "
                        + "-transform=BWT+MTF -block=4m -entropy=FPAQ -verbose -jobs=4", true);

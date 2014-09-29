@@ -23,7 +23,7 @@ public interface EntropyEncoder
     public int encode(byte[] array, int blkptr, int len);
 
     // Encode the byte value provided into the bitstream
-    public boolean encodeByte(byte val);
+    public void encodeByte(byte val);
 
     // Return the underlying bitstream
     public OutputBitStream getBitStream();
