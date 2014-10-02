@@ -87,7 +87,7 @@ public final class ExpGolombEncoder extends AbstractEncoder
        {
           // Add 0 for positive and 1 for negative sign
           n++;
-          emit = (emit << 1) | (val >>> 31);
+          emit = (emit << 1) | (val >>> 7);
        }
 
        this.bitstream.writeBits(emit, n);
