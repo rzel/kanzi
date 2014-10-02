@@ -43,8 +43,8 @@ public class FPAQPredictor implements Predictor
       // Find the number of registered 0 & 1 given the previous bits (in this.ctxIdx)
       if (++this.states[idx+(bit&1)] >= THRESHOLD) 
       {
-         this.states[idx] >>>= SHIFT;
-         this.states[idx+1] >>>= SHIFT;
+         this.states[idx] >>= SHIFT;
+         this.states[idx+1] >>= SHIFT;
       }
       
       // Update context by registering the current bit (or wrapping after 8 bits)

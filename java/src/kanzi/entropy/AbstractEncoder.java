@@ -17,7 +17,6 @@ package kanzi.entropy;
 
 import kanzi.EntropyEncoder;
 import kanzi.OutputBitStream;
-import kanzi.BitStreamException;
 
 
 public abstract class AbstractEncoder implements EntropyEncoder
