@@ -588,7 +588,8 @@ public final class ImageQualityMonitor
 
                for (int j=0; j<8; j++)
                {
-                  final int idx = ((long) Math.abs(dct_s[idx] - dct_d[idx])) << 10;
+                  final int idx = i8 + j;
+                  long err1024 = ((long) Math.abs(dct_s[idx] - dct_d[idx])) << 10;
 
                   if ((i != 0) || (j != 0))
                      err1024 = (err1024*mask_csf[idx]<s_mask_1024) ? 0 : err1024-(s_mask_1024/mask_csf[idx]);
