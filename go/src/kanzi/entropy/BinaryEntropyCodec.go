@@ -98,7 +98,11 @@ func (this *BinaryEntropyEncoder) encodeBit(bit byte) {
 }
 
 func (this *BinaryEntropyEncoder) Encode(block []byte) (int, error) {
-	return EntropyEncodeArray(this, block)
+	for i := range block {
+		this.EncodeByte(block[i])
+	}
+
+	return len(block), nil
 }
 
 func (this *BinaryEntropyEncoder) flush() {

@@ -21,8 +21,7 @@ import kanzi.OutputBitStream;
 
 public abstract class AbstractEncoder implements EntropyEncoder
 {
-    @Override
-    public abstract void encodeByte(byte val);
+    protected abstract void encodeByte(byte val);
 
     
     @Override

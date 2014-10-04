@@ -36,7 +36,6 @@ public class EntropyUtils
 
    private int[] buf1;
    private int[] buf2;
-   private int[] scaledFreqs;
    private final int logRange;
 
 
@@ -48,7 +47,6 @@ public class EntropyUtils
 
       this.buf1 = new int[0];
       this.buf2 = new int[0];
-      this.scaledFreqs = new int[0];
       this.logRange = logRange;
    }
 
@@ -239,7 +237,9 @@ public class EntropyUtils
 
 
    // Not thread safe
-   public int normalizeFrequencies(int[] freqs, int[] cumFreqs, int count) throws BitStreamException
+   // Returns the size of the alphabet
+   // The alphabet and freqs parameters are updated
+   public int normalizeFrequencies(int[] freqs, int[] alphabet, int count)
    {
       if (count == 0)
          return 0;
@@ -250,10 +250,6 @@ public class EntropyUtils
       if (this.buf2.length < 256)
          this.buf2 = new int[256];
 
-      if (this.scaledFreqs.length < 256)
-         this.scaledFreqs = new int[256];
-
-      final int[] alphabet = this.buf1;
       final int[] errors = this.buf2;
       int alphabetSize = 0;
       int sum = 0;
@@ -279,8 +275,8 @@ public class EntropyUtils
          }
          else
          {
-            int errCeiling = ((scaledFreq+1) * count) / range - freqs[i];
-            int errFloor = freqs[i] - (scaledFreq * count) / range;
+            int errCeiling = ((scaledFreq+1) * count) - (freqs[i] * range);
+            int errFloor = (freqs[i] * range) - (scaledFreq * count);
 
             if (errCeiling < errFloor)
             {
@@ -295,18 +291,16 @@ public class EntropyUtils
 
          alphabet[alphabetSize++] = i;
          sum += scaledFreq;
-         this.scaledFreqs[i] = scaledFreq;
+         freqs[i] = scaledFreq;
       }
 
       if (alphabetSize == 0)
          return 0;
 
-      cumFreqs[0] = 0;
-
       if (sum != range)
       {
          // Need to normalize frequency sum to range
-         int[] ranks = new int[256];
+         final int[] ranks = this.buf1;
 
          for (int i=0; i<256; i++)
             ranks[i] = i;
@@ -314,6 +308,7 @@ public class EntropyUtils
          // Adjust rounding of fractional scaled frequencies so that sum == range
          sum -= range;
          int prevSum = ~sum;
+         QuickSort sorter = new QuickSort(new DefaultArrayComparator(errors));
 
          while (sum != 0)
          {
@@ -322,30 +317,25 @@ public class EntropyUtils
                break;
 
             // Sort array by increasing rounding error
-            QuickSort sorter = new QuickSort(new DefaultArrayComparator(errors));
             sorter.sort(ranks, 0, alphabetSize);
             prevSum = sum;
-            int inc = (sum > 0) ? -1 : 1;
+            final int inc = (sum > 0) ? -1 : 1;
             int idx = alphabetSize - 1;
 
-            // Remove from frequencies with largest floor rounding error
+            // Remove from frequencies with largest rounding error
             while ((idx >= 0) && (sum != 0))
             {
                if (errors[ranks[idx]] == 0)
                   break;
 
-               this.scaledFreqs[alphabet[ranks[idx]]] += inc;
+               freqs[alphabet[ranks[idx]]] += inc;
                errors[alphabet[ranks[idx]]] += inc;
                sum += inc;
                idx--;
             }
          }
       }
-
-      // Create histogram of frequencies scaled to 'range'
-      for (int i=0; i<256; i++)
-         cumFreqs[i+1] = cumFreqs[i] + this.scaledFreqs[i];
-
+      
       return alphabetSize;
    }
 

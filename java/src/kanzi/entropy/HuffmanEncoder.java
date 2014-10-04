@@ -142,11 +142,11 @@ public class HuffmanEncoder extends AbstractEncoder
        final int end = blkptr + len;
        final int sz = (this.chunkSize == 0) ? len : this.chunkSize;
        int startChunk = blkptr;
-       int sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
-       int endChunk = startChunk + sizeChunk;
-
+       
        while (startChunk < end)
        {
+          final int endChunk = (startChunk + sz < end) ? startChunk + sz : end;
+
           for (int i=0; i<256; i++)
              frequencies[i] = 0;
 
@@ -155,13 +155,11 @@ public class HuffmanEncoder extends AbstractEncoder
 
           // Rebuild Huffman tree
           this.updateFrequencies(frequencies);
-
+          
           for (int i=startChunk; i<endChunk; i++)
              this.encodeByte(array[i]);
 
           startChunk = endChunk;
-          sizeChunk = (startChunk + sz < end) ? sz : end - startChunk;
-          endChunk = startChunk + sizeChunk;
        }
 
        return len;

@@ -30,21 +30,6 @@ const (
 	ABSENT_SYMBOLS_MASK    = 1
 )
 
-func EntropyEncodeArray(ee kanzi.EntropyEncoder, block []byte) (int, error) {
-	for i := range block {
-		ee.EncodeByte(block[i])
-	}
-
-	return len(block), nil
-}
-
-func EntropyDecodeArray(ed kanzi.EntropyDecoder, block []byte) (int, error) {
-	for i := range block {
-		block[i] = ed.DecodeByte()
-	}
-
-	return len(block), nil
-}
 
 // alphabet must be sorted in increasing order
 func EncodeAlphabet(obs kanzi.OutputBitStream, alphabet []uint8) int {
