@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	TOP        = uint64(0x00FFFFFFFFFFFFFF)
+	BINARY_ENTROPY_TOP = uint64(0x00FFFFFFFFFFFFFF)
 	MASK_24_56 = uint64(0x00FFFFFFFF000000)
 	MASK_0_24  = uint64(0x0000000000FFFFFF)
 	MASK_0_32  = uint64(0x00000000FFFFFFFF)
@@ -56,7 +56,7 @@ func NewBinaryEntropyEncoder(bs kanzi.OutputBitStream, predictor Predictor) (*Bi
 	this := new(BinaryEntropyEncoder)
 	this.predictor = predictor
 	this.low = 0
-	this.high = TOP
+	this.high = BINARY_ENTROPY_TOP
 	this.bitstream = bs
 	return this, nil
 }
@@ -146,7 +146,7 @@ func NewBinaryEntropyDecoder(bs kanzi.InputBitStream, predictor Predictor) (*Bin
 	this := new(BinaryEntropyDecoder)
 	this.predictor = predictor
 	this.low = 0
-	this.high = TOP
+	this.high = BINARY_ENTROPY_TOP
 	this.bitstream = bs
 	return this, nil
 }

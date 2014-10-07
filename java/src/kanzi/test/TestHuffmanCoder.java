@@ -166,7 +166,7 @@ public class TestHuffmanCoder
 
                     for (int j=i0; j<i0+len; j++)
                     {
-                       values1[j] = (byte) (i0 & 255);
+                       values1[j] = (byte) i0;
                        i++;
                     }
                 }

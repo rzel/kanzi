@@ -17,6 +17,7 @@ package entropy
 
 import (
 	"errors"
+	"fmt"
 	"kanzi"
 )
 
@@ -36,7 +37,7 @@ func NewRiceGolombEncoder(bs kanzi.OutputBitStream, sgn bool, logBase uint) (*Ri
 	}
 
 	if logBase <= 0 || logBase >= 8 {
-		return nil, errors.New("Invalid logBase value (must be in [1..7])")
+		return nil, fmt.Errorf("Invalid logBase '%v' value (must be in [1..7])", logBase)
 	}
 
 	this := new(RiceGolombEncoder)

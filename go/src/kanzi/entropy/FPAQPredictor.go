@@ -39,22 +39,21 @@ func NewFPAQPredictor() (*FPAQPredictor, error) {
 // Used to update the probability model
 func (this *FPAQPredictor) Update(bit byte) {
 	// Find the number of registered 0 & 1 given the previous bits (in this.ctxIdx)
-	idx := this.ctxIdx << 1
-	b := int(bit) & 1
-	this.states[idx+b]++
+	idx := (this.ctxIdx << 1) | int(bit & 1)
+	this.states[idx]++
 
-	if this.states[idx+b] >= THRESHOLD {
-		this.states[idx] >>= SHIFT
-		this.states[idx+1] >>= SHIFT
+	if this.states[idx] >= THRESHOLD {
+		this.states[idx&-2] >>= SHIFT
+		this.states[(idx&-2)+1] >>= SHIFT
 	}
 
 	// Update context by registering the current bit (or wrapping after 8 bits)
-
 	if idx < 256 {
-		this.ctxIdx = idx | b
+		this.ctxIdx = idx
 	} else {
 		this.ctxIdx = 1
 	}
+
 
 	idx = this.ctxIdx << 1
 	this.prediction = ((this.states[idx+1] + 1) << 12) / (this.states[idx] + this.states[idx+1] + 2)

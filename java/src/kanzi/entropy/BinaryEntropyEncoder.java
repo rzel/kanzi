@@ -49,7 +49,7 @@ public class BinaryEntropyEncoder extends AbstractEncoder
    }
 
 
-  // @Override
+   @Override
    public void encodeByte(byte val)
    {
      
