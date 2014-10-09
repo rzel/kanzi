@@ -22,13 +22,13 @@ import (
 
 const (
 	BINARY_ENTROPY_TOP = uint64(0x00FFFFFFFFFFFFFF)
-	MASK_24_56 = uint64(0x00FFFFFFFF000000)
-	MASK_0_24  = uint64(0x0000000000FFFFFF)
-	MASK_0_32  = uint64(0x00000000FFFFFFFF)
+	MASK_24_56         = uint64(0x00FFFFFFFF000000)
+	MASK_0_24          = uint64(0x0000000000FFFFFF)
+	MASK_0_32          = uint64(0x00000000FFFFFFFF)
 )
 
 type Predictor interface {
-	// Used to update the probability model
+	// Update the probability model
 	Update(bit byte)
 
 	// Return the split value representing the probability of 1 in the [0..4095] range.
@@ -170,7 +170,7 @@ func (this *BinaryEntropyDecoder) decodeByte() byte {
 	res |= (this.DecodeBit() << 2)
 	res |= (this.DecodeBit() << 1)
 	res |= this.DecodeBit()
-	return byte(res)
+	return res
 }
 
 func (this *BinaryEntropyDecoder) Initialized() bool {
@@ -186,13 +186,13 @@ func (this *BinaryEntropyDecoder) Initialize() {
 	this.initialized = true
 }
 
-func (this *BinaryEntropyDecoder) DecodeBit() int {
+func (this *BinaryEntropyDecoder) DecodeBit() byte {
 	// Compute prediction
 	prediction := this.predictor.Get()
 
 	// Calculate interval split
 	xmid := this.low + ((this.high-this.low)>>12)*uint64(prediction)
-	var bit int
+	var bit byte
 
 	if this.current <= xmid {
 		bit = 1
@@ -203,7 +203,7 @@ func (this *BinaryEntropyDecoder) DecodeBit() int {
 	}
 
 	// Update predictor
-	this.predictor.Update(byte(bit))
+	this.predictor.Update(bit)
 
 	// Read 32 bits from bitstream
 	for (this.low^this.high)&MASK_24_56 == 0 {

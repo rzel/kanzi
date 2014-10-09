@@ -35,6 +35,7 @@ public class FPAQPredictor implements Predictor
    }
    
    
+   // Update the probability model
    @Override
    public void update(int bit)
    {
@@ -45,12 +46,12 @@ public class FPAQPredictor implements Predictor
       {
          this.states[idx&-2] >>= SHIFT;
          this.states[(idx&-2)+1] >>= SHIFT;
-      }
+      }  
       
       // Update context by registering the current bit (or wrapping after 8 bits)
       this.ctxIdx = (idx < 256) ? idx : 1;
       idx = this.ctxIdx << 1;
-      this.prediction = ((this.states[idx+1]+1)<<12) / (this.states[idx]+this.states[idx+1]+2);
+      this.prediction = ((this.states[idx+1]+1)<<12) / (this.states[idx]+this.states[idx+1]+2);    
    }
 
    

@@ -20,6 +20,7 @@ import kanzi.entropy.HuffmanDecoder;
 import kanzi.entropy.HuffmanEncoder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.Random;
 import kanzi.InputBitStream;
 import kanzi.OutputBitStream;
 import kanzi.bitstream.DebugOutputBitStream;
@@ -150,6 +151,7 @@ public class TestHuffmanCoder
             byte[] values1 = new byte[size];
             byte[] values2 = new byte[size];
             long delta1 = 0, delta2 = 0;
+            Random rnd = new Random();
 
             for (int ii=0; ii<iter; ii++)
             {
@@ -164,9 +166,11 @@ public class TestHuffmanCoder
                     if (i0+len >= values1.length)
                         len = 1;
 
+                    final byte b = (byte) rnd.nextInt();
+                    
                     for (int j=i0; j<i0+len; j++)
                     {
-                       values1[j] = (byte) i0;
+                       values1[j] = b;
                        i++;
                     }
                 }

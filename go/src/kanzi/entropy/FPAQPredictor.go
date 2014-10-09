@@ -36,10 +36,10 @@ func NewFPAQPredictor() (*FPAQPredictor, error) {
 	return this, nil
 }
 
-// Used to update the probability model
+// Update the probability model
 func (this *FPAQPredictor) Update(bit byte) {
 	// Find the number of registered 0 & 1 given the previous bits (in this.ctxIdx)
-	idx := (this.ctxIdx << 1) | int(bit & 1)
+	idx := (this.ctxIdx << 1) | int(bit&1)
 	this.states[idx]++
 
 	if this.states[idx] >= THRESHOLD {
@@ -53,7 +53,6 @@ func (this *FPAQPredictor) Update(bit byte) {
 	} else {
 		this.ctxIdx = 1
 	}
-
 
 	idx = this.ctxIdx << 1
 	this.prediction = ((this.states[idx+1] + 1) << 12) / (this.states[idx] + this.states[idx+1] + 2)

@@ -52,7 +52,6 @@ public class BinaryEntropyEncoder extends AbstractEncoder
    @Override
    public void encodeByte(byte val)
    {
-     
       this.encodeBit_((val >> 7) & 1);
       this.encodeBit_((val >> 6) & 1);
       this.encodeBit_((val >> 5) & 1);
@@ -60,7 +59,7 @@ public class BinaryEntropyEncoder extends AbstractEncoder
       this.encodeBit_((val >> 3) & 1);
       this.encodeBit_((val >> 2) & 1);
       this.encodeBit_((val >> 1) & 1);
-      this.encodeBit_(val & 1);
+      this.encodeBit_(val & 1);          
    }
    
 
@@ -72,7 +71,7 @@ public class BinaryEntropyEncoder extends AbstractEncoder
    
    private boolean encodeBit_(int bit)
    {
-      // Compute predictionthis.predictor.update(bit);
+      // Compute prediction
       final int prediction = this.predictor.get();
 
       // Calculate interval split
