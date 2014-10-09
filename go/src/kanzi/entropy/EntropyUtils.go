@@ -16,7 +16,9 @@ limitations under the License.
 package entropy
 
 import (
+	"fmt"
 	"kanzi"
+	"sort"
 )
 
 const (
@@ -30,9 +32,50 @@ const (
 	ABSENT_SYMBOLS_MASK    = 1
 )
 
+type ErrorComparator struct {
+	symbols []byte
+	errors  []int
+}
+
+func ByIncreasingError(symbols []byte, errors []int) ErrorComparator {
+	return ErrorComparator{symbols: symbols, errors: errors}
+}
+
+func (this ErrorComparator) Less(i, j int) bool {
+	// Check errors (natural order) as first key
+	ri := this.symbols[i]
+	rj := this.symbols[j]
+
+	if this.errors[ri] != this.errors[rj] {
+		return this.errors[ri] < this.errors[rj]
+	}
+
+	// Check index (natural order) as second key
+	return ri < rj
+}
+
+func (this ErrorComparator) Len() int {
+	return len(this.symbols)
+}
+
+func (this ErrorComparator) Swap(i, j int) {
+	this.symbols[i], this.symbols[j] = this.symbols[j], this.symbols[i]
+}
+
+type EntropyUtils struct {
+	ranks  []byte
+	errors []int
+}
+
+func NewEntropyUtils() (*EntropyUtils, error) {
+	this := new(EntropyUtils)
+	this.ranks = make([]byte, 0)
+	this.errors = make([]int, 0)
+	return this, nil
+}
 
 // alphabet must be sorted in increasing order
-func EncodeAlphabet(obs kanzi.OutputBitStream, alphabet []uint8) int {
+func EncodeAlphabet(obs kanzi.OutputBitStream, alphabet []byte) int {
 	alphabetSize := len(alphabet)
 
 	// First, push alphabet encoding mode
@@ -46,7 +89,7 @@ func EncodeAlphabet(obs kanzi.OutputBitStream, alphabet []uint8) int {
 	if alphabetSize == 128 {
 		flag := true
 
-		for i := uint8(0); i < 128; i++ {
+		for i := byte(0); i < 128; i++ {
 			if alphabet[i] != i {
 				flag = false
 				break
@@ -142,7 +185,7 @@ func EncodeAlphabet(obs kanzi.OutputBitStream, alphabet []uint8) int {
 	return alphabetSize
 }
 
-func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
+func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []byte) (int, error) {
 	// Read encoding mode from bitstream
 	aphabetType := ibs.ReadBit()
 
@@ -158,7 +201,7 @@ func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
 
 		// Full alphabet
 		for i := 0; i < alphabetSize; i++ {
-			alphabet[i] = uint8(i)
+			alphabet[i] = byte(i)
 		}
 
 		return alphabetSize, nil
@@ -174,7 +217,7 @@ func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
 
 			for j := 0; j < 64; j++ {
 				if val&(uint64(1)<<uint(j)) != 0 {
-					alphabet[alphabetSize] = uint8(i + j)
+					alphabet[alphabetSize] = byte(i + j)
 					alphabetSize++
 				}
 			}
@@ -188,7 +231,7 @@ func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
 
 		if val&1 == ABSENT_SYMBOLS_MASK {
 			for i := 0; i < alphabetSize; i++ {
-				next := symbol + uint8(ibs.ReadBits(log))
+				next := symbol + byte(ibs.ReadBits(log))
 
 				for symbol < next {
 					alphabet[n] = symbol
@@ -212,6 +255,118 @@ func DecodeAlphabet(ibs kanzi.InputBitStream, alphabet []uint8) (int, error) {
 				symbol += uint8(ibs.ReadBits(log))
 				alphabet[i] = symbol
 				symbol++
+			}
+		}
+	}
+
+	return alphabetSize, nil
+}
+
+// Returns the size of the alphabet
+// The alphabet and freqs parameters are updated
+func (this *EntropyUtils) NormalizeFrequencies(freqs []int, alphabet []byte, count int, logRange uint) (int, error) {
+	if count == 0 {
+		return 0, nil
+	}
+
+	if logRange < 8 || logRange > 16 {
+		return 0, fmt.Errorf("Invalid range parameter: %v (must be in [8..16])", logRange)
+	}
+
+	if len(this.ranks) < 256 {
+		this.ranks = make([]byte, 256)
+	}
+
+	if len(this.errors) < 256 {
+		this.errors = make([]int, 256)
+	}
+
+	ranks := this.ranks
+	errors := this.errors
+	alphabetSize := 0
+	sum := -(1 << logRange)
+
+	// Scale frequencies by stretching distribution over complete range
+	for i := 0; i < 256; i++ {
+		alphabet[i] = 0
+		ranks[i] = byte(i)
+
+		if freqs[i] == 0 {
+			continue
+		}
+
+		sf := int64(freqs[i]) << logRange
+		scaledFreq := int(sf / int64(count))
+
+		if scaledFreq == 0 {
+			// Quantum of frequency
+			// Pretend that this is a perfect fit (to avoid messing with this frequency below)
+			scaledFreq = 1
+			errors[i] = 0
+		} else {
+			// Find best frequency rounding value
+			errCeiling := int64(scaledFreq+1)*int64(count) - sf
+			errFloor := sf - int64(scaledFreq)*int64(count)
+
+			if errCeiling < errFloor {
+				scaledFreq++
+				errors[i] = int(errCeiling)
+			} else {
+				errors[i] = int(errFloor)
+			}
+		}
+
+		alphabet[alphabetSize] = byte(i)
+		alphabetSize++
+		sum += scaledFreq
+		freqs[i] = scaledFreq
+	}
+
+	if alphabetSize == 0 {
+		return 0, nil
+	}
+
+	if sum != 0 {
+		// Need to normalize frequency sum to range
+		// Adjust rounding of fractional scaled frequencies so that sum == range
+		prevSum := ^sum
+		var inc int
+
+		if sum > 0 {
+			inc = -1
+		} else {
+			inc = 1
+		}
+
+		for sum != 0 {
+			// If we cannot converge, exit
+			if prevSum == sum {
+				break
+			}
+
+			// Sort array by increasing rounding error
+			sort.Sort(ByIncreasingError(ranks, errors))
+			prevSum = sum
+			idx := alphabetSize - 1
+
+			// Modify frequencies with largest rounding error
+			for idx >= 0 && sum != 0 {
+				r := ranks[idx]
+				idx--
+
+				if errors[r] == 0 {
+					break
+				}
+
+				// Avoid messing with 'quantum of frequency' (possibly representing
+				// a smaller non zero frequency)
+				if freqs[r] == -inc {
+					continue
+				}
+
+				freqs[alphabet[r]] += inc
+				errors[alphabet[r]] += (inc << logRange)
+				sum += inc
 			}
 		}
 	}

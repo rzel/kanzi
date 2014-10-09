@@ -36,18 +36,12 @@ public class EntropyUtils
 
    private int[] buf1;
    private int[] buf2;
-   private final int logRange;
 
 
-   public EntropyUtils(int logRange)
+   public EntropyUtils()
    {
-      if ((logRange < 8) || (logRange > 16))
-         throw new IllegalArgumentException("Invalid range parameter: "+ logRange +
-                 " (must be in [8..16])");
-
       this.buf1 = new int[0];
       this.buf2 = new int[0];
-      this.logRange = logRange;
    }
 
 
@@ -239,10 +233,14 @@ public class EntropyUtils
    // Not thread safe
    // Returns the size of the alphabet
    // The alphabet and freqs parameters are updated
-   public int normalizeFrequencies(int[] freqs, int[] alphabet, int count)
+   public int normalizeFrequencies(int[] freqs, int[] alphabet, int count, int logRange)
    {
       if (count == 0)
          return 0;
+
+      if ((logRange < 8) || (logRange > 16))
+         throw new IllegalArgumentException("Invalid range parameter: "+ logRange +
+                 " (must be in [8..16])");
 
       if (this.buf1.length < 256)
          this.buf1 = new int[256];
@@ -250,92 +248,95 @@ public class EntropyUtils
       if (this.buf2.length < 256)
          this.buf2 = new int[256];
 
+      final int[] ranks = this.buf1;
       final int[] errors = this.buf2;
       int alphabetSize = 0;
-      int sum = 0;
-      final int range = 1 << this.logRange;
-
-      for (int i=0; i<256; i++)
-         alphabet[i] = 0;
+      int sum = -(1 << logRange);
 
       // Scale frequencies by stretching distribution over complete range
       for (int i=0; i<256; i++)
       {
+         alphabet[i] = 0;
+         ranks[i] = i;
+         
          if (freqs[i] == 0)
             continue;
 
-         int scaledFreq = (range * freqs[i]) / count;
+         long sf = (long) freqs[i] << logRange;
+         int scaledFreq = (int) (sf / count);
 
          if (scaledFreq == 0)
          {
-            // Smallest non zero frequency numerator
-            // Pretend that this is a perfect fit (to avoid messing with this frequency below)
+            // Quantum of frequency
+            // Pretend that this is a perfect fit (to avoid readjusting it later)
             scaledFreq = 1;
             errors[i] = 0;
          }
          else
          {
-            int errCeiling = ((scaledFreq+1) * count) - (freqs[i] * range);
-            int errFloor = (freqs[i] * range) - (scaledFreq * count);
+            // Find best frequency rounding value
+            long errCeiling = ((scaledFreq+1) * (long) count) - sf;
+            long errFloor = sf - (scaledFreq * (long) count);
 
             if (errCeiling < errFloor)
             {
                scaledFreq++;
-               errors[i] = errCeiling;
+               errors[i] = (int) errCeiling;
             }
             else
             {
-               errors[i] = errFloor;
+               errors[i] = (int) errFloor;
             }
          }
 
          alphabet[alphabetSize++] = i;
-         sum += scaledFreq;
+         sum += scaledFreq;        
          freqs[i] = scaledFreq;
       }
 
       if (alphabetSize == 0)
          return 0;
-
-      if (sum != range)
+      
+      if (sum != 0)
       {
          // Need to normalize frequency sum to range
-         final int[] ranks = this.buf1;
-
-         for (int i=0; i<256; i++)
-            ranks[i] = i;
-
          // Adjust rounding of fractional scaled frequencies so that sum == range
-         sum -= range;
          int prevSum = ~sum;
          QuickSort sorter = new QuickSort(new DefaultArrayComparator(errors));
+         final int inc = (sum > 0) ? -1 : 1;
 
          while (sum != 0)
          {
-            // If we cannot converge, exit
+            // If we cannot converge, exit with small rounding errors
             if (prevSum == sum)
                break;
 
             // Sort array by increasing rounding error
             sorter.sort(ranks, 0, alphabetSize);
             prevSum = sum;
-            final int inc = (sum > 0) ? -1 : 1;
             int idx = alphabetSize - 1;
 
-            // Remove from frequencies with largest rounding error
+            // Modify frequencies with largest rounding error
             while ((idx >= 0) && (sum != 0))
             {
-               if (errors[ranks[idx]] == 0)
+               final int r = ranks[idx];
+               idx--;
+               
+               if (errors[r] == 0)
                   break;
 
-               freqs[alphabet[ranks[idx]]] += inc;
-               errors[alphabet[ranks[idx]]] += inc;
-               sum += inc;
-               idx--;
+               // Avoid messing with 'quantum of frequency' (possibly representing 
+               // a smaller non zero frequency)
+               if (freqs[r] == -inc)
+                  continue;
+               
+               freqs[r] += inc;
+               errors[r] += (inc << logRange);
+               sum += inc;                                    
             }
          }
       }
-      
+
       return alphabetSize;
    }
 
