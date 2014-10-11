@@ -15,6 +15,7 @@ limitations under the License.
 
 package kanzi.entropy;
 
+import kanzi.BitStreamException;
 import kanzi.InputBitStream;
 
 // Implementation of Asymetric Numeral System decoder.
@@ -25,23 +26,23 @@ import kanzi.InputBitStream;
 public class ANSRangeDecoder extends AbstractDecoder
 {
    private static final long TOP = 1L << 24;
-   private static final int DEFAULT_CHUNK_SIZE = 0; // full size of block
-   
+   private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
+
    private final InputBitStream bitstream;
    private final int[] alphabet;
    private final int[] freqs;
    private final int[] cumFreqs;
    private short[] f2s; // mapping frequency -> symbol
-   private final int chunkSize; 
-   private int logRange; 
- 
-   
+   private final int chunkSize;
+   private int logRange;
+
+
    public ANSRangeDecoder(InputBitStream bs)
    {
       this(bs, DEFAULT_CHUNK_SIZE);
    }
-   
-   
+
+
    public ANSRangeDecoder(InputBitStream bs, int chunkSize)
    {
       if (bs == null)
@@ -56,12 +57,12 @@ public class ANSRangeDecoder extends AbstractDecoder
       this.bitstream = bs;
       this.alphabet = new int[256];
       this.freqs = new int[256];
-      this.cumFreqs = new int[257];      
-      this.f2s = new short[0];      
+      this.cumFreqs = new int[257];
+      this.f2s = new short[0];
       this.chunkSize = chunkSize;
    }
-   
-   
+
+
    @Override
    public int decode(byte[] array, int blkptr, int len)
    {
@@ -70,10 +71,10 @@ public class ANSRangeDecoder extends AbstractDecoder
 
       if (len == 0)
          return 0;
-        
+
       final int end = blkptr + len;
       final int sz = (this.chunkSize == 0) ? len : this.chunkSize;
-      int startChunk = blkptr;      
+      int startChunk = blkptr;
 
       while (startChunk < end)
       {
@@ -81,25 +82,26 @@ public class ANSRangeDecoder extends AbstractDecoder
             return startChunk - blkptr;
 
          // logRange field set after decoding header !
-         final long mask = (1L << this.logRange) - 1;    
+         final long mask = (1L << this.logRange) - 1;
          final int endChunk = (startChunk + sz < end) ? startChunk + sz : end;
-         
+
          // Read initial ANS state
          long st = this.bitstream.readBits(64);
-         
-         for (int i=startChunk; i<endChunk; i++)  
+
+         for (int i=startChunk; i<endChunk; i++)
          {
             final int idx = (int) (st & mask);
             final int symbol = this.f2s[idx];
             array[i] = (byte) symbol;
-            
+
             // Compute next ANS state
+            // D(x) = (s, q_s (x/M) + mod(x,M) - b_s) where s is such b_s <= x mod M < b_{s+1}
             st = (this.freqs[symbol] * (st >> this.logRange)) + idx - this.cumFreqs[symbol];
 
             // Normalize
-            while (st < TOP) 
+            while (st < TOP)
                st = (st << 32) | this.bitstream.readBits(32);
-         }            
+         }
 
          startChunk = endChunk;
       }
@@ -114,40 +116,66 @@ public class ANSRangeDecoder extends AbstractDecoder
       throw new UnsupportedOperationException("Not supported");
    }
 
-   
+
    protected int decodeHeader(int[] frequencies)
    {
       int alphabetSize = EntropyUtils.decodeAlphabet(this.bitstream, this.alphabet);
-      
-      if (alphabetSize == 0) 
+
+      if (alphabetSize == 0)
          return 0;
 
-      if (alphabetSize != 256) 
+      if (alphabetSize != 256)
       {
          for (int i=0; i<256; i++)
             frequencies[i] = 0;
       }
 
-      // Decode frequencies
       this.logRange = (int) (8 + this.bitstream.readBits(3));
-      final int logMax = (int) (8 + this.bitstream.readBits(5));   
       int sum = 0;
-      
-      // Read all frequencies but the first one
-      for (int i=1; i<alphabetSize; i++)
+      int inc = (alphabetSize > 64) ? 16 : 8;
+      int llr = 3;
+
+      while (1<<llr <= this.logRange)
+         llr++;
+
+      // Decode all frequencies (but the first one) by chunks of size 'inc'
+      for (int i=1; i<alphabetSize; i+=inc)
       {
-         int val = (int) this.bitstream.readBits(logMax);  
-         frequencies[this.alphabet[i]] = val;
-         sum += val;
+         final int logMax = (int) (1 + this.bitstream.readBits(llr));
+         final int endj = (i+inc < alphabetSize) ? i + inc : alphabetSize;
+
+         // Read frequencies
+         for (int j=i; j<endj; j++)
+         {
+            int val = (int) this.bitstream.readBits(logMax);
+
+            if ((val <= 0) || (val >= 1 << this.logRange))
+            {
+               throw new BitStreamException("Invalid bitstream: incorrect frequency " +
+                       val + " for symbol '" + this.alphabet[j] + "' in ANS range decoder",
+                       BitStreamException.INVALID_STREAM);
+            }
+
+            frequencies[this.alphabet[j]] = val;
+            sum += val;
+         }
       }
-      
+
       // Infer first frequency
       frequencies[this.alphabet[0]] = (1 << this.logRange) - sum;
-      this.cumFreqs[0] = 0;     
+
+      if ((frequencies[this.alphabet[0]] <= 0) || (frequencies[this.alphabet[0]] > 1 << this.logRange))
+      {
+         throw new BitStreamException("Invalid bitstream: incorrect frequency " +
+                 frequencies[this.alphabet[0]] + " for symbol '" + this.alphabet[0] +
+                 "' in ANS range decoder", BitStreamException.INVALID_STREAM);
+      }
+
+      this.cumFreqs[0] = 0;
 
       if (this.f2s.length < 1<<this.logRange)
          this.f2s = new short[1<<this.logRange];
-      
+
       // Create histogram of frequencies scaled to 'range' and reverse mapping
       for (int i=0; i<256; i++)
       {
@@ -160,9 +188,9 @@ public class ANSRangeDecoder extends AbstractDecoder
       return alphabetSize;
    }
 
-    
+
    @Override
-   public InputBitStream getBitStream() 
+   public InputBitStream getBitStream()
    {
       return this.bitstream;
    }

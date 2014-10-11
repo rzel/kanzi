@@ -70,13 +70,13 @@ func (this SizeComparator) Swap(i, j int) {
 	this.ranks[i], this.ranks[j] = this.ranks[j], this.ranks[i]
 }
 
-type PriorityQueue []*HuffmanNode
+type HuffmanPriorityQueue []*HuffmanNode
 
-func (this PriorityQueue) Len() int {
+func (this HuffmanPriorityQueue) Len() int {
 	return len(this)
 }
 
-func (this PriorityQueue) Less(i, j int) bool {
+func (this HuffmanPriorityQueue) Less(i, j int) bool {
 	ni := this[i]
 	nj := this[j]
 
@@ -95,15 +95,15 @@ func (this PriorityQueue) Less(i, j int) bool {
 	return ni.symbol&0xFF < nj.symbol&0xFF
 }
 
-func (this PriorityQueue) Swap(i, j int) {
+func (this HuffmanPriorityQueue) Swap(i, j int) {
 	this[i], this[j] = this[j], this[i]
 }
 
-func (this *PriorityQueue) Push(node interface{}) {
+func (this *HuffmanPriorityQueue) Push(node interface{}) {
 	*this = append(*this, node.(*HuffmanNode))
 }
 
-func (this *PriorityQueue) Pop() interface{} {
+func (this *HuffmanPriorityQueue) Pop() interface{} {
 	old := *this
 	n := len(old)
 	node := old[n-1]
@@ -203,7 +203,7 @@ func NewHuffmanEncoder(bs kanzi.OutputBitStream, args ...uint) (*HuffmanEncoder,
 
 func createTreeFromFrequencies(frequencies []uint, sizes_ []byte, ranks []byte) error {
 	// Create Huffman tree of (present) symbols
-	queue := make(PriorityQueue, 0)
+	queue := make(HuffmanPriorityQueue, 0)
 
 	for i := range ranks {
 		heap.Push(&queue, &HuffmanNode{symbol: ranks[i], weight: frequencies[ranks[i]]})

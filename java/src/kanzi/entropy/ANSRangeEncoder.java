@@ -25,25 +25,25 @@ import kanzi.OutputBitStream;
 public class ANSRangeEncoder extends AbstractEncoder
 {
    private static final long TOP = 1L << 24;
-   private static final int DEFAULT_CHUNK_SIZE = 0; // full size of block
+   private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
    private static final int DEFAULT_LOG_RANGE = 13;
-  
+
    private final OutputBitStream bitstream;
    private final int[] alphabet;
    private final int[] freqs;
    private final int[] cumFreqs;
    private int[] buffer;
    private final EntropyUtils eu;
-   private final int chunkSize; 
-   private int logRange; 
- 
-   
+   private final int chunkSize;
+   private int logRange;
+
+
    public ANSRangeEncoder(OutputBitStream bs)
    {
       this(bs, DEFAULT_CHUNK_SIZE, DEFAULT_LOG_RANGE);
    }
-   
-   
+
+
    public ANSRangeEncoder(OutputBitStream bs, int chunkSize, int logRange)
    {
       if (bs == null)
@@ -67,60 +67,70 @@ public class ANSRangeEncoder extends AbstractEncoder
       this.chunkSize = chunkSize;
       this.eu = new EntropyUtils();
    }
-   
-   
-   protected int updateFrequencies(int[] frequencies, int size, int lr) 
+
+
+   protected int updateFrequencies(int[] frequencies, int size, int lr)
    {
       if ((frequencies == null) || (frequencies.length != 256))
          return -1;
-        
+
       int alphabetSize = this.eu.normalizeFrequencies(frequencies, this.alphabet, size, lr);
-      this.cumFreqs[0] = 0;     
+      this.cumFreqs[0] = 0;
 
       // Create histogram of frequencies scaled to 'range'
-      for (int i=0; i<256; i++) 
+      for (int i=0; i<256; i++)
          this.cumFreqs[i+1] = this.cumFreqs[i] + frequencies[i];
-      
-      this.encodeHeader(alphabetSize, this.alphabet, frequencies, lr);         
+
+      this.encodeHeader(alphabetSize, this.alphabet, frequencies, lr);
       return alphabetSize;
    }
 
-   
-   protected boolean encodeHeader(int alphabetSize, int[] alphabet, int[] frequencies, int lr) 
+
+   protected boolean encodeHeader(int alphabetSize, int[] alphabet, int[] frequencies, int lr)
    {
+      EntropyUtils.encodeAlphabet(this.bitstream, alphabetSize, alphabet);
+
       if (alphabetSize == 0)
          return true;
 
-      EntropyUtils.encodeAlphabet(this.bitstream, alphabetSize, alphabet);
-      
-      // Encode frequencies
-      int max = 0;
-      int logMax = 8;
-      
-      for (int i=0; i<alphabetSize; i++)
-      {
-         if (frequencies[alphabet[i]] > max)
-            max = frequencies[alphabet[i]];
-      }
-
-      while (1<<logMax <= max)
-         logMax++;
-
       this.bitstream.writeBits(lr-8, 3); // logRange
-      this.bitstream.writeBits(logMax-8, 5);
+      int inc = (alphabetSize > 64) ? 16 : 8;
+      int llr = 3;
 
-      // Write all frequencies but the first one          
-      // The first frequency (usually high for symbol 0) is ignored since the sum is known
-      for (int i=1; i<alphabetSize; i++)
-         this.bitstream.writeBits(frequencies[alphabet[i]], logMax);
+      while (1<<llr <= lr)
+         llr++;
+
+      // Encode all frequencies (but the first one) by chunks of size 'inc'
+      for (int i=1; i<alphabetSize; i+=inc)
+      {
+         int max = 0;
+         int logMax = 1;
+         final int endj = (i+inc < alphabetSize) ? i + inc : alphabetSize;
+
+         // Search for max frequency log size in next chunk
+         for (int j=i; j<endj; j++)
+         {
+            if (frequencies[alphabet[j]] > max)
+               max = frequencies[alphabet[j]];
+         }
+
+         while (1<<logMax <= max)
+            logMax++;
+
+         this.bitstream.writeBits(logMax-1, llr);
+
+         // Write frequencies
+         for (int j=i; j<endj; j++)
+            this.bitstream.writeBits(frequencies[alphabet[j]], logMax);
+      }
 
       return true;
    }
-   
-   
+
+
    // Dynamically compute the frequencies for every chunk of data in the block
    @Override
-   public int encode(byte[] array, int blkptr, int len) 
+   public int encode(byte[] array, int blkptr, int len)
    {
       if ((array == null) || (blkptr+len > array.length) || (blkptr < 0) || (len < 0))
          return -1;
@@ -131,68 +141,68 @@ public class ANSRangeEncoder extends AbstractEncoder
       final int[] frequencies = this.freqs;
       final int end = blkptr + len;
       final int sz = (this.chunkSize == 0) ? len : this.chunkSize;
-      int endChunk = end;
-      int lr = this.logRange;
-      
-      // Lower log range if the size of the data block is small
-      while ((lr > 8) && (1<<lr > len))
-         lr--;
-
-      final long top = (TOP >> lr) << 32;
-      long st = TOP;
+      int startChunk = blkptr;
 
       if (this.buffer.length < sz)
          this.buffer = new int[sz];
-   
-      // Work backwards
-      while (endChunk > blkptr)
+
+      while (startChunk < end)
       {
+         long st = TOP;
+         final int endChunk = (startChunk + sz < end) ? startChunk + sz : end;
+         int lr = this.logRange;
+
+         // Lower log range if the size of the data chunk is small
+         while ((lr > 8) && (1<<lr > endChunk-startChunk))
+            lr--;
+
          for (int i=0; i<256; i++)
             frequencies[i] = 0;
 
-         final int startChunk = (endChunk - blkptr >= sz) ? endChunk - sz : blkptr;
-         
          for (int i=startChunk; i<endChunk; i++)
             frequencies[array[i] & 0xFF]++;
 
          // Rebuild statistics
          this.updateFrequencies(frequencies, endChunk-startChunk, lr);
+
+         final long top = (TOP >> lr) << 32;
          int n = 0;
 
-         // Reverse encoding
-         for (int i=endChunk-1; i>=startChunk; i--) 
+         // Encoding works in reverse
+         for (int i=endChunk-1; i>=startChunk; i--)
          {
             final int symbol = array[i] & 0xFF;
             final int freq = frequencies[symbol];
-            final long max = top * freq;         
+            final long max = top * freq;
 
             // Normalize
-            while (st >= max) 
-            {  
+            while (st >= max)
+            {
                this.buffer[n++] = (int) st;
                st >>>= 32;
             }
 
             // Compute next ANS state
-            st = ((st / freq) << lr) + (st % freq) + this.cumFreqs[symbol]; 
+            // C(s,x) = M floor(x/q_s) + mod(x,q_s) + b_s where b_s = q_0 + ... + q_{s-1}
+            st = ((st / freq) << lr) + (st % freq) + this.cumFreqs[symbol];
          }
-        
-         endChunk = startChunk;
+
+         startChunk = endChunk;
 
          // Write final ANS state
          this.bitstream.writeBits(st, 64);
 
          // Write encoded data to bitstream
          for (n--; n>=0; n--)
-            this.bitstream.writeBits(this.buffer[n], 32);         
+            this.bitstream.writeBits(this.buffer[n], 32);
       }
-     
+
       return len;
    }
-   
+
 
    @Override
-   protected void encodeByte(byte val) 
+   protected void encodeByte(byte val)
    {
       throw new UnsupportedOperationException("Not supported");
    }
@@ -200,8 +210,8 @@ public class ANSRangeEncoder extends AbstractEncoder
 
    // Not thread safe
    @Override
-   public OutputBitStream getBitStream() 
+   public OutputBitStream getBitStream()
    {
       return this.bitstream;
-   }  
+   }
 }
