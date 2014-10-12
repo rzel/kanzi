@@ -48,6 +48,7 @@ type ANSRangeEncoder struct {
 // beginning of the block apply to the whole block
 // Since the number of args is variable, this function can be called like this:
 // NewANSRangeEncoder(bs) or NewANSRangeEncoder(bs, 16384, 14)
+// The default chunk size is 65536 bytes.
 func NewANSRangeEncoder(bs kanzi.OutputBitStream, args ...uint) (*ANSRangeEncoder, error) {
 	if bs == nil {
 		return nil, errors.New("Invalid null bitstream parameter")
