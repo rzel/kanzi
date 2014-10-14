@@ -23,9 +23,8 @@ import (
 
 const (
 	TOP_RANGE                = uint64(0x00FFFFFFFFFFFFFF)
-	BOTTOM_RANGE             = uint64(0x000000FFFFFFFFFF)
-	MAX_RANGE                = BOTTOM_RANGE + 1
-	MASK                     = uint64(0x00FF000000000000)
+	BOTTOM_RANGE             = uint64(0x00000000FFFFFFFF)
+	MASK                     = uint64(0x00FFFF0000000000)
 	DEFAULT_RANGE_CHUNK_SIZE = uint(1 << 16) // 64 KB by default
 	DEFAULT_RANGE_LOG_RANGE  = uint(13)
 )
@@ -33,6 +32,7 @@ const (
 type RangeEncoder struct {
 	low       uint64
 	range_    uint64
+	invSum    uint64
 	bitstream kanzi.OutputBitStream
 	freqs     []int
 	cumFreqs  []int
@@ -94,20 +94,24 @@ func (this *RangeEncoder) updateFrequencies(frequencies []int, size int, lr uint
 		return 0, errors.New("Invalid frequencies parameter")
 	}
 
-	alphabetSize, err := this.eu.NormalizeFrequencies(frequencies, this.alphabet, size, lr)
+	alphabetSize, err := this.eu.NormalizeFrequencies(frequencies, this.alphabet, size, 1<<lr)
 
 	if err != nil {
 		return alphabetSize, err
 	}
 
-	this.cumFreqs[0] = 0
+	if alphabetSize > 0 {
+		this.cumFreqs[0] = 0
 
-	// Create histogram of frequencies scaled to 'range'
-	for i := 0; i < 256; i++ {
-		this.cumFreqs[i+1] = this.cumFreqs[i] + frequencies[i]
+		// Create histogram of frequencies scaled to 'range'
+		for i := 0; i < 256; i++ {
+			this.cumFreqs[i+1] = this.cumFreqs[i] + frequencies[i]
+		}
+
+		this.invSum = uint64(1 << 24) / uint64(this.cumFreqs[256])
+		this.encodeHeader(alphabetSize, this.alphabet, frequencies, lr)
 	}
 
-	this.encodeHeader(alphabetSize, this.alphabet, frequencies, lr)
 	return alphabetSize, nil
 }
 
@@ -162,7 +166,6 @@ func (this *RangeEncoder) encodeHeader(alphabetSize int, alphabet []byte, freque
 
 	return true
 }
-
 
 func (this *RangeEncoder) Encode(block []byte) (int, error) {
 	if block == nil {
@@ -225,19 +228,19 @@ func (this *RangeEncoder) Encode(block []byte) (int, error) {
 }
 
 func (this *RangeEncoder) encodeByte(b byte) {
- 	value := int(b)
+	value := int(b)
 	symbolLow := uint64(this.cumFreqs[value])
 	symbolHigh := uint64(this.cumFreqs[value+1])
 
 	// Compute next low and range
-	this.range_ /= uint64(this.cumFreqs[256])
+	this.range_ = (this.range_ >> 24) * this.invSum
 	this.low += (symbolLow * this.range_)
 	this.range_ *= (symbolHigh - symbolLow)
 
 	// If the left-most digits are the same throughout the range, write bits to bitstream
 	for {
 		if (this.low^(this.low+this.range_))&MASK != 0 {
-			if this.range_ >= MAX_RANGE {
+			if this.range_ > BOTTOM_RANGE {
 				break
 			}
 
@@ -245,9 +248,9 @@ func (this *RangeEncoder) encodeByte(b byte) {
 			this.range_ = -this.low & BOTTOM_RANGE
 		}
 
-		this.bitstream.WriteBits(this.low>>48, 8)
-		this.range_ <<= 8
-		this.low <<= 8
+		this.bitstream.WriteBits(this.low>>40, 16)
+		this.range_ <<= 16
+		this.low <<= 16
 	}
 }
 
@@ -262,6 +265,7 @@ type RangeDecoder struct {
 	code      uint64
 	low       uint64
 	range_    uint64
+	invSum    uint64
 	bitstream kanzi.InputBitStream
 	freqs     []int
 	cumFreqs  []int
@@ -382,6 +386,7 @@ func (this *RangeDecoder) decodeHeader(frequencies []int) (int, uint, error) {
 		}
 	}
 
+	this.invSum = uint64(1 << 24) / uint64(this.cumFreqs[256])
 	return alphabetSize, logRange, nil
 }
 
@@ -407,9 +412,9 @@ func (this *RangeDecoder) Decode(block []byte) (int, error) {
 			return startChunk, err
 		}
 
-        this.range_ = TOP_RANGE
-        this.low = 0
-        this.code = this.bitstream.ReadBits(56)
+		this.range_ = TOP_RANGE
+		this.low = 0
+		this.code = this.bitstream.ReadBits(56)
 		endChunk := startChunk + sizeChunk
 
 		if endChunk > end {
@@ -427,7 +432,7 @@ func (this *RangeDecoder) Decode(block []byte) (int, error) {
 }
 
 func (this *RangeDecoder) decodeByte() byte {
-	this.range_ /= uint64(this.cumFreqs[256])
+	this.range_ = (this.range_ >> 24) * this.invSum
 	count := int((this.code - this.low) / this.range_)
 	value := int(this.f2s[count])
 
@@ -439,7 +444,7 @@ func (this *RangeDecoder) decodeByte() byte {
 
 	for {
 		if (this.low^(this.low+this.range_))&MASK != 0 {
-			if this.range_ >= MAX_RANGE {
+			if this.range_ > BOTTOM_RANGE {
 				break
 			}
 
@@ -447,9 +452,9 @@ func (this *RangeDecoder) decodeByte() byte {
 			this.range_ = -this.low & BOTTOM_RANGE
 		}
 
-		this.code = (this.code << 8) | this.bitstream.ReadBits(8)
-		this.range_ <<= 8
-		this.low <<= 8
+		this.code = (this.code << 16) | this.bitstream.ReadBits(16)
+		this.range_ <<= 16
+		this.low <<= 16
 	}
 
 	return byte(value)

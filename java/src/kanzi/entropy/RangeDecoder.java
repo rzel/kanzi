@@ -28,9 +28,8 @@ import kanzi.BitStreamException;
 public final class RangeDecoder extends AbstractDecoder
 {
     private static final long TOP_RANGE    = 0x00FFFFFFFFFFFFFFL;
-    private static final long BOTTOM_RANGE = 0x000000FFFFFFFFFFL;
-    private static final long MASK         = 0x00FF000000000000L;
-    private static final long MAX_RANGE = BOTTOM_RANGE + 1;
+    private static final long BOTTOM_RANGE = 0x00000000FFFFFFFFL;
+    private static final long MASK         = 0x00FFFF0000000000L;
     private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
 
 
@@ -43,8 +42,9 @@ public final class RangeDecoder extends AbstractDecoder
     private short[] f2s; // mapping frequency -> symbol
     private final InputBitStream bitstream;
     private final int chunkSize;
+    private long invSum;
 
-
+    
     public RangeDecoder(InputBitStream bitstream)
     {
        this(bitstream, DEFAULT_CHUNK_SIZE);
@@ -144,7 +144,8 @@ public final class RangeDecoder extends AbstractDecoder
          for (int j=frequencies[i]-1; j>=0; j--)
             this.f2s[this.cumFreqs[i]+j] = (short) i;
       }
-
+      
+      this.invSum = (1L<<24) / this.cumFreqs[256];
       return alphabetSize;
     }
    
@@ -187,7 +188,7 @@ public final class RangeDecoder extends AbstractDecoder
     @Override
     protected byte decodeByte()
     {
-       this.range /= this.cumFreqs[256];
+       this.range = (this.range >> 24) * this.invSum;
        final int count = (int) ((this.code - this.low) / this.range);
        final int value = this.f2s[count];
 
@@ -201,16 +202,16 @@ public final class RangeDecoder extends AbstractDecoder
        {
           if (((this.low ^ (this.low + this.range)) & MASK) != 0)
           {
-             if (this.range >= MAX_RANGE)
+             if (this.range > BOTTOM_RANGE)
                 break;
              
              // Normalize
              this.range = -this.low & BOTTOM_RANGE;
           }
 
-          this.code = (this.code << 8) | this.bitstream.readBits(8);
-          this.range <<= 8;
-          this.low <<= 8;
+          this.code = (this.code << 16) | this.bitstream.readBits(16);
+          this.range <<= 16;
+          this.low <<= 16;
        }
 
        return (byte) value;

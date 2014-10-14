@@ -27,9 +27,8 @@ import kanzi.OutputBitStream;
 public final class RangeEncoder extends AbstractEncoder
 {
     private static final long TOP_RANGE    = 0x00FFFFFFFFFFFFFFL;
-    private static final long BOTTOM_RANGE = 0x000000FFFFFFFFFFL;
-    private static final long MASK         = 0x00FF000000000000L;
-    private static final long MAX_RANGE = BOTTOM_RANGE + 1; 
+    private static final long BOTTOM_RANGE = 0x00000000FFFFFFFFL;
+    private static final long MASK         = 0x00FFFF0000000000L;
     private static final int DEFAULT_CHUNK_SIZE = 1 << 16; // 64 KB by default
     private static final int DEFAULT_LOG_RANGE = 13;
 
@@ -43,7 +42,8 @@ public final class RangeEncoder extends AbstractEncoder
     private final OutputBitStream bitstream;
     private final int chunkSize;
     private int logRange;
-
+    private long invSum;
+    
     
     public RangeEncoder(OutputBitStream bitstream)
     {
@@ -85,12 +85,18 @@ public final class RangeEncoder extends AbstractEncoder
          return -1;
 
       int alphabetSize = this.eu.normalizeFrequencies(frequencies, this.alphabet, size, 1<<lr);
-      this.cumFreqs[0] = 0;
+      
+      if (alphabetSize > 0)
+      {
+         this.cumFreqs[0] = 0;
 
-      // Create histogram of frequencies scaled to 'range'
-      for (int i=0; i<256; i++)
-         this.cumFreqs[i+1] = this.cumFreqs[i] + frequencies[i];
+         // Create histogram of frequencies scaled to 'range'
+         for (int i=0; i<256; i++)
+            this.cumFreqs[i+1] = this.cumFreqs[i] + frequencies[i];
 
+         this.invSum = (1L<<24) / this.cumFreqs[256];
+      }
+      
       this.encodeHeader(alphabetSize, this.alphabet, frequencies, lr);
       return alphabetSize;
    }
@@ -193,7 +199,7 @@ public final class RangeEncoder extends AbstractEncoder
         final int symbolHigh = this.cumFreqs[value+1];
 
         // Compute next low and range
-        this.range /= this.cumFreqs[256];
+        this.range = (this.range >> 24) * this.invSum;
         this.low += (symbolLow * this.range);
         this.range *= (symbolHigh - symbolLow);
  
@@ -202,16 +208,16 @@ public final class RangeEncoder extends AbstractEncoder
         {                       
             if (((this.low ^ (this.low + this.range)) & MASK) != 0)
             {
-               if (this.range >= MAX_RANGE)
+               if (this.range > BOTTOM_RANGE)
                   break;
                
                // Normalize
                this.range = -this.low & BOTTOM_RANGE;
             }
 
-            this.bitstream.writeBits(this.low >> 48, 8);
-            this.range <<= 8;
-            this.low <<= 8;
+            this.bitstream.writeBits(this.low >> 40, 16);
+            this.range <<= 16;
+            this.low <<= 16;
         }
     }
 
