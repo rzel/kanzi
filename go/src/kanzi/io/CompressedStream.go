@@ -111,7 +111,7 @@ type CompressedOutputStream struct {
 	listeners     *list.List
 }
 
-func NewCompressedOutputStream(entropyCodec string, functionType string, os kanzi.OutputStream, blockSize uint,
+func NewCompressedOutputStream(entropyCodec string, functionType string, os *BufferedOutputStream, blockSize uint,
 	checksum bool, debugWriter io.Writer, jobs uint) (*CompressedOutputStream, error) {
 	if os == nil {
 		return nil, errors.New("Invalid null output stream parameter")
@@ -208,7 +208,7 @@ func (this *CompressedOutputStream) WriteHeader() *IOError {
 	if this.initialized == true {
 		return nil
 	}
-	
+
 	cksum := 0
 
 	if this.hasher != nil {
@@ -568,7 +568,7 @@ type CompressedInputStream struct {
 	listeners     *list.List
 }
 
-func NewCompressedInputStream(is kanzi.InputStream,
+func NewCompressedInputStream(is *BufferedInputStream,
 	debugWriter io.Writer, jobs uint) (*CompressedInputStream, error) {
 	if is == nil {
 		return nil, errors.New("Invalid null input stream parameter")

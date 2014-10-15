@@ -139,9 +139,9 @@ public class CompressedOutputStream extends OutputStream
       if (this.obs.writeBits(BITSTREAM_FORMAT_VERSION, 7) != 7)
          throw new kanzi.io.IOException("Cannot write bitstream version to header", Error.ERR_WRITE_FILE);
 
-      if (this.obs.writeBit((this.hasher != null) ? 1 : 0) == false)
+      if (this.obs.writeBits((this.hasher != null) ? 1 : 0, 1) != 1)
          throw new kanzi.io.IOException("Cannot write checksum to header", Error.ERR_WRITE_FILE);
-
+      
       if (this.obs.writeBits(this.entropyType & 0x7F, 7) != 7)
          throw new kanzi.io.IOException("Cannot write entropy type to header", Error.ERR_WRITE_FILE);
 
