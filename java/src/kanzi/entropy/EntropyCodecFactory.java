@@ -23,12 +23,12 @@ import kanzi.OutputBitStream;
 
 public class EntropyCodecFactory 
 {
-   public static final byte HUFFMAN_TYPE = 72;
-   public static final byte NONE_TYPE    = 78;
-   public static final byte FPAQ_TYPE    = 70;
-   public static final byte PAQ_TYPE     = 80;
-   public static final byte RANGE_TYPE   = 82;
-   public static final byte ANS_TYPE     = 64;
+   public static final byte NONE_TYPE    = 0;
+   public static final byte HUFFMAN_TYPE = 1;
+   public static final byte FPAQ_TYPE    = 2;
+   public static final byte PAQ_TYPE     = 3;
+   public static final byte RANGE_TYPE   = 4;
+   public static final byte ANS_TYPE     = 5;
    
    
    public EntropyDecoder newDecoder(InputBitStream ibs, byte entropyType)

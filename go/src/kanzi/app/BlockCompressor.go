@@ -56,8 +56,8 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 	var silent = flag.Bool("silent", false, "silent mode, no output (except warnings and errors)")
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
 	var inputName = flag.String("input", "", "mandatory name of the input file to encode")
-	var outputName = flag.String("output", "", "optional name of the output file (defaults to <input.knz>), or 'none' for no output")
-	var blockSize = flag.String("block", "1048576", "size of the input blocks (max 64MB - 4 / min 1KB / default 1MB)")
+	var outputName = flag.String("output", "", "optional name of the output file (defaults to <input.knz>), or 'none' for dry-run")
+	var blockSize = flag.String("block", "1048576", "size of the input blocks, multiple of 8, max 512 MB (depends on transform), min 1KB, default 1MB")
 	var entropy = flag.String("entropy", "Huffman", "entropy codec to use [None|Huffman*|ANS|Range|PAQ|FPAQ]")
 	var function = flag.String("transform", "BWT+MTF", "transform to use [None|BWT|BWTS|Snappy|LZ4|RLT]")
 	var cksum = flag.Bool("checksum", false, "enable block checksum")
@@ -72,15 +72,16 @@ func NewBlockCompressor() (*BlockCompressor, error) {
 		printOut("-silent              : silent mode, no output (except warnings and errors)", true)
 		printOut("-overwrite           : overwrite the output file if it already exists", true)
 		printOut("-input=<inputName>   : mandatory name of the input file to encode", true)
-		printOut("-output=<outputName> : optional name of the output file (defaults to <input.knz>), or 'none' for no output", true)
-		printOut("-block=<size>        : size of the input blocks (max 64MB - 4 / min 1KB / default 1MB)", true)
+		printOut("-output=<outputName> : optional name of the output file (defaults to <input.knz>) or 'none' for dry-run", true)
+		printOut("-block=<size>        : size of the input blocks, multiple of 8, max 512 MB (depends on transform), min 1KB, default 1MB", true)
 		printOut("-entropy=<codec>     : entropy codec to use [None|Huffman*|ANS|Range|PAQ|FPAQ]", true)
+		printOut("-transform=<codec>   : transform to use [None|BWT*|BWTS|Snappy|LZ4|RLT]", true)
 		printOut("                       for BWT(S), an optional GST can be provided: [MTF|RANK|TIMESTAMP]", true)
 		printOut("                       EG: BWT+RANK or BWTS+MTF (default is BWT+MTF)", true)
 		printOut("-checksum            : enable block checksum", true)
 		printOut("-jobs=<jobs>         : number of concurrent jobs", true)
 		printOut("", true)
-		printOut("EG. java -cp kanzi.jar kanzi.app.BlockCompressor -input=foo.txt -output=foo.knz -overwrite -transform=BWT+MTF -block=4m -entropy=FPAQ -verbose -jobs=4", true)
+		printOut("EG. go run BlockCompressor -input=foo.txt -output=foo.knz -overwrite -transform=BWT+MTF -block=4m -entropy=FPAQ -verbose -jobs=4", true)
 		os.Exit(0)
 	}
 
@@ -328,7 +329,10 @@ func (this *BlockCompressor) call() (int, uint64) {
 
 	// Close streams to ensure all data are flushed
 	// Deferred close is fallback for error paths
-	cos.Close()
+	if err := cos.Close(); err != nil {
+		fmt.Printf("%v\n", err)
+		return io.ERR_PROCESS_BLOCK, written
+	}
 
 	after := time.Now()
 	delta := after.Sub(before).Nanoseconds() / 1000000 // convert to ms

@@ -50,7 +50,7 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 	var overwrite = flag.Bool("overwrite", false, "overwrite the output file if it already exists")
 	var silent = flag.Bool("silent", false, "silent mode, no output (except warnings and errors)")
 	var inputName = flag.String("input", "", "mandatory name of the input file to decode")
-	var outputName = flag.String("output", "", "optional name of the output file or 'none' for no output")
+	var outputName = flag.String("output", "", "optional name of the output file or 'none' for dry-run")
 	var tasks = flag.Int("jobs", 1, "number of concurrent jobs")
 
 	// Parse
@@ -62,8 +62,10 @@ func NewBlockDecompressor() (*BlockDecompressor, error) {
 		printOut("-overwrite           : overwrite the output file if it already exists", true)
 		printOut("-silent              : silent mode, no output (except warnings and errors)", true)
 		printOut("-input=<inputName>   : mandatory name of the input file to decode", true)
-		printOut("-output=<outputName> : optional name of the output file or 'none' for no output", true)
+		printOut("-output=<outputName> : optional name of the output file or 'none' for dry-run", true)
 		printOut("-jobs=<jobs>         : number of concurrent jobs", true)
+		printOut("", true)
+		printOut("EG. go run BlockDecompressor -input=foo.knz -overwrite -verbose -jobs=2", true)
 		os.Exit(0)
 	}
 
@@ -266,7 +268,10 @@ func (this *BlockDecompressor) call() (int, uint64) {
 
 	// Close streams to ensure all data are flushed
 	// Deferred close is fallback for error paths
-	cis.Close()
+	if err := cis.Close(); err != nil {
+		fmt.Printf("%v\n", err)
+		return io.ERR_PROCESS_BLOCK, read
+	}
 
 	after := time.Now()
 	delta := after.Sub(before).Nanoseconds() / 1000000 // convert to ms

@@ -314,8 +314,10 @@ public class BlockDecompressor implements Runnable, Callable<Integer>
               printOut("-overwrite           : overwrite the output file if it already exists", true);
               printOut("-silent              : silent mode, no output (except warnings and errors)", true);
               printOut("-input=<inputName>   : mandatory name of the input file to decode", true);
-              printOut("-output=<outputName> : optional name of the output file or 'none' for no output", true);
+              printOut("-output=<outputName> : optional name of the output file or 'none' for dry-run", true);
               printOut("-jobs=<jobs>         : number of concurrent jobs", true);
+              printOut("", true);
+              printOut("EG. java -cp kanzi.jar kanzi.app.BlockDecompressor -input=foo.knz -overwrite -verbose -jobs=2", true);
               System.exit(0);
            }
            else if (arg.equals("-verbose"))
