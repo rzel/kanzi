@@ -19,6 +19,7 @@ import (
 	"container/list"
 	"flag"
 	"fmt"
+	"kanzi"
 	"kanzi/io"
 	"os"
 	"runtime"
@@ -221,7 +222,7 @@ func (this *BlockCompressor) call() (int, uint64) {
 	printOut(msg, this.verbose)
 	written := uint64(0)
 	var output *os.File
-	var bos *io.BufferedOutputStream
+	var bos kanzi.OutputStream
 
 	if strings.ToUpper(this.outputName) != "NONE" {
 		var err error
@@ -253,6 +254,8 @@ func (this *BlockCompressor) call() (int, uint64) {
 			fmt.Printf("Cannot create compressed stream: %s\n", err.Error())
 			return io.ERR_CREATE_COMPRESSOR, written
 		}
+	} else {
+		bos, _ = io.NewNullOutputStream()
 	}
 
 	verboseWriter := os.Stdout

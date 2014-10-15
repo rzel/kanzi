@@ -111,7 +111,7 @@ type CompressedOutputStream struct {
 	listeners     *list.List
 }
 
-func NewCompressedOutputStream(entropyCodec string, functionType string, os *BufferedOutputStream, blockSize uint,
+func NewCompressedOutputStream(entropyCodec string, functionType string, os kanzi.OutputStream, blockSize uint,
 	checksum bool, debugWriter io.Writer, jobs uint) (*CompressedOutputStream, error) {
 	if os == nil {
 		return nil, errors.New("Invalid null output stream parameter")
