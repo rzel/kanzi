@@ -107,23 +107,26 @@ public class EntropyCodecFactory
   
    public byte getType(String name)
    {
-      switch (name.toUpperCase())
-      {
-         case "HUFFMAN":
-            return HUFFMAN_TYPE; 
-         case "ANS":
-            return ANS_TYPE; 
-         case "FPAQ":
-            return FPAQ_TYPE;
-         case "PAQ":
-            return PAQ_TYPE;
-         case "RANGE":
-            return RANGE_TYPE; 
-         case "NONE":
-            return NONE_TYPE;
-         default:
-            throw new IllegalArgumentException("Unsupported entropy codec type: " + name);
-      }
+      if (name.equalsIgnoreCase("HUFFMAN"))
+         return HUFFMAN_TYPE; 
+      
+      if (name.equalsIgnoreCase("ANS"))
+         return ANS_TYPE; 
+      
+      if (name.equalsIgnoreCase("FPAQ"))
+         return FPAQ_TYPE;
+      
+      if (name.equalsIgnoreCase("PAQ"))
+         return PAQ_TYPE;
+      
+      if (name.equalsIgnoreCase("RANGE"))
+         return RANGE_TYPE; 
+      
+      if (name.equalsIgnoreCase("NONE"))
+         return NONE_TYPE;
+
+      throw new IllegalArgumentException("Unsupported entropy codec type: " + name); 
    } 
    
 }
+
