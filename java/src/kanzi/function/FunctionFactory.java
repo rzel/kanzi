@@ -33,7 +33,7 @@ public class FunctionFactory
    // GST: 3 msb
  
 
-public byte getType(String name)
+   public byte getType(String name)
    {
       String args = "";
       name = name.toUpperCase();

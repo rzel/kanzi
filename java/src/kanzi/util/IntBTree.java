@@ -433,6 +433,7 @@ public final class IntBTree
       return sb.toString();
    }
    
+   
    // Interface to implement visitor pattern. Must return the node value
    public interface Callback
    {
@@ -440,10 +441,10 @@ public final class IntBTree
    }
 
 
-   // A node containing an integer (one or several times)
+   // A node containing a range of integers
    public static class IntBTNode
    {
-      protected int base;
+      protected int base;  // range base
       protected int[] counts;
       protected IntBTNode left;
       protected IntBTNode right;
