@@ -53,7 +53,7 @@ func NewByteFunction(size uint, functionType byte) (kanzi.ByteFunction, error) {
 			return nil, err
 		}
 
-		return NewBlockCodec(bwt, int(functionType)>>4, size) // raw BWT
+		return NewBWTBlockCodec(bwt, int(functionType)>>4, size) // raw BWT
 
 	case BWTS_TYPE:
 		bwts, err := transform.NewBWTS(size)
@@ -62,7 +62,7 @@ func NewByteFunction(size uint, functionType byte) (kanzi.ByteFunction, error) {
 			return nil, err
 		}
 
-		return NewBlockCodec(bwts, int(functionType)>>4, size) // raw BWTS
+		return NewBWTBlockCodec(bwts, int(functionType)>>4, size) // raw BWTS
 
 	case NULL_TRANSFORM_TYPE:
 		return NewNullFunction(size)
