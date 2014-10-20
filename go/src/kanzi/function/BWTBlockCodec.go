@@ -45,7 +45,7 @@ const (
 	GST_MODE_RANK       = 2
 	GST_MODE_TIMESTAMP  = 3
 	BWT_MAX_HEADER_SIZE = 4
-	MAX_BLOCK_SIZE      = 256 * 1024 * 1024  // 30 bits
+	MAX_BLOCK_SIZE      = 256 * 1024 * 1024 // 30 bits
 )
 
 type BWTBlockCodec struct {
@@ -84,11 +84,11 @@ func NewBWTBlockCodec(tr interface{}, mode int, blockSize uint) (*BWTBlockCodec,
 
 	if blockSize > this.maxBlockSize() {
 		transformName := "BWT"
-		
+
 		if this.isBWT == false {
 			transformName = "BWTS"
 		}
-		
+
 		errMsg := fmt.Sprintf("The max block size for the %v is %d", transformName, this.maxBlockSize())
 		return nil, errors.New(errMsg)
 	}
@@ -317,6 +317,6 @@ func (this BWTBlockCodec) MaxEncodedLen(srcLen int) int {
 	if this.isBWT == true {
 		return srcLen + 4
 	}
-	
+
 	return srcLen
 }
