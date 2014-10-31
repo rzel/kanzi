@@ -115,7 +115,7 @@ public class TestContextResizer
                 System.out.println("No image file name provided on command line, using default value");
 
             System.out.println("File name set to '" + fileName + "'");
-            System.out.println("Strength set to "+effectPerMil+"%");
+            System.out.println("Strength set to "+(effectPerMil/10)+"%");
             ImageIcon icon = new ImageIcon(fileName);
             Image image = icon.getImage();
             int w = image.getWidth(null);
