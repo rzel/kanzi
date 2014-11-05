@@ -28,7 +28,7 @@ public final class SobelFilter implements IntFilter
     public static final int IMAGE = 0;
     public static final int COST = 1;
 
-    // Type of input filter (use RGB = accurate mode or only Ror G or B = fast mode)
+    // Type of input filter (use RGB = accurate mode or only R or G or B = fast mode)
     public static final int THREE_CHANNELS = 3;
     public static final int R_CHANNEL = 0;
     public static final int G_CHANNEL = 1;
@@ -55,9 +55,9 @@ public final class SobelFilter implements IntFilter
     }
 
 
-    public SobelFilter(int width, int height, int stride, boolean processBoundaries)
+    public SobelFilter(int width, int height, int stride, int direction, boolean processBoundaries)
     {
-       this(width, height, stride, VERTICAL | HORIZONTAL, THREE_CHANNELS, IMAGE, processBoundaries);
+       this(width, height, stride, direction, THREE_CHANNELS, IMAGE, processBoundaries);
     }
 
 
@@ -117,7 +117,7 @@ public final class SobelFilter implements IntFilter
         final boolean isHorizontal = ((this.direction & HORIZONTAL) != 0);
         boolean isPacked = (this.channels == THREE_CHANNELS);
         final int shiftChannel = (this.channels == R_CHANNEL) ? 16 : ((this.channels == G_CHANNEL) ? 8 : 0);
-        final int mask = (this.filterType == COST) ? 0xFF : 0x00FFFFFF;
+        final int mask = (this.filterType == COST) ? 0xFF : -1;
         final int h = this.height;
         final int w = this.width;
         final int st = this.stride;
@@ -197,7 +197,7 @@ public final class SobelFilter implements IntFilter
                 val = (val + (val >> 31)) ^ (val >> 31);
              }
 
-             dst[dstLine+x-1] = (val > 255) ? mask : ((val << 16) | (val << 8) | val) & mask;
+             dst[dstLine+x-1] = (val > 255) ? mask : (0xFF000000 | (val << 16) | (val << 8) | val) & mask;
 
              // Slide the 3x3 window (reassign 6 pixels: left + center columns)
              val00 = val01;
