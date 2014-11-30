@@ -82,7 +82,7 @@ public final class SnappyCodec implements ByteFunction, Sizeable
    // emitLiteral writes a literal chunk and returns the number of bytes written.
    private static int emitLiteral(IndexedByteArray source, IndexedByteArray destination, int len)
    {
-     int srcIdx = source.index;
+     final int srcIdx = source.index;
      int dstIdx = destination.index;
      final byte[] src = source.array;
      final byte[] dst = destination.array;
@@ -99,7 +99,7 @@ public final class SnappyCodec implements ByteFunction, Sizeable
         {
 	   for (int i=0; i<len; i++)
 	      dst[dstIdx+i] = src[srcIdx+i];
-
+           
            return res;
         }
      }
