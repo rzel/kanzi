@@ -18,7 +18,7 @@ package kanzi;
 
 public enum ColorModelType
 {
-    RGB(1), YUV444(2), YUV422(3), YUV420(4), YUV411(5), XYZ(6);
+    RGB(1), YUV444(2), YUV422(3), YUV420(4), YUV411(5), XYZ(6), LAB(7);
 
     private final byte value;
 
@@ -47,6 +47,9 @@ public enum ColorModelType
 
           case 6 :
              return "XYZ";
+
+          case 7 :
+             return "LAB";
 
           default:
              return "RGB";

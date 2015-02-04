@@ -81,15 +81,15 @@ public final class XYZColorModelConverter implements ColorModelConverter
 
             for (int k=startLine, i=startLine2; k<end; i++)
             {
+                // ------- fromRGB 'Macro'
                 final int rgbVal = rgb[k++];
                 final int r = (rgbVal >> 16) & 0xFF;
                 final int g = (rgbVal >> 8)  & 0xFF;
                 final int b =  rgbVal & 0xFF;
                 
-                // ------- fromRGB 'Macro'
-                x[i] = (1689*r + 1465*g +  739*b) >> 12;
-                y[i] = ( 871*r + 2929*g +  296*b) >> 12;
-                z[i] = (  79*r +  488*g + 3892*b) >> 12;
+                x[i] = (6758*r + 5859*g  +  2956*b + 8192) >> 14;
+                y[i] = (3484*r + 11717*g +  1183*b + 8192) >> 14;
+                z[i] = ( 317*r +  1953*g + 15570*b + 8192) >> 14;
                 // ------- fromRGB 'Macro'  END
             }
 
@@ -120,17 +120,22 @@ public final class XYZColorModelConverter implements ColorModelConverter
 
             for (int i=startLine, k=startLine2; i<end; i++)
             {
-                final int xVal = x[j];
-                final int yVal = y[j];
-                final int zVal = z[j];
-
                 // ------- toRGB 'Macro'
-                final int r = (13273*xVal - 6296*yVal - 2042*zVal) >> 12;
-                final int g = (-3970*xVal + 7684*yVal +  170*zVal) >> 12;
-                final int b = (  228*xVal -  836*yVal + 4330*zVal) >> 12;
+                final int xVal = x[i];
+                final int yVal = y[i];
+                final int zVal = z[i];
+
+                int r =  (53091*xVal - 25184*yVal -  8168*zVal + 8192) >> 14;
+                int g = (-15880*xVal + 30737*yVal +   681*zVal + 8192) >> 14;
+                int b =  (  912*xVal -  3343*yVal + 17322*zVal + 8192) >> 14;
+                
+                // clip (0, 255)
+                r = ((~(r >> 31)) & 255 & (r | ((255-r) >> 31))); 
+                g = ((~(g >> 31)) & 255 & (g | ((255-g) >> 31))); 
+                b = ((~(b >> 31)) & 255 & (b | ((255-b) >> 31))); 
                 // ------- toRGB 'Macro' END
 
-                rgb[k++] = r | g | b;
+                rgb[k++] = (r << 16) | (g << 8) | b;
             }
 
             startLine  += this.width;
