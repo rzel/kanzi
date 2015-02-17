@@ -16,24 +16,25 @@ limitations under the License.
 package kanzi.entropy;
 
 
+import kanzi.EntropyEncoder;
 import kanzi.OutputBitStream;
 
 
 // This class is a generic implementation of a boolean entropy encoder
-public class BinaryEntropyEncoder extends AbstractEncoder
+public class BinaryEntropyEncoder implements EntropyEncoder
 {
    private static final long TOP        = 0x00FFFFFFFFFFFFFFL;
    private static final long MASK_24_56 = 0x00FFFFFFFF000000L;
    private static final long MASK_0_24  = 0x0000000000FFFFFFL;
    private static final long MASK_0_32  = 0x00000000FFFFFFFFL;
-   
+
    private final Predictor predictor;
    private long low;
    private long high;
    private final OutputBitStream bitstream;
    private boolean disposed;
 
-   
+
    public BinaryEntropyEncoder(OutputBitStream bitstream, Predictor predictor)
    {
       if (bitstream == null)
@@ -48,8 +49,22 @@ public class BinaryEntropyEncoder extends AbstractEncoder
       this.predictor = predictor;
    }
 
-   
+
    @Override
+   public int encode(byte[] array, int blkptr, int len)
+   {
+      if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
+         return -1;
+
+      final int end = blkptr + len;
+
+      for (int i = blkptr; i<end; i++)
+         this.encodeByte(array[i]);
+
+      return len;
+   }
+
+
    public void encodeByte(byte val)
    {
       this.encodeBit_((val >> 7) & 1);
@@ -59,16 +74,16 @@ public class BinaryEntropyEncoder extends AbstractEncoder
       this.encodeBit_((val >> 3) & 1);
       this.encodeBit_((val >> 2) & 1);
       this.encodeBit_((val >> 1) & 1);
-      this.encodeBit_(val & 1);          
+      this.encodeBit_(val & 1);
    }
-   
+
 
    public boolean encodeBit(int bit)
    {
       return this.encodeBit_(bit & 1);
    }
-   
-   
+
+
    private boolean encodeBit_(int bit)
    {
       // Compute prediction
@@ -78,7 +93,7 @@ public class BinaryEntropyEncoder extends AbstractEncoder
       final long xmid = this.low + ((this.high - this.low) >> 12) * prediction;
 
       // Update fields with new interval bounds
-      final int bitmask = bit - 1;
+      final long bitmask = bit - 1;
       this.low = (bitmask & (xmid + 1)) | (~bitmask & this.low);
       this.high = (bitmask & this.high) | (~bitmask & xmid);
 

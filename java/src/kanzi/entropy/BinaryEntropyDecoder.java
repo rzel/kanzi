@@ -17,11 +17,12 @@ package kanzi.entropy;
 
 
 import kanzi.BitStreamException;
+import kanzi.EntropyDecoder;
 import kanzi.InputBitStream;
 
 
 // This class is a generic implementation of a boolean entropy decoder
-public class BinaryEntropyDecoder extends AbstractDecoder
+public class BinaryEntropyDecoder implements EntropyDecoder
 {
    private static final long TOP        = 0x00FFFFFFFFFFFFFFL;
    private static final long MASK_24_56 = 0x00FFFFFFFF000000L;
@@ -67,7 +68,7 @@ public class BinaryEntropyDecoder extends AbstractDecoder
      try
      {
         while (i < end)
-           array[i++] = this.decodeByte_();
+           array[i++] = this.decodeByte();
      }
      catch (BitStreamException e)
      {
@@ -76,21 +77,9 @@ public class BinaryEntropyDecoder extends AbstractDecoder
 
      return i - blkptr;
    }
+   
 
-
-   @Override
-   public byte decodeByte()
-   {
-      // Deferred initialization: the bitstream may not be ready at build time
-      // Initialize 'current' with bytes read from the bitstream
-      if (this.isInitialized() == false)
-         this.initialize();
-
-      return this.decodeByte_();
-   }
-
-
-   protected byte decodeByte_()
+   protected byte decodeByte()
    {
       int res;     
       res   = (this.decodeBit() << 7);
@@ -166,5 +155,11 @@ public class BinaryEntropyDecoder extends AbstractDecoder
    public InputBitStream getBitStream()
    {
       return this.bitstream;
+   }
+
+   
+   @Override
+   public void dispose() 
+   {
    }
 }
