@@ -53,7 +53,7 @@ func NewDefaultInputBitStream(stream kanzi.InputStream, bufferSize uint) (*Defau
 	return this, nil
 }
 
-// Return 1 or 0. Return error if stream is closed
+// Return 1 or 0
 func (this *DefaultInputBitStream) ReadBit() int {
 	if this.bitIndex == 63 {
 		this.pullCurrent()  // Panic if stream is closed

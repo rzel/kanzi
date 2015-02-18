@@ -15,7 +15,6 @@ limitations under the License.
 
 package kanzi.entropy;
 
-import kanzi.BitStreamException;
 import kanzi.EntropyDecoder;
 import kanzi.InputBitStream;
 
@@ -80,18 +79,10 @@ public final class ExpGolombDecoder implements EntropyDecoder
       if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
          return -1;
 
-      int end = blkptr + len;
-      int i = blkptr;
+      final int end = blkptr + len;
 
-      try
-      {
-         while (i < end)
-            array[i++] = this.decodeByte();
-      }
-      catch (BitStreamException e)
-      {
-         return i - blkptr;
-      }
+      for (int i=blkptr; i<end; i++)
+         array[i] = this.decodeByte();
 
       return len;
     }

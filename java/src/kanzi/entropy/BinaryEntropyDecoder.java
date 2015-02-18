@@ -58,24 +58,16 @@ public class BinaryEntropyDecoder implements EntropyDecoder
    {
      if ((array == null) || (blkptr + len > array.length) || (blkptr < 0) || (len < 0))
         return -1;
-
-     final int end = blkptr + len;
-     int i = blkptr;
-
+      
      if (this.isInitialized() == false)
         this.initialize();
 
-     try
-     {
-        while (i < end)
-           array[i++] = this.decodeByte();
-     }
-     catch (BitStreamException e)
-     {
-        // Fall through
-     }
+     final int end = blkptr + len;
 
-     return i - blkptr;
+     for (int i=blkptr; i<end; i++)
+        array[i] = this.decodeByte();
+
+     return len;
    }
    
 
@@ -112,7 +104,7 @@ public class BinaryEntropyDecoder implements EntropyDecoder
    }
 
 
-   public int decodeBit()
+   protected int decodeBit()
    {
       // Compute prediction
       final int prediction = this.predictor.get();

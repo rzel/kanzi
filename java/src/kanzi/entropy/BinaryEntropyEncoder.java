@@ -65,26 +65,20 @@ public class BinaryEntropyEncoder implements EntropyEncoder
    }
 
 
-   public void encodeByte(byte val)
+   protected void encodeByte(byte val)
    {
-      this.encodeBit_((val >> 7) & 1);
-      this.encodeBit_((val >> 6) & 1);
-      this.encodeBit_((val >> 5) & 1);
-      this.encodeBit_((val >> 4) & 1);
-      this.encodeBit_((val >> 3) & 1);
-      this.encodeBit_((val >> 2) & 1);
-      this.encodeBit_((val >> 1) & 1);
-      this.encodeBit_(val & 1);
+      this.encodeBit((val >> 7) & 1);
+      this.encodeBit((val >> 6) & 1);
+      this.encodeBit((val >> 5) & 1);
+      this.encodeBit((val >> 4) & 1);
+      this.encodeBit((val >> 3) & 1);
+      this.encodeBit((val >> 2) & 1);
+      this.encodeBit((val >> 1) & 1);
+      this.encodeBit(val & 1);
    }
 
 
-   public boolean encodeBit(int bit)
-   {
-      return this.encodeBit_(bit & 1);
-   }
-
-
-   private boolean encodeBit_(int bit)
+   protected boolean encodeBit(int bit)
    {
       // Compute prediction
       final int prediction = this.predictor.get();
