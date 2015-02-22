@@ -41,6 +41,10 @@ func NewDefaultInputBitStream(stream kanzi.InputStream, bufferSize uint) (*Defau
 		return nil, errors.New("Invalid buffer size parameter (must be at least 1024 bytes)")
 	}
 
+	if bufferSize > 1<<29 {
+		return nil, errors.New("Invalid buffer size parameter (must be at most 536870912 bytes)")
+	}
+
 	if bufferSize&7 != 0 {
 		return nil, errors.New("Invalid buffer size (must be a multiple of 8)")
 	}
@@ -190,7 +194,7 @@ func (this *DefaultInputBitStream) Close() (bool, error) {
 
 // Return number of bits read so far
 func (this *DefaultInputBitStream) Read() uint64 {
-	return this.read + uint64(this.position<<3) - uint64(this.bitIndex)
+	return this.read + uint64(this.position)<<3 - uint64(this.bitIndex)
 }
 
 func (this *DefaultInputBitStream) Closed() bool {

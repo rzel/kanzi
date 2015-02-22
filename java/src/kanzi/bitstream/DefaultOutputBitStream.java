@@ -40,6 +40,9 @@ public final class DefaultOutputBitStream implements OutputBitStream
       if (bufferSize < 1024)
          throw new IllegalArgumentException("Invalid buffer size (must be at least 1024)");
 
+      if (bufferSize > 1<<28)
+         throw new IllegalArgumentException("Invalid buffer size (must be at most 268435456)");
+
       if ((bufferSize & 7) != 0)
          throw new IllegalArgumentException("Invalid buffer size (must be a multiple of 8)");
 
