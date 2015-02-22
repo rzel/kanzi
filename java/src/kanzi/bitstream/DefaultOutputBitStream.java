@@ -118,15 +118,8 @@ public final class DefaultOutputBitStream implements OutputBitStream
       this.current = 0;
       this.position += 8;
 
-      try
-      {
-         if (this.position >= this.buffer.length)
-            this.flush();
-      }
-      catch (BitStreamException e)
-      {
-         throw e;
-      }
+      if (this.position >= this.buffer.length)
+         this.flush();
    }
 
 

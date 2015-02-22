@@ -78,7 +78,7 @@ public class BinaryEntropyEncoder implements EntropyEncoder
    }
 
 
-   protected boolean encodeBit(int bit)
+   protected void encodeBit(int bit)
    {
       // Compute prediction
       final int prediction = this.predictor.get();
@@ -97,8 +97,6 @@ public class BinaryEntropyEncoder implements EntropyEncoder
       // Write unchanged first 32 bits to bitstream
       while (((this.low ^ this.high) & MASK_24_56) == 0)
          this.flush();
-
-      return true;
    }
 
 

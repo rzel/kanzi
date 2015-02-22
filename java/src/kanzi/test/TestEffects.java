@@ -35,6 +35,7 @@ import kanzi.filter.ContrastFilter;
 import kanzi.filter.FastBilateralFilter;
 import kanzi.filter.GaussianFilter;
 import kanzi.filter.LightingEffect;
+import kanzi.filter.SmoothFilter;
 import kanzi.filter.SobelFilter;
 import kanzi.filter.seam.ContextResizer;
 
@@ -95,7 +96,7 @@ public class TestEffects
             frame.add(new JLabel(icon));
             IntFilter effect;
             int adjust = 100 * 512 * 512 / (w * h); // adjust number of tests based on size
-     
+     filterName = "SMOOTH";
             switch (filterName)
             { 
                case "CONTEXTRESIZER" :
@@ -168,6 +169,15 @@ public class TestEffects
                   test(effect, icon, "Filter - full - radius "+radius, 0, 700, 650, 10000*adjust/100, 30000);
                   break;  
                }
+               
+               case "SMOOTH" :
+               {
+                  // Smooth
+                  frame.setVisible(true);            
+                  effect = new SmoothFilter(w, h, w);
+                  test(effect, icon, "Filter - full", 0, 700, 650, 1000*adjust/100, 30000);
+               }
+               
                
                case "BLUR" :
                {
