@@ -83,8 +83,8 @@ public class ColorClusterFilter implements IntFilter
       if ((nbClusters < 2) || (nbClusters > 256))
          throw new IllegalArgumentException("The number of clusters must be in [2..256]");
 
-      if ((downSampling < 0) || (downSampling > 2))
-         throw new IllegalArgumentException("The down sampling factor must be in [0..2]");
+      if ((downSampling < 0) || (downSampling > 1))
+         throw new IllegalArgumentException("The down sampling factor must be in [0..1]");
 
       if ((iterations < 2) || (iterations > 256))
          throw new IllegalArgumentException("The maximum number of iterations must be in [2..256]");
@@ -205,7 +205,7 @@ public class ColorClusterFilter implements IntFilter
 
                final Cluster cluster = cl[kfound];
                buf[offs+i] &= 0x00FFFFFF;
-               buf[offs+i] |= ((kfound + 1) << 24); // update pixel's cluster index (top byte)
+               buf[offs+i] |= (kfound << 24); // update pixel's cluster index (top byte)
                cluster.sumR += r;
                cluster.sumG += g;
                cluster.sumB += b;
@@ -256,8 +256,7 @@ public class ColorClusterFilter implements IntFilter
          c.centroidY <<= 1;
       }
 
-      this.subSample = scale;
-      return this.createFinalImage(src, dst);
+      return this.createFinalImage(src, dst, scale);
    }
 
 
@@ -310,15 +309,14 @@ public class ColorClusterFilter implements IntFilter
 
 
    // Up-sample and set all points in the cluster to the color of the centroid pixel
-   private boolean createFinalImage(IndexedIntArray source, IndexedIntArray destination)
+   private boolean createFinalImage(IndexedIntArray source, IndexedIntArray destination, int scale)
    {
       final int[] buf = this.buffer;
       final int[] src = source.array;
       final int[] dst = destination.array;
       final int srcStart = source.index;
       final int dstStart = destination.index;
-      final Cluster[] cl = this.clusters;
-      final int scale = this.subSample; 
+      final Cluster[] cl = this.clusters; 
       final int scaledW = this.width >> scale;
       final int scaledY = this.height >> scale;
       final int st = this.stride;
@@ -327,8 +325,8 @@ public class ColorClusterFilter implements IntFilter
            
       for (int j=this.height-2; j>=0; j-=2)
       {
-         Cluster c1 = cl[(buf[offs+scaledW-1]>>>24)-1]; // pixel p1 to the right of current p0
-         Cluster c3 = cl[(buf[nlOffs+scaledW-1]>>>24)-1]; // pixel p3 to the right of p2
+         Cluster c1 = cl[buf[offs+scaledW-1]>>>24]; // pixel p1 to the right of current p0
+         Cluster c3 = cl[buf[nlOffs+scaledW-1]>>>24]; // pixel p3 to the right of p2
          final int srcIdx = srcStart + j * st;
          final int dstIdx = dstStart + j * st;
 
@@ -336,9 +334,9 @@ public class ColorClusterFilter implements IntFilter
          {
             int iOffs = srcIdx + i;
             int oOffs = dstIdx + i;
-            final int cluster0Idx = (buf[offs+(i>>scale)] >>> 24) - 1;
+            final int cluster0Idx = buf[offs+(i>>scale)] >>> 24;
             final Cluster c0 = cl[cluster0Idx];
-            final int cluster2Idx = (buf[nlOffs+(i>>scale)] >>> 24) - 1;
+            final int cluster2Idx = buf[nlOffs+(i>>scale)] >>> 24;
             final Cluster c2 = cl[cluster2Idx]; // pixel p2 below current p0
             final int pixel0 = c0.centroidValue;
             dst[oOffs] = pixel0;

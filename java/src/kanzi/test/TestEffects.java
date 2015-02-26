@@ -35,7 +35,6 @@ import kanzi.filter.ContrastFilter;
 import kanzi.filter.FastBilateralFilter;
 import kanzi.filter.GaussianFilter;
 import kanzi.filter.LightingEffect;
-import kanzi.filter.SmoothFilter;
 import kanzi.filter.SobelFilter;
 import kanzi.filter.seam.ContextResizer;
 
@@ -169,16 +168,7 @@ public class TestEffects
                   test(effect, icon, "Filter - full - radius "+radius, 0, 700, 650, 10000*adjust/100, 30000);
                   break;  
                }
-               
-               case "SMOOTH" :
-               {
-                  // Smooth
-                  frame.setVisible(true);            
-                  effect = new SmoothFilter(w, h, w);
-                  test(effect, icon, "Filter - full", 0, 700, 650, 1000*adjust/100, 30000);
-               }
-               
-               
+                                          
                case "BLUR" :
                {
                   // Blur

@@ -57,7 +57,7 @@ public class TestColorClusterFilter
             // img.getRaster().getDataElements()
             img.getRaster().getDataElements(0, 0, w, h, source.array);
 
-            ColorClusterFilter effect = new ColorClusterFilter(w, h, w, 30, 12, null, 1);
+            ColorClusterFilter effect = new ColorClusterFilter(w, h, w, 32, 8, null, 1);
             //System.arraycopy(dest, 0, source, 0, w*h);
             effect.apply(source, dest);
             final int[] dArray = dest.array;
@@ -99,7 +99,7 @@ public class TestColorClusterFilter
             // Smooth the results by adding bilateral filtering
             if (applyBilateral == true)
             {
-               FastBilateralFilter fbl = new FastBilateralFilter(w, h, 70.0f, 0.03f);
+               FastBilateralFilter fbl = new FastBilateralFilter(w, h, 40.0f, 0.03f);
                fbl.apply(dest, dest);
             }
 
