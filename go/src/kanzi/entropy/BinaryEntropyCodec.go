@@ -36,7 +36,6 @@ type Predictor interface {
 	Get() uint
 }
 
-
 type BinaryEntropyEncoder struct {
 	predictor Predictor
 	low       uint64
@@ -74,16 +73,14 @@ func (this *BinaryEntropyEncoder) encodeByte(val byte) {
 }
 
 func (this *BinaryEntropyEncoder) encodeBit(bit byte) {
-	// Compute prediction
-	prediction := this.predictor.Get()
-
 	// Calculate interval split
-	xmid := this.low + ((this.high-this.low)>>12)*uint64(prediction)
+	// Written in a way to maximize accuracy of multiplication/division
+	split := (((this.high - this.low) >> 7) * uint64(this.predictor.Get())) >> 5
 
 	// Update fields with new interval bounds
 	bitmask := uint64(bit) - 1
-	this.low = (bitmask & (xmid + 1)) | (^bitmask & this.low)
-	this.high = (bitmask & this.high) | (^bitmask & xmid)
+	this.high = (bitmask & this.high) | (^bitmask & (this.low + split))
+	this.low += (bitmask & (split + 1))
 
 	// Update predictor
 	this.predictor.Update(bit)
@@ -148,7 +145,6 @@ func NewBinaryEntropyDecoder(bs kanzi.InputBitStream, predictor Predictor) (*Bin
 	return this, nil
 }
 
-
 func (this *BinaryEntropyDecoder) decodeByte() byte {
 	res := (this.decodeBit() << 7)
 	res |= (this.decodeBit() << 6)
@@ -157,8 +153,7 @@ func (this *BinaryEntropyDecoder) decodeByte() byte {
 	res |= (this.decodeBit() << 3)
 	res |= (this.decodeBit() << 2)
 	res |= (this.decodeBit() << 1)
-	res |= this.decodeBit()
-	return res
+	return res | this.decodeBit()
 }
 
 func (this *BinaryEntropyDecoder) Initialized() bool {
@@ -175,30 +170,28 @@ func (this *BinaryEntropyDecoder) Initialize() {
 }
 
 func (this *BinaryEntropyDecoder) decodeBit() byte {
-	// Compute prediction
-	prediction := this.predictor.Get()
-
 	// Calculate interval split
-	xmid := this.low + ((this.high-this.low)>>12)*uint64(prediction)
-	var bit byte
+	// Written in a way to maximize accuracy of multiplication/division
+	xmid := ((((this.high - this.low) >> 7) * uint64(this.predictor.Get())) >> 5) + this.low
+        var bit
 
-	if this.current <= xmid {
-		bit = 1
-		this.high = xmid
-	} else {
-		bit = 0
-		this.low = xmid + 1
-	}
+        if this.current <= xmid {
+                bit = 1
+                this.high = xmid
+        } else {
+                bit = 0
+                this.low = xmid + 1
+        }
 
-	// Update predictor
-	this.predictor.Update(bit)
+        // Update predictor
+        this.predictor.Update(bit)
 
-	// Read 32 bits from bitstream
-	for (this.low^this.high)&MASK_24_56 == 0 {
-		this.read()
-	}
+        // Read 32 bits from bitstream
+        for (this.low^this.high)&MASK_24_56 == 0 {
+                this.read()
+        }
 
-	return bit
+        return bit
 }
 
 func (this *BinaryEntropyDecoder) read() {

@@ -80,27 +80,25 @@ public class BinaryEntropyEncoder implements EntropyEncoder
 
    protected void encodeBit(int bit)
    {
-      // Compute prediction
-      final int prediction = this.predictor.get();
-
       // Calculate interval split
-      final long xmid = this.low + ((this.high - this.low) >> 12) * prediction;
+      // Written in a way to maximize accuracy of multiplication/division
+      final long split = (((this.high - this.low) >> 7) * this.predictor.get()) >> 5;
 
       // Update fields with new interval bounds
       final long bitmask = bit - 1;
-      this.low = (bitmask & (xmid + 1)) | (~bitmask & this.low);
-      this.high = (bitmask & this.high) | (~bitmask & xmid);
-
+      this.high = (bitmask & this.high) | (~bitmask & (this.low + split));
+      this.low += (bitmask & (split + 1));
+     
       // Update predictor
       this.predictor.update(bit);
-
+            
       // Write unchanged first 32 bits to bitstream
       while (((this.low ^ this.high) & MASK_24_56) == 0)
          this.flush();
    }
 
 
-   protected void flush()
+   private void flush()
    {
       this.bitstream.writeBits(this.high >>> 24, 32);
       this.low <<= 32;

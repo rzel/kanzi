@@ -73,15 +73,14 @@ public class BinaryEntropyDecoder implements EntropyDecoder
    protected byte decodeByte()
    {
       int res;     
-      res   = (this.decodeBit() << 7);
-      res  |= (this.decodeBit() << 6);
-      res  |= (this.decodeBit() << 5);
-      res  |= (this.decodeBit() << 4);
-      res  |= (this.decodeBit() << 3);
-      res  |= (this.decodeBit() << 2);
-      res  |= (this.decodeBit() << 1);
-      res  |= this.decodeBit();
-      return (byte) res;
+      res  = (this.decodeBit() << 7);
+      res |= (this.decodeBit() << 6);
+      res |= (this.decodeBit() << 5);
+      res |= (this.decodeBit() << 4);
+      res |= (this.decodeBit() << 3);
+      res |= (this.decodeBit() << 2);
+      res |= (this.decodeBit() << 1);
+      return (byte) (res | this.decodeBit());
    }
 
 
@@ -105,12 +104,10 @@ public class BinaryEntropyDecoder implements EntropyDecoder
 
    protected int decodeBit()
    {
-      // Compute prediction
-      final int prediction = this.predictor.get();
-
       // Calculate interval split
-      final long xmid = this.low + ((this.high - this.low) >> 12) * prediction;
-      int bit;
+      // Written in a way to maximize accuracy of multiplication/division
+      final long xmid = ((((this.high - this.low) >> 7) * this.predictor.get()) >> 5) + this.low;
+      final int bit;
 
       if (this.current <= xmid)
       {
@@ -134,7 +131,7 @@ public class BinaryEntropyDecoder implements EntropyDecoder
    }
 
 
-   protected void read()
+   private void read()
    {
       this.low = (this.low << 32) & MASK_0_56;           
       this.high = ((this.high << 32) | MASK_0_32) & MASK_0_56;    
