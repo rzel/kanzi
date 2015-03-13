@@ -91,8 +91,11 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, count uint) uint {
 		remaining := uint(length - this.bitIndex - 1)
 		this.current |= (value >> remaining)
 		this.pushCurrent()
-		this.current |= (value << (64 - remaining))
-		this.bitIndex -= int(remaining)
+
+		if remaining != 0 {
+			this.current |= (value << (64 - remaining))
+			this.bitIndex -= int(remaining)
+		}
 	}
 
 	return count

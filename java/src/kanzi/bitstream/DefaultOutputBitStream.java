@@ -92,8 +92,12 @@ public final class DefaultOutputBitStream implements OutputBitStream
       {
          this.current |= (value >>> -remaining);
          this.pushCurrent();
-         this.current |= (value << remaining);
-         this.bitIndex += remaining;
+         
+         if (remaining != 0) 
+         {
+            this.current |= (value << remaining);
+            this.bitIndex += remaining;
+         }
       }
 
       return count;
