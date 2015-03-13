@@ -79,7 +79,7 @@ func (this *BinaryEntropyEncoder) encodeBit(bit byte) {
 
 	// Update fields with new interval bounds
 	bitmask := uint64(bit) - 1
-	this.high = (bitmask & this.high) | (^bitmask & (this.low + split))
+	this.high -= (^bitmask & (this.high - this.low - split))
 	this.low += (bitmask & (split + 1))
 
 	// Update predictor
@@ -173,25 +173,25 @@ func (this *BinaryEntropyDecoder) decodeBit() byte {
 	// Calculate interval split
 	// Written in a way to maximize accuracy of multiplication/division
 	xmid := ((((this.high - this.low) >> 7) * uint64(this.predictor.Get())) >> 5) + this.low
-        var bit
+	var bit byte
 
-        if this.current <= xmid {
-                bit = 1
-                this.high = xmid
-        } else {
-                bit = 0
-                this.low = xmid + 1
-        }
+	if this.current <= xmid {
+		bit = 1
+		this.high = xmid
+	} else {
+		bit = 0
+		this.low = xmid + 1
+	}
 
-        // Update predictor
-        this.predictor.Update(bit)
+	// Update predictor
+	this.predictor.Update(bit)
 
-        // Read 32 bits from bitstream
-        for (this.low^this.high)&MASK_24_56 == 0 {
-                this.read()
-        }
+	// Read 32 bits from bitstream
+	for (this.low^this.high)&MASK_24_56 == 0 {
+		this.read()
+	}
 
-        return bit
+	return bit
 }
 
 func (this *BinaryEntropyDecoder) read() {

@@ -67,13 +67,13 @@ public class CMPredictor implements Predictor
    // Update the probability model
    @Override
    public void update(int bit)
-   {    
+   { 
       final int ctx_ = this.ctx;
       final int runCtx = (2-this.run) >>> 31;
       final int[] counter0_ = this.counter0;
       final int[] counter1_ = this.counter1[this.c1];
       final int[] counter2_ = this.counter2[runCtx][ctx_];
-
+           
       if (bit == 0)
       {
          counter0_[ctx_] -= (counter0_[ctx_] >> LOW_RATE);
@@ -112,16 +112,16 @@ public class CMPredictor implements Predictor
    @Override
    public int get()
    {
+      final int p0 = this.counter0[this.ctx];
+      final int p1 = this.counter1[this.c1][this.ctx];
+      final int p2 = this.counter1[this.c2][this.ctx];
+      final int p = ((p0<<2)+p1+p1+p1+p2+4) >> 3;
+      this.idx = p >> 12;
       final int runCtx = (2-this.run) >>> 31;
       final int[] counter2_ = this.counter2[runCtx][this.ctx];            
-      int p0 = this.counter0[this.ctx];
-      int p1 = this.counter1[this.c1][this.ctx];
-      int p2 = this.counter1[this.c2][this.ctx];
-      int p = ((p0<<2)+p1+p1+p1+p2+4) >> 3;
-      this.idx = p >> 12;
-      int x1 = counter2_[this.idx];
-      int x2 = counter2_[this.idx+1];
-      int ssep = x1 + (((x2-x1)*(p&4095)) >> 12);
+      final int x1 = counter2_[this.idx];
+      final int x2 = counter2_[this.idx+1];
+      final int ssep = x1 + (((x2-x1)*(p&4095)) >> 12);
       return (p + ssep + ssep + ssep + 32) >> 6; // rescale to [0..4095]
    }
 }   

@@ -74,13 +74,12 @@ func (this *DefaultOutputBitStream) WriteBits(value uint64, count uint) uint {
 		return 0
 	}
 
-	length := int(count)
-
-	if length > 64 {
+	if count > 64 {
 		panic(fmt.Errorf("Invalid length: %v (must be in [1..64])", count))
 	}
 
 	value &= (0xFFFFFFFFFFFFFFFF >> (64 - count))
+	length := int(count)
 
 	// Pad the current position in buffer
 	if length < this.bitIndex+1 {

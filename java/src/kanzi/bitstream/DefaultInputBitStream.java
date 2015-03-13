@@ -125,8 +125,8 @@ public final class DefaultInputBitStream implements InputBitStream
       {
          // Not enough spots available in 'current'
          res = this.current & (-1L >>> (63 - this.bitIndex));
-         this.pullCurrent();
          res <<= remaining;
+         this.pullCurrent();
          this.bitIndex -= remaining;
          res |= (this.current >>> (this.bitIndex + 1));
       }

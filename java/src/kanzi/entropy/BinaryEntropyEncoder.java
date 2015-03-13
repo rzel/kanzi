@@ -86,7 +86,7 @@ public class BinaryEntropyEncoder implements EntropyEncoder
 
       // Update fields with new interval bounds
       final long bitmask = bit - 1;
-      this.high = (bitmask & this.high) | (~bitmask & (this.low + split));
+      this.high -= (~bitmask & (this.high - this.low - split));
       this.low += (bitmask & (split + 1));
      
       // Update predictor

@@ -73,15 +73,13 @@ public final class DefaultOutputBitStream implements OutputBitStream
    @Override
    public int writeBits(long value, int count)
    {
-      if ((count <= 0) || (count > 64))
-      {
-         if (count == 0)
-            return 0;
+      if (count == 0)
+         return 0;
 
+      if (count > 64)
          throw new IllegalArgumentException("Invalid length: "+count+" (must be in [1..64])");
-      }
 
-      value &= (-1L >>> (64 - count));
+      value &= (-1L >>> -count);
       final int remaining = this.bitIndex + 1 - count;
 
       if (remaining > 0)
@@ -94,12 +92,8 @@ public final class DefaultOutputBitStream implements OutputBitStream
       {
          this.current |= (value >>> -remaining);
          this.pushCurrent();
-         
-         if (remaining != 0) 
-         {
-            this.current |= (value << remaining);
-            this.bitIndex += remaining;
-         }
+         this.current |= (value << remaining);
+         this.bitIndex += remaining;
       }
 
       return count;
